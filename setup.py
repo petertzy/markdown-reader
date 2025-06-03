@@ -1,10 +1,10 @@
 from setuptools import setup
 
-APP = ['markdown_reader.py']  # 确保这是主文件名
-DATA_FILES = ['preview.html']  # 加入你依赖的静态文件
+APP = ['markdown_reader.py']
+DATA_FILES = ['preview.html']
 OPTIONS = {
     'iconfile': 'icon.icns',
-    'packages': ['markdown2'],  # tkinter 不需要写在这里
+    'packages': ['markdown2'],
     'plist': {
         'CFBundleName': 'MarkdownReader',
         'CFBundleDisplayName': 'MarkdownReader',
@@ -19,7 +19,7 @@ OPTIONS = {
                 'CFBundleTypeMIMETypes': ['text/markdown'],
                 'CFBundleTypeRole': 'Editor',
                 'LSHandlerRank': 'Owner',
-                'CFBundleTypeIconFile': 'icon.icns',  # 可选：为 md 文件设置图标
+                'CFBundleTypeIconFile': 'icon.icns',
             }
         ],
     }
