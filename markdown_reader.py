@@ -88,6 +88,12 @@ class MarkdownReader:
                         white-space: pre-wrap;
                     }}
                 </style>
+                <script>
+                    // ⏱️ 每 2 秒自動重載一次頁面
+                    setTimeout(function () {{
+                        window.location.reload(true);
+                    }}, 2000);
+                </script>
             </head>
             <body>
                 {html_content}
