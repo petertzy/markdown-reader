@@ -18,7 +18,7 @@
 ### 1. 下載專案
 
 ```bash
-git clone https://github.com/yourname/markdown-reader.git
+git clone https://github.com/petertzy/markdown-reader.git
 cd markdown-reader
 ````
 
