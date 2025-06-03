@@ -8,12 +8,30 @@
                         color: black;
                         font-family: sans-serif;
                         padding: 20px;
-                        font-size: 32px;  /* ⬅️ 加這一行或放大這一行 */
+                        font-size: 32px;
                         line-height: 1.6;
                     }
                     pre, code {
-                        font-size: 28px;  /* ⬅️ 程式碼區塊也放大 */
+                        font-size: 28px;
                         white-space: pre-wrap;
+                    }
+                    table {
+                        border-collapse: collapse;
+                        width: 100%;
+                        margin-top: 20px;
+                    }
+                    th, td {
+                        text-align: left;
+                        border: 1px solid #ccc;
+                        padding: 12px 16px;
+                        vertical-align: top;
+                    }
+                    th {
+                        background-color: #f3f3f3;
+                        color: #333;
+                    }
+                    tr:nth-child(even) {
+                        background-color: #fafafa;
                     }
                 </style>
             </head>
@@ -257,14 +275,40 @@
 
 <h2>✅ 技术点总结</h2>
 
-<p>| 技术                  | 用途                        |
-| ------------------- | ------------------------- |
-| Livewire            | 创建响应式组件，无需手写大量 JavaScript |
-| <code>Http::get()</code>       | 向外部 API 请求邮箱验证            |
-| <code>$this-&gt;validate()</code> | 自动触发 Laravel 的验证逻辑        |
-| <code>mount()</code>           | Livewire 生命周期钩子，用于初始化组件数据 |
-| <code>render()</code>          | 返回组件视图                    |
-| <code>session()</code>         | 获取存储在会话中的用户输入             |</p>
+<table>
+<thead>
+<tr>
+  <th>技术</th>
+  <th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Livewire</td>
+  <td>创建响应式组件，无需手写大量 JavaScript</td>
+</tr>
+<tr>
+  <td><code>Http::get()</code></td>
+  <td>向外部 API 请求邮箱验证</td>
+</tr>
+<tr>
+  <td><code>$this-&gt;validate()</code></td>
+  <td>自动触发 Laravel 的验证逻辑</td>
+</tr>
+<tr>
+  <td><code>mount()</code></td>
+  <td>Livewire 生命周期钩子，用于初始化组件数据</td>
+</tr>
+<tr>
+  <td><code>render()</code></td>
+  <td>返回组件视图</td>
+</tr>
+<tr>
+  <td><code>session()</code></td>
+  <td>获取存储在会话中的用户输入</td>
+</tr>
+</tbody>
+</table>
 
 <hr />
 
