@@ -70,17 +70,3 @@ MIT License - 自由使用、修改與散佈。
 
 歡迎提交 pull request 或開 issue，一起改善這個工具！
 
-````
-
----
-
-### ✅ 建議命名與結構
-- `markdown_reader.py` 主程式
-- `README.md` 說明文件
-- `requirements.txt`（可加上）：
-  ```txt
-  markdown2
-  tkinterdnd2
-````
-
-# markdown-reader
