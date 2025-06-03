@@ -59,22 +59,28 @@ python markdown_reader.py
 
 To bundle this app as a `.app`, install `py2app` and create a `setup.py` script:
 
-### Install py2app
+### Build the App
 
 ```bash
 rm -rf build dist
 python setup.py py2app
 ```
 
-### Build the App
-
-```bash
-python setup.py py2app
-```
-
 The generated app will be located in the `dist/` folder. You can launch it by double-clicking.
 
 ---
+
+## Exit the Virtual Environment
+```bash
+deactivate
+```
+
+## Submit Changes to Git
+```bash
+git add .
+git commit -m "Update"  # Replace "Update" with a meaningful commit message
+git push
+```
 
 ## Technical Details
 
