@@ -25,7 +25,7 @@ cd markdown-reader
 ### 2. Create a virtual environment (recommended)
 
 ```bash
-python3 -m venv venv
+python -m venv venv
 source venv/bin/activate  # macOS/Linux
 # .\venv\Scripts\activate  # Windows (cmd/powershell)
 ```
@@ -43,7 +43,7 @@ pip install -r requirements.txt
 ## Running the Application
 
 ```bash
-python3 markdown_reader.py
+python markdown_reader.py
 ```
 
 ### How to Use
@@ -63,7 +63,7 @@ To bundle this app as a `.app`, install `py2app` and create a `setup.py` script:
 
 ```bash
 rm -rf build dist
-python3 setup.py py2app
+python setup.py py2app
 ```
 
 ### Build the App
