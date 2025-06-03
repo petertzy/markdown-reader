@@ -103,19 +103,6 @@ python setup.py py2app
 
 ---
 
-## 注意事項
-
-* 若修改虛擬環境名稱（如從 `venv311` 改為 `venv`），請同時更新 `venv/bin/activate` 中的提示文字：
-
-  ```bash
-  PS1='(venv)' ...
-  VIRTUAL_ENV_PROMPT='(venv)'
-  ```
-* 若遇 `python not found`，請確保已正確啟動虛擬環境（`source venv/bin/activate`）
-* 本工具適用於開發與閱讀 Markdown，不建議用於大型專案編輯器
-
----
-
 ## 授權 License
 
 本專案以 MIT 授權釋出，可自由使用、修改、分發。
