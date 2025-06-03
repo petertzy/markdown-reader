@@ -66,7 +66,7 @@ rm -rf build dist
 python setup.py py2app
 ```
 
-The generated app will be located in the `dist/` folder. You can launch it by double-clicking.
+The generated app will be located in the `dist/` folder. You can launch it by double-clicking. To use it like a regular app, move it to your Applications folder.
 
 ---
 
