@@ -13,7 +13,7 @@ A clean and intuitive Markdown reader with real-time preview support, dark mode 
 
 ---
 
-## Review of the project
+## Project Overview
 
 <img width="1437" alt="Image" src="https://github.com/user-attachments/assets/9f3bfa17-e9ef-451a-98b8-0ab36953cf03" />
 
