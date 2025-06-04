@@ -99,7 +99,14 @@ git push
 
 ## License
 
-This project is licensed under the **MIT License** — free to use, modify, and distribute.
+This project is licensed under a **custom license**:
+
+- All contributors have full rights to use, modify, distribute, and use this project for commercial or non-commercial purposes.
+- All other users may use and modify the code for **non-commercial purposes only**.
+- **Commercial use by non-contributors is strictly prohibited** without explicit written permission from the project creator.
+
+Please contact the project owner to request commercial licensing.
+
 
 ---
 
