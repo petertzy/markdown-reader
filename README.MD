@@ -49,7 +49,7 @@ pip install -r requirements.txt
 ## Running the Application
 
 ```bash
-python markdown_reader.py
+python app.py
 ```
 
 ### How to Use
