@@ -21,7 +21,8 @@ class MarkdownReader:
         self.root.title("Markdown Reader")
         self.root.geometry("900x600")
         self.dark_mode = False
-        self.preview_file = os.path.join(os.path.expanduser("~"), "preview.html")  # Use home directory to avoid read-only issues
+        # Always use preview.html in the project directory for preview
+        self.preview_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "preview.html")
 
         self.create_widgets()
         self.bind_events()
