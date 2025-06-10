@@ -1,6 +1,6 @@
 from setuptools import setup
 
-APP = ['markdown_reader.py']
+APP = ['app.py']
 DATA_FILES = ['preview.html']
 OPTIONS = {
     'iconfile': 'icon.icns',
