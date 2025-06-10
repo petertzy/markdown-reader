@@ -38,6 +38,7 @@ class MarkdownReader:
 
         viewmenu = tk.Menu(menubar, tearoff=0)
         viewmenu.add_command(label="Toggle Dark Mode", command=self.toggle_dark_mode)
+        viewmenu.add_command(label="Open Preview in Browser", command=self.open_preview_in_browser)
         menubar.add_cascade(label="View", menu=viewmenu)
 
         self.root.config(menu=menubar)
@@ -141,6 +142,12 @@ class MarkdownReader:
         fg = "#dcdcdc" if self.dark_mode else "black"
         self.text_area.config(bg=bg, fg=fg, insertbackground=fg)
         self.update_preview()
+
+    def open_preview_in_browser(self):
+        try:
+            webbrowser.open(f"file://{os.path.abspath(self.preview_file)}", new=0)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open preview in browser: {e}")
 
 if __name__ == "__main__":
     try:
