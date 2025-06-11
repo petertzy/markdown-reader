@@ -1,7 +1,7 @@
 from setuptools import setup
 
 APP = ['app.py']
-DATA_FILES = ['preview.html']
+DATA_FILES = []
 OPTIONS = {
     'iconfile': 'icon.icns',
     'packages': ['markdown2'],

@@ -9,5 +9,12 @@ def get_resource_path(filename):
     else:
         return os.path.join(os.path.abspath("."), filename)
 
+import os
+
 def get_preview_file():
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "preview.html")
+    file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "preview.html")
+    if not os.path.exists(file_path):
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write("")
+    return file_path
+
