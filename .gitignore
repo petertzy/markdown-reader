@@ -9,5 +9,4 @@ dist/
 # Python virtual environment
 venv/
 
-preview.html
 markdown_reader/preview.html
