@@ -23,7 +23,6 @@ def update_preview(app):
                         line-height: 1.6;
                     }}
                     pre, code {{
-                        font-size: 28px;
                         white-space: pre-wrap;
                     }}
                     table {{
