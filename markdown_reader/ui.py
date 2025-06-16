@@ -11,7 +11,7 @@ class MarkdownReader:
     def __init__(self, root):
         self.root = root
         self.root.title("Markdown Reader")
-        self.root.geometry("1430x795")
+        self.root.geometry("1280x795")
         self.dark_mode = False
         self.preview_file = get_preview_file()
         self.create_widgets()
