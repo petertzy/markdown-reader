@@ -30,12 +30,14 @@ def update_preview(app):
                         border-collapse: collapse;
                         width: 100%;
                         margin-top: 20px;
+                        font-size: 32px;
                     }}
                     th, td {{
                         text-align: left;
                         border: 1px solid #ccc;
                         padding: 12px 16px;
                         vertical-align: top;
+                        font-size: 32px;
                     }}
                     th {{
                         background-color: #f3f3f3;
