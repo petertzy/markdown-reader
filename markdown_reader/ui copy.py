@@ -1,5 +1,4 @@
 import os
-import re
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
@@ -11,7 +10,7 @@ class MarkdownReader:
     def __init__(self, root):
         self.root = root
         self.root.title("Markdown Reader")
-        self.root.geometry("1430x795")
+        self.root.geometry("900x600")
         self.dark_mode = False
         self.preview_file = get_preview_file()
         self.create_widgets()
@@ -32,8 +31,7 @@ class MarkdownReader:
 
         self.root.config(menu=menubar)
 
-        base_font = ("Consolas", 28)
-        self.text_area = ScrolledText(self.root, wrap=tk.WORD, font=base_font)
+        self.text_area = ScrolledText(self.root, wrap=tk.WORD, font=("Helvetica", 12))
         self.text_area.pack(fill=tk.BOTH, expand=True)
         self.text_area.bind("<<Modified>>", self.on_text_change)
 
@@ -54,7 +52,6 @@ class MarkdownReader:
 
     def on_text_change(self, event):
         self.text_area.edit_modified(False)
-        self.highlight_markdown()
         update_preview(self)
 
     def toggle_dark_mode(self):
