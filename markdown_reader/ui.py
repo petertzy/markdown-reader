@@ -1,11 +1,26 @@
 import os
-import re
+import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
 from markdown_reader.logic import update_preview, open_preview_in_browser
 from markdown_reader.file_handler import load_file, drop_file
 from markdown_reader.utils import get_preview_file
+
+
+class FileChangeHandler(FileSystemEventHandler):
+    def __init__(self, app, filepath):
+        self.app = app
+        self.filepath = os.path.abspath(filepath)
+
+    def on_modified(self, event):
+        if os.path.abspath(event.src_path) == self.filepath:
+            # 防止多线程 UI 冲突
+            self.app.root.after(100, lambda: self.app.load_file(self.filepath))
+
 
 class MarkdownReader:
     def __init__(self, root):
@@ -14,6 +29,9 @@ class MarkdownReader:
         self.root.geometry("1280x795")
         self.dark_mode = False
         self.preview_file = get_preview_file()
+        self.current_file_path = None
+        self.observer = None
+
         self.create_widgets()
         self.bind_events()
 
@@ -22,12 +40,13 @@ class MarkdownReader:
         filemenu = tk.Menu(menubar, tearoff=0)
         filemenu.add_command(label="Open File", command=self.open_file)
         filemenu.add_separator()
-        filemenu.add_command(label="Exit", command=self.root.quit)
+        filemenu.add_command(label="Exit", command=self.quit)
         menubar.add_cascade(label="File", menu=filemenu)
 
         viewmenu = tk.Menu(menubar, tearoff=0)
         viewmenu.add_command(label="Toggle Dark Mode", command=self.toggle_dark_mode)
-        viewmenu.add_command(label="Open Preview in Browser", command=lambda: open_preview_in_browser(self.preview_file))
+        viewmenu.add_command(label="Open Preview in Browser",
+                             command=lambda: open_preview_in_browser(self.preview_file))
         menubar.add_cascade(label="View", menu=viewmenu)
 
         self.root.config(menu=menubar)
@@ -47,10 +66,23 @@ class MarkdownReader:
     def open_file(self):
         file_path = filedialog.askopenfilename(filetypes=[("Markdown files", "*.md")])
         if file_path:
-            load_file(file_path, self)
+            self.load_file(file_path)
+            self.start_watching(file_path)
 
     def load_file(self, path):
+        self.current_file_path = os.path.abspath(path)
         load_file(path, self)
+
+    def start_watching(self, path):
+        if self.observer:
+            self.observer.stop()
+            self.observer.join()
+
+        event_handler = FileChangeHandler(self, path)
+        self.observer = Observer()
+        watch_dir = os.path.dirname(os.path.abspath(path))
+        self.observer.schedule(event_handler, path=watch_dir, recursive=False)
+        self.observer.start()
 
     def on_text_change(self, event):
         self.text_area.edit_modified(False)
@@ -63,3 +95,12 @@ class MarkdownReader:
         fg = "#dcdcdc" if self.dark_mode else "black"
         self.text_area.config(bg=bg, fg=fg, insertbackground=fg)
         update_preview(self)
+
+    def highlight_markdown(self):
+        pass
+
+    def quit(self):
+        if self.observer:
+            self.observer.stop()
+            self.observer.join()
+        self.root.quit()
