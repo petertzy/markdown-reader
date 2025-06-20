@@ -18,7 +18,6 @@ class FileChangeHandler(FileSystemEventHandler):
 
     def on_modified(self, event):
         if os.path.abspath(event.src_path) == self.filepath:
-            # 防止多线程 UI 冲突
             self.app.root.after(100, lambda: self.app.load_file(self.filepath))
 
 
