@@ -1,0 +1,12 @@
+# Default owner for all files
+* @petertzy
+
+# Files in markdown_reader folder should be reviewed by petertzy and Xavi
+markdown_reader/ @petertzy @Xavi1
+
+# Markdown and workflow files should be reviewed by petertzy
+*.md @petertzy
+*.yml @petertzy
+
+# app.py should be reviewed by petertzy
+app.py @petertzy @Xavi1
