@@ -1,5 +1,4 @@
 markdown2>=2.4.0
 tkinterdnd2>=0.3.0
 py2app>=0.28
-
 watchdog
