@@ -18,7 +18,6 @@ class FileChangeHandler(FileSystemEventHandler):
 
     def on_modified(self, event):
         if os.path.abspath(event.src_path) == self.filepath:
-            # 防止多线程 UI 冲突
             self.app.root.after(100, lambda: self.app.load_file(self.filepath))
 
 
@@ -39,6 +38,7 @@ class MarkdownReader:
         menubar = tk.Menu(self.root)
         filemenu = tk.Menu(menubar, tearoff=0)
         filemenu.add_command(label="Open File", command=self.open_file)
+        filemenu.add_command(label="Save File", command=self.save_file)
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.quit)
         menubar.add_cascade(label="File", menu=filemenu)
@@ -62,6 +62,9 @@ class MarkdownReader:
             self.root.dnd_bind('<<Drop>>', lambda event: drop_file(event, self))
         except Exception:
             pass
+
+        self.root.bind_all("<Control-s>", lambda event: self.save_file())
+        self.root.bind_all("<Command-s>", lambda event: self.save_file())
 
     def open_file(self):
         file_path = filedialog.askopenfilename(filetypes=[("Markdown files", "*.md")])
@@ -104,3 +107,27 @@ class MarkdownReader:
             self.observer.stop()
             self.observer.join()
         self.root.quit()
+
+    def save_file(self):
+        if self.current_file_path:
+            try:
+                content = self.text_area.get("1.0", "end-1c")
+                with open(self.current_file_path, "w", encoding="utf-8") as f:
+                    f.write(content)
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save file: {e}")
+        else:
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".md",
+                filetypes=[("Markdown files", "*.md"), ("All files", "*.*")],
+                initialfile="default.md"
+            )
+            if file_path:
+                try:
+                    content = self.text_area.get("1.0", "end-1c")
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.write(content)
+                    self.current_file_path = file_path
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to save file: {e}")
+
