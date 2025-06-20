@@ -50,9 +50,11 @@ def update_preview(app):
             <body>{html_content}</body>
             </html>
             """)
-        if not hasattr(app, 'browser_opened') or not app.browser_opened:
-            webbrowser.open(f"file://{os.path.abspath(app.preview_file)}", new=0)
-            app.browser_opened = True
+        if getattr(app, 'current_file_path', None):
+            if not hasattr(app, 'browser_opened') or not app.browser_opened:
+                import webbrowser
+                webbrowser.open(f"file://{os.path.abspath(app.preview_file)}", new=0)
+                app.browser_opened = True
     except Exception as e:
         messagebox.showerror("Error", f"Failed to generate preview: {e}")
 
