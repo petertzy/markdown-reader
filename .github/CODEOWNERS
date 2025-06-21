@@ -5,7 +5,7 @@
 markdown_reader/ @petertzy @Xavi1
 
 # Markdown and workflow files should be reviewed by petertzy
-*.md @petertzy
+*.md or *.MD @petertzy
 *.yml @petertzy
 
 # app.py should be reviewed by petertzy

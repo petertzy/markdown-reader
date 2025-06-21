@@ -14,5 +14,6 @@ def load_file(path, app):
 
 def drop_file(event, app):
     file_path = event.data.strip('{}')
-    if file_path.endswith('.md'):
+    if file_path.endswith('.md') or file_path.endswith('.MD'):
         load_file(file_path, app)
+

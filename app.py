@@ -14,7 +14,7 @@ if __name__ == "__main__":
     import sys, os
     if len(sys.argv) > 1:
         file_path = sys.argv[1]
-        if file_path.lower().endswith(('.md', '.markdown')) and os.path.isfile(file_path):
+        if file_path.lower().endswith(('.md', '.markdown', '.MD', '.MARKDOWN')) and os.path.isfile(file_path):
             app.load_file(file_path)
 
     root.mainloop()

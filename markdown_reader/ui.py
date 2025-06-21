@@ -67,8 +67,11 @@ class MarkdownReader:
         self.root.bind_all("<Command-s>", lambda event: self.save_file())
 
     def open_file(self):
-        file_path = filedialog.askopenfilename(filetypes=[("Markdown files", "*.md")])
-        if file_path:
+        file_path = filedialog.askopenfilename(filetypes=[
+            ("Markdown files", "*.md *.MD"),
+            ("All files", "*.*")
+        ])
+        if file_path and file_path.lower().endswith(".md"):
             self.load_file(file_path)
             self.start_watching(file_path)
 
