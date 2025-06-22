@@ -1,12 +1,13 @@
 import os
 import threading
 import tkinter as tk
+from tkinter import ttk
 from tkinter import filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from markdown_reader.logic import update_preview, open_preview_in_browser
+from markdown_reader.logic import open_preview_in_browser
 from markdown_reader.file_handler import load_file, drop_file
 from markdown_reader.utils import get_preview_file
 
@@ -37,8 +38,11 @@ class MarkdownReader:
     def create_widgets(self):
         menubar = tk.Menu(self.root)
         filemenu = tk.Menu(menubar, tearoff=0)
+        filemenu.add_command(label="New", command=self.new_file)
         filemenu.add_command(label="Open File", command=self.open_file)
         filemenu.add_command(label="Save File", command=self.save_file)
+        filemenu.add_command(label="Close", command=self.close_current_tab)
+        filemenu.add_command(label="Close All", command=self.close_all_tabs)
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.quit)
         menubar.add_cascade(label="File", menu=filemenu)
@@ -46,15 +50,18 @@ class MarkdownReader:
         viewmenu = tk.Menu(menubar, tearoff=0)
         viewmenu.add_command(label="Toggle Dark Mode", command=self.toggle_dark_mode)
         viewmenu.add_command(label="Open Preview in Browser",
-                             command=lambda: open_preview_in_browser(self.preview_file))
+                             command=lambda: open_preview_in_browser(self.preview_file, self))
         menubar.add_cascade(label="View", menu=viewmenu)
 
         self.root.config(menu=menubar)
 
-        base_font = ("Consolas", 28)
-        self.text_area = ScrolledText(self.root, wrap=tk.WORD, font=base_font)
-        self.text_area.pack(fill=tk.BOTH, expand=True)
-        self.text_area.bind("<<Modified>>", self.on_text_change)
+        self.notebook = ttk.Notebook(self.root)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+
+        self.editors = []
+        self.file_paths = []
+
+        self.new_file()
 
     def bind_events(self):
         try:
@@ -66,18 +73,58 @@ class MarkdownReader:
         self.root.bind_all("<Control-s>", lambda event: self.save_file())
         self.root.bind_all("<Command-s>", lambda event: self.save_file())
 
+    def new_file(self):
+        frame = tk.Frame(self.notebook)
+        base_font = ("Consolas", 28)
+        text_area = ScrolledText(frame, wrap=tk.WORD, font=base_font)
+        text_area.pack(fill=tk.BOTH, expand=True)
+        text_area.bind("<<Modified>>", self.on_text_change)
+        self.notebook.add(frame, text="Untitled")
+        self.notebook.select(len(self.editors))
+        self.editors.append(text_area)
+        self.file_paths.append(None)
+
     def open_file(self):
         file_path = filedialog.askopenfilename(filetypes=[
             ("Markdown files", "*.md *.MD"),
             ("All files", "*.*")
         ])
         if file_path and file_path.lower().endswith(".md"):
+            self.new_file()
             self.load_file(file_path)
             self.start_watching(file_path)
 
     def load_file(self, path):
-        self.current_file_path = os.path.abspath(path)
-        load_file(path, self)
+        abs_path = os.path.abspath(path)
+        if not self.editors:
+           self.new_file()
+        idx = self.notebook.index(self.notebook.select())
+        text_area = self.editors[idx]
+
+        try:
+            with open(abs_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            text_area.delete("1.0", tk.END)
+            text_area.insert(tk.END, content)
+            self.file_paths[idx] = abs_path
+            self.notebook.tab(idx, text=os.path.basename(abs_path))
+            self.current_file_path = abs_path
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load file: {e}")
+
+    def close_current_tab(self):
+        if not self.editors:
+            return
+        idx = self.notebook.index(self.notebook.select())
+        self.notebook.forget(idx)
+        del self.editors[idx]
+        del self.file_paths[idx]
+
+    def close_all_tabs(self):
+        while self.editors:
+            self.notebook.forget(0)
+            del self.editors[0]
+            del self.file_paths[0]
 
     def start_watching(self, path):
         if self.observer:
@@ -91,16 +138,17 @@ class MarkdownReader:
         self.observer.start()
 
     def on_text_change(self, event):
-        self.text_area.edit_modified(False)
+        widget = event.widget
+        widget.edit_modified(False)
         self.highlight_markdown()
-        update_preview(self)
 
     def toggle_dark_mode(self):
         self.dark_mode = not self.dark_mode
         bg = "#1e1e1e" if self.dark_mode else "white"
         fg = "#dcdcdc" if self.dark_mode else "black"
-        self.text_area.config(bg=bg, fg=fg, insertbackground=fg)
-        update_preview(self)
+
+        for text_area in self.editors:
+            text_area.config(bg=bg, fg=fg, insertbackground=fg)
 
     def highlight_markdown(self):
         pass
@@ -112,10 +160,14 @@ class MarkdownReader:
         self.root.quit()
 
     def save_file(self):
-        if self.current_file_path:
+        idx = self.notebook.index(self.notebook.select())
+        text_area = self.editors[idx]
+        current_path = self.file_paths[idx]
+
+        if current_path:
             try:
-                content = self.text_area.get("1.0", "end-1c")
-                with open(self.current_file_path, "w", encoding="utf-8") as f:
+                content = text_area.get("1.0", "end-1c")
+                with open(current_path, "w", encoding="utf-8") as f:
                     f.write(content)
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save file: {e}")
@@ -127,10 +179,10 @@ class MarkdownReader:
             )
             if file_path:
                 try:
-                    content = self.text_area.get("1.0", "end-1c")
+                    content = text_area.get("1.0", "end-1c")
                     with open(file_path, "w", encoding="utf-8") as f:
                         f.write(content)
-                    self.current_file_path = file_path
+                    self.file_paths[idx] = file_path
+                    self.notebook.tab(idx, text=os.path.basename(file_path))
                 except Exception as e:
                     messagebox.showerror("Error", f"Failed to save file: {e}")
-
