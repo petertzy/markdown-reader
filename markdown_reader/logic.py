@@ -4,8 +4,15 @@ import webbrowser
 from tkinter import messagebox
 
 def update_preview(app):
-    markdown_text = app.text_area.get('1.0', 'end')
-    html_content = markdown2.markdown(markdown_text, extras=["fenced-code-blocks", "code-friendly", "tables"])
+    if not app.editors:
+        return False
+    try:
+        idx = app.notebook.index(app.notebook.select())
+        text_area = app.editors[idx]
+        markdown_text = text_area.get("1.0", "end-1c")
+        html_content = markdown2.markdown(markdown_text, extras=["fenced-code-blocks", "code-friendly", "tables"])
+    except Exception as e:
+        print(f"update_preview Error: {e}")
 
     try:
         with open(app.preview_file, 'w', encoding='utf-8') as f:
@@ -60,16 +67,27 @@ def update_preview(app):
             <body>{html_content}</body>
             </html>
             """)
-        if getattr(app, 'current_file_path', None):
-            if not hasattr(app, 'browser_opened') or not app.browser_opened:
-                import webbrowser
-                webbrowser.open(f"file://{os.path.abspath(app.preview_file)}", new=0)
-                app.browser_opened = True
+        return True
+    #    if getattr(app, 'current_file_path', None):
+    #        if not hasattr(app, 'browser_opened') or not app.browser_opened:
+    #            import webbrowser
+    #            webbrowser.open(f"file://{os.path.abspath(app.preview_file)}", new=0)
+    #            app.browser_opened = True
     except Exception as e:
         messagebox.showerror("Error", f"Failed to generate preview: {e}")
 
-def open_preview_in_browser(preview_file):
-    try:
-        webbrowser.open(f"file://{os.path.abspath(preview_file)}", new=0)
-    except Exception as e:
-        messagebox.showerror("Error", f"Failed to open preview: {e}")
+#def open_preview_in_browser(preview_file, app):
+#    update_preview(app)
+#    try:
+#        webbrowser.open(f"file://{os.path.abspath(preview_file)}", new=0)
+#    except Exception as e:
+#        messagebox.showerror("Error", f"Failed to open preview: {e}")
+
+def open_preview_in_browser(preview_file, app):
+    if update_preview(app):
+        try:
+            webbrowser.open(f"file://{os.path.abspath(preview_file)}", new=0)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open preview: {e}")
+    else:
+        messagebox.showinfo("Info", "No document to preview.")
