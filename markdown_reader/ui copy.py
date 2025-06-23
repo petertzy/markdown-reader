@@ -443,34 +443,38 @@ class MarkdownReader:
 
     def update_preview(self):
         from markdown_reader.logic import update_preview
+        # Before updating preview, convert per-selection color tags to HTML in the markdown
         text_area = self.get_current_text_area()
         if not text_area:
             return
-
         content = text_area.get("1.0", "end-1c")
-
-        spans = []
-
+        # Find all color tags and wrap them in <span style="color:...">...</span>
+        # We'll use the tag ranges from the text widget
         for tag in text_area.tag_names():
             if tag == "fgcolor":
+                # Get all ranges for this tag
                 ranges = text_area.tag_ranges(tag)
-                color = text_area.tag_cget(tag, "foreground")
                 for i in range(0, len(ranges), 2):
-                    start = text_area.index(ranges[i])
-                    end = text_area.index(ranges[i + 1])
-                    start_idx = text_area.count("1.0", start, "chars")[0]
-                    end_idx = text_area.count("1.0", end, "chars")[0]
-                    spans.append((start_idx, end_idx, color))
-
-        spans.sort(reverse=True, key=lambda x: x[0])
-        for start_idx, end_idx, color in spans:
-            span_text = (
-                f'<span style="color:{color}">'
-                + content[start_idx:end_idx]
-                + '</span>\n\n'
-            )
-            content = content[:start_idx] + span_text + content[end_idx:]
-
+                    start = ranges[i]
+                    end = ranges[i+1]
+                    color = text_area.tag_cget(tag, "foreground")
+                    selected_text = text_area.get(start, end)
+                    # Replace only the first occurrence in content (approximate, not perfect for repeated text)
+                    # For robust replacement, use indices
+                    idx1 = text_area.index(start)
+                    idx2 = text_area.index(end)
+                    # Convert indices to line/char
+                    line1, char1 = map(int, idx1.split('.'))
+                    line2, char2 = map(int, idx2.split('.'))
+                    lines = content.split('\n')
+                    # Get the substring
+                    if line1 == line2:
+                        lines[line1-1] = lines[line1-1][:char1] + f'<span style="color:{color}">' + lines[line1-1][char1:char2] + '</span>' + lines[line1-1][char2:]
+                    else:
+                        # Multi-line selection: not handled for color, skip
+                        continue
+                    content = '\n'.join(lines)
+        # Pass the modified content to the preview
         self._preview_content_override = content
         update_preview(self)
         self._preview_content_override = None

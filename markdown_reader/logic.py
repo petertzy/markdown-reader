@@ -114,13 +114,6 @@ def update_preview(app):
     except Exception as e:
         messagebox.showerror("Error", f"Failed to generate preview: {e}")
 
-#def open_preview_in_browser(preview_file, app):
-#    update_preview(app)
-#    try:
-#        webbrowser.open(f"file://{os.path.abspath(preview_file)}", new=0)
-#    except Exception as e:
-#        messagebox.showerror("Error", f"Failed to open preview: {e}")
-
 def open_preview_in_browser(preview_file, app):
     if update_preview(app):
         try:
