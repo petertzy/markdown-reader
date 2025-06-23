@@ -6,8 +6,16 @@
 build/
 dist/
 
-# Python virtual environment
+# Python virtual environments
 venv/
+.env/
+.venv/
 
+# Bytecode and cache
+__pycache__/
+*.py[cod]
+*.so
+
+# Preview files
 markdown_reader/preview.html
-
+markdown_reader/__pycache__/
