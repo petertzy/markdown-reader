@@ -32,6 +32,12 @@ class MarkdownReader:
         self.current_file_path = None
         self.observer = None
 
+        # --- Toolbar state ---
+        self.current_font_family = "Consolas"
+        self.current_font_size = 14
+        self.current_fg_color = "#000000"
+        self.current_bg_color = "#ffffff"
+
         self.create_widgets()
         self.bind_events()
 
@@ -54,6 +60,36 @@ class MarkdownReader:
         menubar.add_cascade(label="View", menu=viewmenu)
 
         self.root.config(menu=menubar)
+
+        # --- Toolbar ---
+        toolbar = tk.Frame(self.root, bd=1, relief=tk.RAISED, bg="#f7f9fa")
+        # Style dropdown
+        self.style_var = tk.StringVar(value="Normal text")
+        style_options = ["Normal text", "Heading 1", "Heading 2", "Heading 3"]
+        style_menu = tk.OptionMenu(toolbar, self.style_var, *style_options, command=self.apply_style)
+        style_menu.config(width=12)
+        style_menu.pack(side=tk.LEFT, padx=2, pady=2)
+        # Font family dropdown
+        import tkinter.font
+        fonts = sorted(set(tkinter.font.families()))
+        self.font_var = tk.StringVar(value="Consolas")
+        font_menu = tk.OptionMenu(toolbar, self.font_var, *fonts, command=self.apply_font)
+        font_menu.config(width=10)
+        font_menu.pack(side=tk.LEFT, padx=2)
+        # Font size
+        self.font_size_var = tk.IntVar(value=14)
+        tk.Button(toolbar, text="-", command=lambda: self.change_font_size(-1)).pack(side=tk.LEFT, padx=1)
+        tk.Entry(toolbar, textvariable=self.font_size_var, width=3, justify='center').pack(side=tk.LEFT)
+        tk.Button(toolbar, text="+", command=lambda: self.change_font_size(1)).pack(side=tk.LEFT, padx=1)
+        # Bold, Italic, Underline
+        tk.Button(toolbar, text="B", font=("Arial", 10, "bold"), command=self.toggle_bold).pack(side=tk.LEFT, padx=2)
+        tk.Button(toolbar, text="I", font=("Arial", 10, "italic"), command=self.toggle_italic).pack(side=tk.LEFT, padx=2)
+        tk.Button(toolbar, text="U", font=("Arial", 10, "underline"), command=self.toggle_underline).pack(side=tk.LEFT, padx=2)
+        # Text color
+        tk.Button(toolbar, text="A", command=self.choose_fg_color).pack(side=tk.LEFT, padx=2)
+        # Highlight color
+        tk.Button(toolbar, text="\u0332", font=("Arial", 10), command=self.choose_bg_color).pack(side=tk.LEFT, padx=2)
+        toolbar.pack(fill=tk.X)
 
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True)
@@ -141,6 +177,7 @@ class MarkdownReader:
         widget = event.widget
         widget.edit_modified(False)
         self.highlight_markdown()
+        self.update_preview()
 
     def toggle_dark_mode(self):
         self.dark_mode = not self.dark_mode
@@ -151,7 +188,66 @@ class MarkdownReader:
             text_area.config(bg=bg, fg=fg, insertbackground=fg)
 
     def highlight_markdown(self):
-        pass
+        # Get the current editor
+        if not self.editors:
+            return
+        idx = self.notebook.index(self.notebook.select())
+        text_area = self.editors[idx]
+        content = text_area.get("1.0", tk.END)
+
+        # Remove all previous tags
+        for tag in text_area.tag_names():
+            text_area.tag_remove(tag, "1.0", tk.END)
+
+        # Use the selected font for highlighting
+        import tkinter.font
+        font_name = getattr(self, 'current_font_family', 'Consolas')
+        font_size = getattr(self, 'current_font_size', 14)
+        text_area.tag_configure("heading", foreground="white", font=(font_name, font_size + 14, "bold"))
+        text_area.tag_configure("bold", font=(font_name, font_size, "bold"))
+        text_area.tag_configure("italic", font=(font_name, font_size, "italic"))
+        text_area.tag_configure("code", foreground="#d19a66", background="#f6f8fa", font=(font_name, font_size))
+        text_area.tag_configure("link", foreground="#2aa198", underline=True)
+        text_area.tag_configure("blockquote", foreground="#6a737d", font=(font_name, font_size, "italic"))
+        text_area.tag_configure("list", foreground="#b58900", font=(font_name, font_size, "bold"))
+
+        import re
+        lines = content.splitlines(keepends=True)
+        pos = 0
+        for line in lines:
+            start_idx = f"{pos + 1}.0"
+            end_idx = f"{pos + 1}.end"
+            # Headings: #, ##, ### ...
+            if re.match(r"^#{1,6} ", line):
+                text_area.tag_add("heading", start_idx, end_idx)
+            # Blockquotes: >
+            if re.match(r"^> ", line):
+                text_area.tag_add("blockquote", start_idx, end_idx)
+            # Lists: -, *, +, or numbered
+            if re.match(r"^\s*([-*+] |\d+\. )", line):
+                text_area.tag_add("list", start_idx, end_idx)
+            # Inline code: `code`
+            for m in re.finditer(r"`([^`]+)`", line):
+                s = f"{pos + 1}.{m.start()}"
+                e = f"{pos + 1}.{m.end()}"
+                text_area.tag_add("code", s, e)
+            # Bold: **text** or __text__
+            for m in re.finditer(r"(\*\*|__)(.*?)\1", line):
+                s = f"{pos + 1}.{m.start(2)}"
+                e = f"{pos + 1}.{m.end(2)}"
+                text_area.tag_add("bold", s, e)
+            # Italic: *text* or _text_ (not bold)
+            for m in re.finditer(r"(?<!\*)\*(?!\*)([^*]+)(?<!\*)\*(?!\*)|(?<!_)_(?!_)([^_]+)(?<!_)_(?!\*)", line):
+                group = 1 if m.group(1) else 2
+                s = f"{pos + 1}.{m.start(group)}"
+                e = f"{pos + 1}.{m.end(group)}"
+                text_area.tag_add("italic", s, e)
+            # Links: [text](url)
+            for m in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", line):
+                s = f"{pos + 1}.{m.start()}"
+                e = f"{pos + 1}.{m.end()}"
+                text_area.tag_add("link", s, e)
+            pos += 1
 
     def quit(self):
         if self.observer:
@@ -186,3 +282,195 @@ class MarkdownReader:
                     self.notebook.tab(idx, text=os.path.basename(file_path))
                 except Exception as e:
                     messagebox.showerror("Error", f"Failed to save file: {e}")
+
+    # --- Toolbar functions ---
+    def get_current_text_area(self):
+        if not self.editors:
+            return None
+        idx = self.notebook.index(self.notebook.select())
+        return self.editors[idx]
+
+    def apply_style(self, style):
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+        try:
+            sel_start = text_area.index("sel.first")
+            sel_end = text_area.index("sel.last")
+        except tk.TclError:
+            # No selection, use current line
+            sel_start = text_area.index("insert linestart")
+            sel_end = text_area.index("insert lineend")
+        start_line = int(sel_start.split('.')[0])
+        end_line = int(sel_end.split('.')[0])
+        for line in range(start_line, end_line + 1):
+            line_start = f"{line}.0"
+            line_end = f"{line}.end"
+            line_text = text_area.get(line_start, line_end)
+            # Remove existing heading marks
+            new_text = line_text.lstrip('# ').lstrip()
+            if style == "Heading 1":
+                new_text = "# " + new_text
+            elif style == "Heading 2":
+                new_text = "## " + new_text
+            elif style == "Heading 3":
+                new_text = "### " + new_text
+            # else: Normal text, just remove heading
+            text_area.delete(line_start, line_end)
+            text_area.insert(line_start, new_text)
+        self.update_preview()
+
+    def apply_font(self, font_name):
+        # Change the font for all editors
+        import tkinter.font
+        # If font_name contains spaces and a style (e.g., 'Arial Light'), use only the first part as the family
+        family = font_name.split()[0]
+        size = self.font_size_var.get()
+        font = tkinter.font.Font(family=family, size=size)
+        for text_area in self.editors:
+            text_area.configure(font=font)
+        self.current_font_family = family
+        self.update_preview()
+
+    def change_font_size(self, delta):
+        new_size = max(6, self.font_size_var.get() + delta)
+        self.font_size_var.set(new_size)
+        self.apply_font(self.font_var.get())
+        self.current_font_size = new_size
+        self.update_preview()
+
+    def toggle_bold(self):
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+        try:
+            sel_start = text_area.index("sel.first")
+            sel_end = text_area.index("sel.last")
+            selected_text = text_area.get(sel_start, sel_end)
+            # If already bold, remove **, else add **
+            if selected_text.startswith("**") and selected_text.endswith("**") and len(selected_text) > 4:
+                new_text = selected_text[2:-2]
+            else:
+                new_text = f"**{selected_text}**"
+            text_area.delete(sel_start, sel_end)
+            text_area.insert(sel_start, new_text)
+        except tk.TclError:
+            from tkinter import messagebox
+            messagebox.showinfo("No selection", "Please select text to make bold.")
+            return
+        self.update_preview()
+
+    def toggle_italic(self):
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+        try:
+            sel_start = text_area.index("sel.first")
+            sel_end = text_area.index("sel.last")
+            selected_text = text_area.get(sel_start, sel_end)
+            # If already italic, remove *, else add * (single asterisk)
+            if (selected_text.startswith("*") and selected_text.endswith("*") and len(selected_text) > 2) or \
+               (selected_text.startswith("_") and selected_text.endswith("_") and len(selected_text) > 2):
+                new_text = selected_text[1:-1]
+            else:
+                new_text = f"*{selected_text}*"
+            text_area.delete(sel_start, sel_end)
+            text_area.insert(sel_start, new_text)
+        except tk.TclError:
+            from tkinter import messagebox
+            messagebox.showinfo("No selection", "Please select text to make italic.")
+            return
+        self.update_preview()
+
+    def toggle_underline(self):
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+        try:
+            sel_start = text_area.index("sel.first")
+            sel_end = text_area.index("sel.last")
+            selected_text = text_area.get(sel_start, sel_end)
+            # Use HTML <u> for underline in Markdown (not standard, but works in many renderers)
+            if selected_text.startswith("<u>") and selected_text.endswith("</u>") and len(selected_text) > 7:
+                new_text = selected_text[3:-4]
+            else:
+                new_text = f"<u>{selected_text}</u>"
+            text_area.delete(sel_start, sel_end)
+            text_area.insert(sel_start, new_text)
+        except tk.TclError:
+            from tkinter import messagebox
+            messagebox.showinfo("No selection", "Please select text to underline.")
+            return
+        self.update_preview()
+
+    def choose_fg_color(self):
+        from tkinter.colorchooser import askcolor
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+        color = askcolor()[1]
+        if color:
+            try:
+                sel_start = text_area.index("sel.first")
+                sel_end = text_area.index("sel.last")
+                selected_text = text_area.get(sel_start, sel_end)
+                # Wrap selection in <span style="color:...">...</span>
+                new_text = f'<span style="color:{color}">{selected_text}</span>'
+                text_area.delete(sel_start, sel_end)
+                text_area.insert(sel_start, new_text)
+            except tk.TclError:
+                from tkinter import messagebox
+                messagebox.showinfo("No selection", "Please select text to color.")
+                return
+            self.current_fg_color = color
+            self.update_preview()
+
+    def choose_bg_color(self):
+        from tkinter.colorchooser import askcolor
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+        color = askcolor()[1]
+        if color:
+            text_area.tag_add("bgcolor", "sel.first", "sel.last")
+            text_area.tag_configure("bgcolor", background=color)
+            self.current_bg_color = color
+            self.update_preview()
+
+    def update_preview(self):
+        from markdown_reader.logic import update_preview
+        # Before updating preview, convert per-selection color tags to HTML in the markdown
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+        content = text_area.get("1.0", "end-1c")
+        # Find all color tags and wrap them in <span style="color:...">...</span>
+        # We'll use the tag ranges from the text widget
+        for tag in text_area.tag_names():
+            if tag == "fgcolor":
+                # Get all ranges for this tag
+                ranges = text_area.tag_ranges(tag)
+                for i in range(0, len(ranges), 2):
+                    start = ranges[i]
+                    end = ranges[i+1]
+                    color = text_area.tag_cget(tag, "foreground")
+                    selected_text = text_area.get(start, end)
+                    # Replace only the first occurrence in content (approximate, not perfect for repeated text)
+                    # For robust replacement, use indices
+                    idx1 = text_area.index(start)
+                    idx2 = text_area.index(end)
+                    # Convert indices to line/char
+                    line1, char1 = map(int, idx1.split('.'))
+                    line2, char2 = map(int, idx2.split('.'))
+                    lines = content.split('\n')
+                    # Get the substring
+                    if line1 == line2:
+                        lines[line1-1] = lines[line1-1][:char1] + f'<span style="color:{color}">' + lines[line1-1][char1:char2] + '</span>' + lines[line1-1][char2:]
+                    else:
+                        # Multi-line selection: not handled for color, skip
+                        continue
+                    content = '\n'.join(lines)
+        # Pass the modified content to the preview
+        self._preview_content_override = content
+        update_preview(self)
+        self._preview_content_override = None

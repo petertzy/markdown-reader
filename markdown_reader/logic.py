@@ -9,10 +9,43 @@ def update_preview(app):
     try:
         idx = app.notebook.index(app.notebook.select())
         text_area = app.editors[idx]
-        markdown_text = text_area.get("1.0", "end-1c")
+        # Use override content if present (from per-selection color logic)
+        markdown_text = getattr(app, '_preview_content_override', None)
+        if markdown_text is None:
+            markdown_text = text_area.get("1.0", "end-1c")
         html_content = markdown2.markdown(markdown_text, extras=["fenced-code-blocks", "code-friendly", "tables"])
     except Exception as e:
         print(f"update_preview Error: {e}")
+
+    # Get style from app (with fallback)
+    font_family = getattr(app, 'current_font_family', 'Consolas')
+    font_size = getattr(app, 'current_font_size', 14)
+    fg_color = getattr(app, 'current_fg_color', '#000000')
+    bg_color = getattr(app, 'current_bg_color', 'white')
+    if getattr(app, 'dark_mode', False):
+        bg_color = '#1e1e1e'
+        fg_color = '#dcdcdc'
+
+    # For web, use a generic fallback for common fonts
+    web_font_family = font_family
+    # Add common web-safe fallbacks
+    if font_family.lower() in ["arial", "helvetica", "verdana", "tahoma", "trebuchet ms"]:
+        web_font_family += ", sans-serif"
+    elif font_family.lower() in ["times new roman", "georgia", "garamond", "serif"]:
+        web_font_family += ", serif"
+    elif font_family.lower() in ["consolas", "courier new", "monospace"]:
+        web_font_family += ", monospace"
+    else:
+        web_font_family += ", sans-serif"
+
+    # Heading sizes relative to base font size
+    h1 = font_size + 18
+    h2 = font_size + 12
+    h3 = font_size + 8
+    h4 = font_size + 4
+    h5 = font_size + 2
+    h6 = font_size + 1
+    base = font_size + 2
 
     try:
         with open(app.preview_file, 'w', encoding='utf-8') as f:
@@ -22,28 +55,38 @@ def update_preview(app):
                 <meta charset="UTF-8">
                 <style>
                     body {{
-                        background-color: {'#1e1e1e' if app.dark_mode else 'white'};
-                        color: {'#dcdcdc' if app.dark_mode else 'black'};
-                        font-family: sans-serif;
+                        background-color: {bg_color};
+                        color: {fg_color};
+                        font-family: {web_font_family};
                         padding: 20px;
-                        font-size: 32px;
+                        font-size: {base}px;
                         line-height: 1.6;
                     }}
+                    h1 {{ font-size: {h1}px; }}
+                    h2 {{ font-size: {h2}px; }}
+                    h3 {{ font-size: {h3}px; }}
+                    h4 {{ font-size: {h4}px; }}
+                    h5 {{ font-size: {h5}px; }}
+                    h6 {{ font-size: {h6}px; }}
+                    b, strong {{ font-weight: bold; }}
+                    i, em {{ font-style: italic; }}
+                    u {{ text-decoration: underline; }}
                     pre, code {{
                         white-space: pre-wrap;
+                        font-family: {web_font_family};
                     }}
                     table {{
                         border-collapse: collapse;
                         width: 100%;
                         margin-top: 20px;
-                        font-size: 32px;
+                        font-size: {base}px;
                     }}
                     th, td {{
                         text-align: left;
                         border: 1px solid #ccc;
                         padding: 12px 16px;
                         vertical-align: top;
-                        font-size: 32px;
+                        font-size: {base}px;
                     }}
                     th {{
                         background-color: #f3f3f3;
@@ -68,11 +111,6 @@ def update_preview(app):
             </html>
             """)
         return True
-    #    if getattr(app, 'current_file_path', None):
-    #        if not hasattr(app, 'browser_opened') or not app.browser_opened:
-    #            import webbrowser
-    #            webbrowser.open(f"file://{os.path.abspath(app.preview_file)}", new=0)
-    #            app.browser_opened = True
     except Exception as e:
         messagebox.showerror("Error", f"Failed to generate preview: {e}")
 
