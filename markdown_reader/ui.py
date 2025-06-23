@@ -436,8 +436,7 @@ class MarkdownReader:
             return
         color = askcolor()[1]
         if color:
-            text_area.tag_add("bgcolor", "sel.first", "sel.last")
-            text_area.tag_configure("bgcolor", background=color)
+            text_area.config(bg=color)
             self.current_bg_color = color
             self.update_preview()
 
