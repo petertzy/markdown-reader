@@ -12,11 +12,11 @@ venv/
 .venv/
 
 # Bytecode and cache
-__pycache__/
 *.py[cod]
 *.so
 
 # Preview files
 markdown_reader/preview.html
-markdown_reader/__pycache__/
 
+__pycache__/
+**/__pycache__/
