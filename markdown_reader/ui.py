@@ -112,6 +112,7 @@ class MarkdownReader:
     def new_file(self):
         frame = tk.Frame(self.notebook)
         base_font = ("Consolas", 28)
+        text_area = self.get_current_text_area()
         text_area = ScrolledText(frame, wrap=tk.WORD, font=base_font)
         text_area.pack(fill=tk.BOTH, expand=True)
         text_area.bind("<<Modified>>", self.on_text_change)
@@ -138,13 +139,10 @@ class MarkdownReader:
             self.load_file(abs_path)
             self.start_watching(abs_path)
 
-
     def load_file(self, path):
         abs_path = os.path.abspath(path)
-        if not self.editors:
-           self.new_file()
         idx = self.notebook.index(self.notebook.select())
-        text_area = self.editors[idx]
+        text_area = self.get_current_text_area()
 
         try:
             with open(abs_path, "r", encoding="utf-8") as f:
@@ -198,10 +196,7 @@ class MarkdownReader:
 
     def highlight_markdown(self):
         # Get the current editor
-        if not self.editors:
-            return
-        idx = self.notebook.index(self.notebook.select())
-        text_area = self.editors[idx]
+        text_area = self.get_current_text_area()
         content = text_area.get("1.0", tk.END)
 
         # Remove all previous tags
@@ -265,8 +260,10 @@ class MarkdownReader:
         self.root.quit()
 
     def save_file(self):
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
         idx = self.notebook.index(self.notebook.select())
-        text_area = self.editors[idx]
         current_path = self.file_paths[idx]
 
         if current_path:

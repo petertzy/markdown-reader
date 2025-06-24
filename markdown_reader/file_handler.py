@@ -4,8 +4,10 @@ def load_file(path, app):
     try:
         with open(path, 'r', encoding='utf-8') as f:
             content = f.read()
-        app.text_area.delete('1.0', 'end')
-        app.text_area.insert('end', content)
+        idx = app.notebook.index(app.notebook.select())
+        text_area = app.editors[idx]
+        text_area.delete('1.0', 'end')
+        text_area.insert('end', content)
         app.current_file_path = path
         from markdown_reader.logic import update_preview
         update_preview(app)
