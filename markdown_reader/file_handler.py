@@ -1,3 +1,4 @@
+import os
 from tkinter import messagebox
 
 def load_file(path, app):
@@ -17,5 +18,9 @@ def load_file(path, app):
 def drop_file(event, app):
     file_path = event.data.strip('{}')
     if file_path.endswith('.md') or file_path.endswith('.MD'):
-        load_file(file_path, app)
+        app.new_file()
+        idx = app.notebook.index(app.notebook.select())
+        app.load_file(file_path)
+        app.notebook.tab(idx, text=os.path.basename(file_path))
+
 
