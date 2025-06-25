@@ -411,29 +411,38 @@ class MarkdownReader:
 
     def choose_fg_color(self):
         from tkinter.colorchooser import askcolor
+        import re
+
         text_area = self.get_current_text_area()
         if not text_area:
             return
         color = askcolor()[1]
-        if color:
-            try:
-                sel_start = text_area.index("sel.first")
-                sel_end = text_area.index("sel.last")
+        if not color:
+            return
 
-                text_area.tag_remove("fgcolor", sel_start, sel_end)
+        try:
+            sel_start = text_area.index("sel.first")
+            sel_end = text_area.index("sel.last")
+            selected_text = text_area.get(sel_start, sel_end)
 
-                tag_name = f"fgcolor_{color.replace('#', '')}"
-                if not tag_name in text_area.tag_names():
-                    text_area.tag_configure(tag_name, foreground=color)
-
-                text_area.tag_add(tag_name, sel_start, sel_end)
-
-                self.current_fg_color = color
-                self.update_preview()
-
-            except tk.TclError:
+            if selected_text.strip() == "" or "\n" in selected_text:
                 from tkinter import messagebox
-                messagebox.showinfo("No selection", "Please select text to color.")
+                messagebox.showinfo("提示", "请选择单行非空文本设置颜色。")
+                return
+
+            cleaned_text = re.sub(
+                r'<span style="color:[^">]+?">(.*?)</span>', r'\1', selected_text, flags=re.DOTALL
+            )
+            new_text = f'<span style="color:{color}">{cleaned_text}</span>'
+
+            text_area.delete(sel_start, sel_end)
+            text_area.insert(sel_start, new_text)
+
+            self.current_fg_color = color
+            self.update_preview()
+        except tk.TclError:
+            from tkinter import messagebox
+            messagebox.showinfo("No selection", "Please select text to color.")
 
     def choose_bg_color(self):
         from tkinter.colorchooser import askcolor
@@ -453,29 +462,5 @@ class MarkdownReader:
             return
 
         content = text_area.get("1.0", "end-1c")
-
-        spans = []
-
-        for tag in text_area.tag_names():
-            if tag == "fgcolor":
-                ranges = text_area.tag_ranges(tag)
-                color = text_area.tag_cget(tag, "foreground")
-                for i in range(0, len(ranges), 2):
-                    start = text_area.index(ranges[i])
-                    end = text_area.index(ranges[i + 1])
-                    start_idx = text_area.count("1.0", start, "chars")[0]
-                    end_idx = text_area.count("1.0", end, "chars")[0]
-                    spans.append((start_idx, end_idx, color))
-
-        spans.sort(reverse=True, key=lambda x: x[0])
-#        for start_idx, end_idx, color in spans:
-#            span_text = (
-#                f'<span style="color:{color}">'
-#                + content[start_idx:end_idx]
-#                + '</span>\n\n'
-#            )
-#            content = content[:start_idx] + span_text + content[end_idx:]
-
-        self._preview_content_override = content
-        update_preview(self)
         self._preview_content_override = None
+        update_preview(self, content)
