@@ -111,7 +111,7 @@ class MarkdownReader:
 
     def new_file(self):
         frame = tk.Frame(self.notebook)
-        base_font = ("Consolas", 28)
+        base_font = (self.current_font_family, self.current_font_size)
         text_area = self.get_current_text_area()
         text_area = ScrolledText(frame, wrap=tk.WORD, font=base_font)
         text_area.pack(fill=tk.BOTH, expand=True)
@@ -207,7 +207,7 @@ class MarkdownReader:
         import tkinter.font
         font_name = getattr(self, 'current_font_family', 'Consolas')
         font_size = getattr(self, 'current_font_size', 14)
-        text_area.tag_configure("heading", foreground="white", font=(font_name, font_size + 14, "bold"))
+        text_area.tag_configure("heading", foreground="#333333", font=(font_name, font_size + 4, "bold"))
         text_area.tag_configure("bold", font=(font_name, font_size, "bold"))
         text_area.tag_configure("italic", font=(font_name, font_size, "italic"))
         text_area.tag_configure("code", foreground="#d19a66", background="#f6f8fa", font=(font_name, font_size))
