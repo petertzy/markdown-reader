@@ -72,8 +72,18 @@ def update_preview(app):
                     i, em {{ font-style: italic; }}
                     u {{ text-decoration: underline; }}
                     pre, code {{
-                        white-space: pre-wrap;
+                        background-color: #f4f4f4;
+                        color: #000000;
                         font-family: {web_font_family};
+                        font-size: {max(font_size - 2, 10)}px;
+                        padding: 8px 12px;
+                        border-radius: 6px;
+                        overflow-x: auto;
+                        display: block;
+                        max-width: 100%;
+                        box-sizing: border-box;
+                        white-space: pre-wrap;
+                        word-break: break-word;
                     }}
                     table {{
                         border-collapse: collapse;
@@ -94,6 +104,18 @@ def update_preview(app):
                     }}
                     tr:nth-child(even) {{
                         background-color: #fafafa;
+                    }}
+                    @media print {{
+                        pre, code {{
+                            background-color: #f4f4f4 !important;
+                            color: #000 !important;
+                            -webkit-print-color-adjust: exact;
+                            print-color-adjust: exact;
+                        }}
+                        body {{
+                            -webkit-print-color-adjust: exact;
+                            print-color-adjust: exact;
+                        }}
                     }}
                 </style>
                 <script>
