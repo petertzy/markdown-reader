@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 
 def get_resource_path(filename):
     if hasattr(sys, '_MEIPASS'):
@@ -12,9 +13,8 @@ def get_resource_path(filename):
 import os
 
 def get_preview_file():
-    file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "preview.html")
-    if not os.path.exists(file_path):
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write("")
-    return file_path
+    preview_path = os.path.join(tempfile.gettempdir(), "markdown_preview.html")
+    with open(preview_path, 'w', encoding='utf-8') as f:
+        f.write("")
+    return preview_path
 
