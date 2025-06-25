@@ -419,18 +419,18 @@ class MarkdownReader:
             try:
                 sel_start = text_area.index("sel.first")
                 sel_end = text_area.index("sel.last")
-                selected_text = text_area.get(sel_start, sel_end)
 
-                if selected_text.startswith('<span style="color:') and selected_text.endswith('</span>'):
-                    return
+                text_area.tag_remove("fgcolor", sel_start, sel_end)
 
-                new_text = f'<span style="color:{color}">{selected_text}</span>'
+                tag_name = f"fgcolor_{color.replace('#', '')}"
+                if not tag_name in text_area.tag_names():
+                    text_area.tag_configure(tag_name, foreground=color)
 
-                text_area.delete(sel_start, sel_end)
-                text_area.insert(sel_start, new_text)
+                text_area.tag_add(tag_name, sel_start, sel_end)
 
                 self.current_fg_color = color
                 self.update_preview()
+
             except tk.TclError:
                 from tkinter import messagebox
                 messagebox.showinfo("No selection", "Please select text to color.")
