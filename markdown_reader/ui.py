@@ -468,13 +468,13 @@ class MarkdownReader:
                     spans.append((start_idx, end_idx, color))
 
         spans.sort(reverse=True, key=lambda x: x[0])
-        for start_idx, end_idx, color in spans:
-            span_text = (
-                f'<span style="color:{color}">'
-                + content[start_idx:end_idx]
-                + '</span>\n\n'
-            )
-            content = content[:start_idx] + span_text + content[end_idx:]
+#        for start_idx, end_idx, color in spans:
+#            span_text = (
+#                f'<span style="color:{color}">'
+#                + content[start_idx:end_idx]
+#                + '</span>\n\n'
+#            )
+#            content = content[:start_idx] + span_text + content[end_idx:]
 
         self._preview_content_override = content
         update_preview(self)
