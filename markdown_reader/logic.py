@@ -82,8 +82,7 @@ def update_preview(app):
                         display: block;
                         max-width: 100%;
                         box-sizing: border-box;
-                        white-space: pre-wrap;
-                        word-break: break-word;
+                        white-space: pre;
                     }}
                     code {{
                         background-color: #f4f4f4;
@@ -120,9 +119,12 @@ def update_preview(app):
                             background-color: #f4f4f4 !important;
                             color: #000 !important;
                             display: block !important;
-                            white-space: pre !important;
+                            white-space: pre-wrap !important;
                             padding: 8px 12px !important;
                             border-radius: 6px !important;
+                            overflow-x: visible !important;
+                            word-break: break-word !important;
+                            word-wrap: break-word !important;
                             -webkit-print-color-adjust: exact;
                             print-color-adjust: exact;
                         }}
