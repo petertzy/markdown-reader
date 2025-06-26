@@ -460,7 +460,5 @@ class MarkdownReader:
         text_area = self.get_current_text_area()
         if not text_area:
             return
+        update_preview(self)
 
-        content = text_area.get("1.0", "end-1c")
-        self._preview_content_override = None
-        update_preview(self, content)
