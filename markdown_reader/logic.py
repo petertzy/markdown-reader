@@ -82,7 +82,7 @@ def update_preview(app):
                         display: block;
                         max-width: 100%;
                         box-sizing: border-box;
-                        white-space: pre-line;
+                        white-space: pre-wrap;
                         word-break: break-word;
                     }}
                     code {{
