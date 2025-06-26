@@ -71,7 +71,7 @@ def update_preview(app):
                     b, strong {{ font-weight: bold; }}
                     i, em {{ font-style: italic; }}
                     u {{ text-decoration: underline; }}
-                    pre, code {{
+                    pre code{{
                         background-color: #f4f4f4;
                         color: #000000;
                         font-family: {web_font_family};
@@ -82,8 +82,18 @@ def update_preview(app):
                         display: block;
                         max-width: 100%;
                         box-sizing: border-box;
-                        white-space: pre-wrap;
+                        white-space: pre-line;
                         word-break: break-word;
+                    }}
+                    code {{
+                        background-color: #f4f4f4;
+                        color: #000000;
+                        font-family: {web_font_family};
+                        font-size: {max(font_size - 2, 10)}px;
+                        padding: 0 4px;
+                        border-radius: 4px;
+                        white-space: normal;
+                        display: inline;
                     }}
                     table {{
                         border-collapse: collapse;
@@ -106,9 +116,23 @@ def update_preview(app):
                         background-color: #fafafa;
                     }}
                     @media print {{
-                        pre, code {{
+                        pre code {{
                             background-color: #f4f4f4 !important;
                             color: #000 !important;
+                            display: block !important;
+                            white-space: pre !important;
+                            padding: 8px 12px !important;
+                            border-radius: 6px !important;
+                            -webkit-print-color-adjust: exact;
+                            print-color-adjust: exact;
+                        }}
+                        code {{
+                            background-color: #f4f4f4 !important;
+                            color: #000 !important;
+                            display: inline !important;
+                            white-space: normal !important;
+                            padding: 0 4px !important;
+                            border-radius: 4px !important;
                             -webkit-print-color-adjust: exact;
                             print-color-adjust: exact;
                         }}
