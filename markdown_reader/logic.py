@@ -1,6 +1,7 @@
 import markdown2
 import os
 import webbrowser
+import re
 from tkinter import messagebox
 
 def update_preview(app):
@@ -13,6 +14,18 @@ def update_preview(app):
         markdown_text = getattr(app, '_preview_content_override', None)
         if markdown_text is None:
             markdown_text = text_area.get("1.0", "end-1c")
+        if hasattr(app, 'file_paths') and app.file_paths:
+            try:
+                idx = app.notebook.index(app.notebook.select())
+                current_path = app.file_paths[idx]
+                base_dir = os.path.dirname(current_path)
+                print("Before fix_image_paths:\n", markdown_text)
+                markdown_text = fix_image_paths(markdown_text, base_dir)
+                print("After fix_image_paths:\n", markdown_text)
+            except Exception as e:
+                print(f"Error determining current file path for image fixing: {e}")
+        else:
+            print("No file_paths attribute or it's empty; skipping fix_image_paths")
         html_content = markdown2.markdown(markdown_text, extras=["fenced-code-blocks", "code-friendly", "tables"])
     except Exception as e:
         print(f"update_preview Error: {e}")
@@ -94,6 +107,14 @@ def update_preview(app):
                         white-space: normal;
                         display: inline;
                     }}
+                    img {{
+                        max-width: 90vw;
+                        max-height: 90vh;
+                        height: auto;
+                        width: auto;
+                        display: block;
+                        margin: 10px 0;
+                    }}
                     table {{
                         border-collapse: collapse;
                         width: 100%;
@@ -170,3 +191,15 @@ def open_preview_in_browser(preview_file, app):
             messagebox.showerror("Error", f"Failed to open preview: {e}")
     else:
         messagebox.showinfo("Info", "No document to preview.")
+
+def fix_image_paths(markdown_text, base_path):
+    def repl(m):
+        alt = m.group(1)
+        src = m.group(2)
+        if src.startswith(('http://', 'https://', 'file://', '/')):
+            return m.group(0)
+        abs_path = os.path.abspath(os.path.join(base_path, src))
+        abs_url = 'file://' + abs_path.replace('\\', '/')
+        return f'![{alt}]({abs_url})'
+
+    return re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', repl, markdown_text)

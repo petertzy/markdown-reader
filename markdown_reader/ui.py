@@ -128,6 +128,8 @@ class MarkdownReader:
         ])
         if file_path and file_path.lower().endswith(".md"):
             abs_path = os.path.abspath(file_path)
+            self.md_filepath_list = []
+            self.md_filepath_list.append(abs_path)
             if abs_path in self.file_paths:
                 index = self.file_paths.index(abs_path)
                 self.notebook.select(index)
