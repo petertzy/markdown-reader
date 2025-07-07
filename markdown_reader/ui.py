@@ -89,6 +89,8 @@ class MarkdownReader:
         tk.Button(toolbar, text="A", command=self.choose_fg_color).pack(side=tk.LEFT, padx=2)
         # Highlight color
         tk.Button(toolbar, text="\u0332", font=("Arial", 10), command=self.choose_bg_color).pack(side=tk.LEFT, padx=2)
+        # Export to PDF button
+        tk.Button(toolbar, text="Export to PDF", command=self.export_to_pdf).pack(side=tk.LEFT, padx=2)
         toolbar.pack(fill=tk.X)
 
         self.notebook = ttk.Notebook(self.root)
@@ -327,6 +329,22 @@ class MarkdownReader:
             text_area.delete(line_start, line_end)
             text_area.insert(line_start, new_text)
         self.update_preview()
+    def export_to_pdf(self):
+        from tkinter import messagebox, filedialog
+        from markdown_reader.file_handler import export_markdown_to_pdf
+        text_area = self.get_current_text_area()
+        if not text_area:
+            messagebox.showinfo("No text area", "Please open or create a file first.")
+            return
+        file_path = filedialog.asksaveasfilename(defaultextension=".pdf",
+                                             filetypes=[("PDF files", "*.pdf")])
+        if not file_path:
+            return 
+        markdown_content = text_area.get("1.0", "tk.END")
+        try:
+            export_markdown_to_pdf(markdown_content, file_path)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to export PDF: {e}")
 
     def apply_font(self, font_name):
         # Change the font for all editors

@@ -1,6 +1,7 @@
 import os
 from tkinter import messagebox
-
+import markdown
+import pdfkit
 def load_file(path, app):
     try:
         with open(path, 'r', encoding='utf-8') as f:
@@ -23,4 +24,6 @@ def drop_file(event, app):
         app.load_file(file_path)
         app.notebook.tab(idx, text=os.path.basename(file_path))
 
-
+def export_markdown_to_pdf(markdown_text, output_path):
+    html_content = markdown.markdown(markdown_text)
+    pdfkit.from_string(html_content, output_path)
