@@ -25,6 +25,24 @@ A clean and intuitive Markdown reader with real-time preview support, dark mode 
 
 ---
 
+# System Dependencies
+
+- wkhtmltopdf >= 0.12.6
+
+## macOS
+Download installer from:
+https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-2/wkhtmltox-0.12.6-2.macos-cocoa.pkg
+
+## Ubuntu
+Download installer from:
+https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-2/wkhtmltox_0.12.6.1-2.jammy_amd64.deb
+
+## Windows
+Download installer from:
+https://wkhtmltopdf.org/downloads.html
+
+---
+
 ## Installation & Usage
 
 ### 1. Clone the repository

@@ -340,7 +340,8 @@ class MarkdownReader:
                                              filetypes=[("PDF files", "*.pdf")])
         if not file_path:
             return 
-        markdown_content = text_area.get("1.0", "tk.END")
+        # markdown_content = text_area.get("1.0", "tk.END")
+        markdown_content = text_area.get("1.0", "end")
         try:
             export_markdown_to_pdf(markdown_content, file_path)
         except Exception as e:

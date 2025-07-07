@@ -1,4 +1,8 @@
+pdfkit>=1.0.0
+markdown>=3.0
 markdown2>=2.4.0
 tkinterdnd2>=0.3.0
 py2app>=0.28
 watchdog
+
+# system dependency: wkhtmltopdf >= 0.12.6 (install manually!)
