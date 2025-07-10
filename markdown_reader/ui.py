@@ -6,7 +6,7 @@ from tkinter import filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
-
+from markdown_reader.logic import update_preview
 from markdown_reader.logic import open_preview_in_browser
 from markdown_reader.file_handler import load_file, drop_file
 from markdown_reader.utils import get_preview_file
@@ -59,6 +59,11 @@ class MarkdownReader:
                              command=lambda: open_preview_in_browser(self.preview_file, self))
         menubar.add_cascade(label="View", menu=viewmenu)
 
+        editmenu = tk.Menu(menubar, tearoff=0)
+        editmenu.add_command(label="Undo", command=self.undo_action)
+        editmenu.add_command(label="Redo", command=self.redo_action)
+        menubar.add_cascade(label="Edit", menu=editmenu)
+
         self.root.config(menu=menubar)
 
         # --- Toolbar ---
@@ -108,12 +113,16 @@ class MarkdownReader:
 
         self.root.bind_all("<Control-s>", lambda event: self.save_file())
         self.root.bind_all("<Command-s>", lambda event: self.save_file())
+        self.root.bind_all("<Control-z>", lambda event: self.undo_action())
+        self.root.bind_all("<Control-y>", lambda event: self.redo_action())
+        self.root.bind_all("<Command-z>", lambda event: self.undo_action())
+        self.root.bind_all("<Command-Shift-Z>", lambda event: self.redo_action())
 
     def new_file(self):
         frame = tk.Frame(self.notebook)
         base_font = (self.current_font_family, self.current_font_size)
         text_area = self.get_current_text_area()
-        text_area = ScrolledText(frame, wrap=tk.WORD, font=base_font)
+        text_area = ScrolledText(frame, wrap=tk.WORD, font=base_font, undo=True)
         text_area.pack(fill=tk.BOTH, expand=True)
         text_area.bind("<<Modified>>", self.on_text_change)
         self.notebook.add(frame, text="Untitled")
@@ -458,9 +467,25 @@ class MarkdownReader:
             self.update_preview()
 
     def update_preview(self):
-        from markdown_reader.logic import update_preview
+        if not self.current_file_path:
+            return
         text_area = self.get_current_text_area()
         if not text_area:
             return
         update_preview(self)
 
+    def undo_action(self):
+        text_area = self.get_current_text_area()
+        if text_area and text_area.edit_modified():
+            try:
+                text_area.edit_undo()
+            except tk.TclError:
+                pass
+
+    def redo_action(self):
+        text_area = self.get_current_text_area()
+        if text_area:
+            try:
+                text_area.edit_redo()
+            except tk.TclError:
+                pass
