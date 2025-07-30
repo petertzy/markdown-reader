@@ -19,9 +19,9 @@ def update_preview(app):
                 idx = app.notebook.index(app.notebook.select())
                 current_path = app.file_paths[idx]
                 base_dir = os.path.dirname(current_path)
-                print("Before fix_image_paths:\n", markdown_text)
+                # print("Before fix_image_paths:\n", markdown_text)
                 markdown_text = fix_image_paths(markdown_text, base_dir)
-                print("After fix_image_paths:\n", markdown_text)
+                # print("After fix_image_paths:\n", markdown_text)
             except Exception as e:
                 print(f"Error determining current file path for image fixing: {e}")
         else:
@@ -67,6 +67,26 @@ def update_preview(app):
             <head>
                 <meta charset="UTF-8">
                 <style>
+                    .copy-button:hover {{
+                        background-color: #a5a8b6;
+                    }}
+                    .copy-button {{
+                        position: absolute;
+                        top: 10px;
+                        right: 10px;
+                        background-color: #cacbd0;
+                        color: rgb(49, 50, 52);
+                        font-size: 0.4em;
+                        padding: 1px;
+                        border: none;
+                        border-radius: 2px;
+                        width: auto;
+                        min-width: 25px;
+                        height: auto;
+                        min-height: 15px;
+                        cursor: pointer;
+                        z-index: 9999;
+                    }}
                     body {{
                         background-color: {bg_color};
                         color: {fg_color};
@@ -136,6 +156,9 @@ def update_preview(app):
                         background-color: #fafafa;
                     }}
                     @media print {{
+                        .copy-button {{
+                            display: none !important;
+                        }}
                         pre code {{
                             background-color: #f4f4f4 !important;
                             color: #000 !important;
@@ -166,17 +189,57 @@ def update_preview(app):
                     }}
                 </style>
                 <script>
-                window.MathJax = {{
-                    tex: {{
-                        inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
-                        displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']]
-                    }},
-                    svg: {{ fontCache: 'global' }}
-                }};
+                    function addCopyButtonToAllCodeBlocks() {{
+                        const codeBlocks = document.querySelectorAll('pre code');
+                        codeBlocks.forEach(function(codeBlock) {{
+                            if (!codeBlock.parentElement.querySelector('.copy-button')) {{
+                                const copyButton = document.createElement('button');
+                                copyButton.className = 'copy-button';
+                                copyButton.textContent = 'Copy';
+
+                                const wrapper = document.createElement('div');
+                                wrapper.style.position = 'relative';
+                                codeBlock.parentElement.parentNode.insertBefore(wrapper, codeBlock.parentElement);
+                                wrapper.appendChild(copyButton);
+                                wrapper.appendChild(codeBlock.parentElement);
+
+                                copyButton.addEventListener('click', function() {{
+                                    const codeContent = codeBlock.innerText;
+                                    const originalText = copyButton.textContent;
+                                    copyButton.textContent = 'Copied!';
+                                    navigator.clipboard.writeText(codeContent).then(function() {{
+                                        setTimeout(function() {{
+                                            copyButton.textContent = originalText;
+                                        }}, 1000);
+                                    }}).catch(function(err) {{
+                                        console.error('Could not copy text: ', err);
+                                    }});
+                                }});
+
+                                copyButton.style.position = 'absolute';
+                                copyButton.style.top = '10px';
+                                copyButton.style.right = '10px';
+                                copyButton.style.border = 'none';
+                                copyButton.style.padding = '5px 10px';
+                                copyButton.style.cursor = 'pointer';
+                                copyButton.style.zIndex = '10';
+                            }}
+                        }});
+                    }}
+                    document.addEventListener('DOMContentLoaded', addCopyButtonToAllCodeBlocks);
+                    window.MathJax = {{
+                        tex: {{
+                            inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+                            displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']]
+                        }},
+                        svg: {{ fontCache: 'global' }}
+                    }};
                 </script>
                 <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
             </head>
-            <body>{html_content}</body>
+            <body>
+                {html_content}
+            </body>
             </html>
             """)
         return True
