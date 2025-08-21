@@ -4,12 +4,6 @@ import webbrowser
 import re
 from tkinter import messagebox
 
-def preserve_line_breaks(text):
-    lines = re.split(r'\n{2,}', text)
-    lines = [re.sub(r'(?<!\n)\n(?!\n)', '<br />\n', para) for para in lines]
-    return '\n\n'.join(lines)
-
-
 def update_preview(app):
     if not app.editors:
         return False
@@ -20,7 +14,6 @@ def update_preview(app):
         markdown_text = getattr(app, '_preview_content_override', None)
         if markdown_text is None:
             markdown_text = text_area.get("1.0", "end-1c")
-            markdown_text = preserve_line_breaks(markdown_text)
         if hasattr(app, 'file_paths') and app.file_paths:
             try:
                 idx = app.notebook.index(app.notebook.select())
@@ -116,7 +109,7 @@ def update_preview(app):
                         color: #000000;
                         font-family: {web_font_family};
                         font-size: {max(font_size - 2, 10)}px;
-                        padding: 8px 12px;
+                        padding: 28px 12px 0px 12px;
                         border-radius: 6px;
                         overflow-x: auto;
                         display: block;
