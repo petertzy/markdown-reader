@@ -1,4 +1,5 @@
 import os
+import re
 import threading
 import tkinter as tk
 from tkinter import ttk
@@ -10,7 +11,7 @@ from markdown_reader.logic import update_preview
 from markdown_reader.logic import open_preview_in_browser
 from markdown_reader.file_handler import load_file, drop_file
 from markdown_reader.utils import get_preview_file
-
+import tkinter.font  # moved here from inside methods
 
 class FileChangeHandler(FileSystemEventHandler):
     def __init__(self, app, filepath):
@@ -64,6 +65,13 @@ class MarkdownReader:
         editmenu.add_command(label="Redo", command=self.redo_action)
         menubar.add_cascade(label="Edit", menu=editmenu)
 
+        # ADD THIS NEW BLOCK:
+        tablemenu = tk.Menu(menubar, tearoff=0)
+        tablemenu.add_command(label="Insert Table...", command=self.insert_table)
+        tablemenu.add_separator()
+        tablemenu.add_command(label="Table Syntax Help", command=self.show_table_help)
+        menubar.add_cascade(label="Table", menu=tablemenu)
+     
         self.root.config(menu=menubar)
 
         # --- Toolbar ---
@@ -75,7 +83,6 @@ class MarkdownReader:
         style_menu.config(width=12)
         style_menu.pack(side=tk.LEFT, padx=2, pady=2)
         # Font family dropdown
-        import tkinter.font
         fonts = sorted(set(tkinter.font.families()))
         self.font_var = tk.StringVar(value="Consolas")
         font_menu = tk.OptionMenu(toolbar, self.font_var, *fonts, command=self.apply_font)
@@ -90,6 +97,8 @@ class MarkdownReader:
         tk.Button(toolbar, text="B", font=("Arial", 10, "bold"), command=self.toggle_bold).pack(side=tk.LEFT, padx=2)
         tk.Button(toolbar, text="I", font=("Arial", 10, "italic"), command=self.toggle_italic).pack(side=tk.LEFT, padx=2)
         tk.Button(toolbar, text="U", font=("Arial", 10, "underline"), command=self.toggle_underline).pack(side=tk.LEFT, padx=2)
+        # Insert table button
+        tk.Button(toolbar, text="⊞", font=("Arial", 12), command=self.insert_table).pack(side=tk.LEFT, padx=2)
         # Text color
         tk.Button(toolbar, text="A", command=self.choose_fg_color).pack(side=tk.LEFT, padx=2)
         # Highlight color
@@ -225,6 +234,8 @@ class MarkdownReader:
         text_area.tag_configure("link", foreground="#2aa198", underline=True)
         text_area.tag_configure("blockquote", foreground="#6a737d", font=(font_name, font_size, "italic"))
         text_area.tag_configure("list", foreground="#b58900", font=(font_name, font_size, "bold"))
+        # ADD THIS NEW LINE:
+        text_area.tag_configure("table", foreground="#0066cc", font=(font_name, font_size))
 
         import re
         lines = content.splitlines(keepends=True)
@@ -241,6 +252,10 @@ class MarkdownReader:
             # Lists: -, *, +, or numbered
             if re.match(r"^\s*([-*+] |\d+\. )", line):
                 text_area.tag_add("list", start_idx, end_idx)
+            # ADD THIS NEW BLOCK:
+            # Table rows: | cell | cell |
+            if "|" in line and line.strip().startswith("|"):
+                text_area.tag_add("table", start_idx, end_idx)
             # Inline code: `code`
             for m in re.finditer(r"`([^`]+)`", line):
                 s = f"{pos + 1}.{m.start()}"
@@ -489,3 +504,89 @@ class MarkdownReader:
                 text_area.edit_redo()
             except tk.TclError:
                 pass
+
+    def insert_table(self):
+        """Insert a basic table template at cursor position"""
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+    
+        # Create a dialog to get table dimensions
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Insert Table")
+        dialog.geometry("300x180")
+        dialog.transient(self.root)
+        dialog.grab_set()
+    
+        # Center the dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+    
+        tk.Label(dialog, text="Rows (including header):", anchor="w").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        rows_var = tk.IntVar(value=3)
+        tk.Spinbox(dialog, from_=2, to=20, textvariable=rows_var, width=10).grid(row=0, column=1, padx=10, pady=10)
+    
+        tk.Label(dialog, text="Columns:", anchor="w").grid(row=1, column=0, padx=10, pady=10, sticky="w")
+        cols_var = tk.IntVar(value=3)
+        tk.Spinbox(dialog, from_=2, to=10, textvariable=cols_var, width=10).grid(row=1, column=1, padx=10, pady=10)
+    
+        def create_table():
+            rows = rows_var.get()
+            cols = cols_var.get()
+        
+            # Generate table markdown
+            table_lines = []
+        
+            # Header row
+            header = "| " + " | ".join([f"Header {i+1}" for i in range(cols)]) + " |"
+            table_lines.append(header)
+        
+            # Separator row
+            separator = "| " + " | ".join(["---" for _ in range(cols)]) + " |"
+            table_lines.append(separator)
+        
+            # Data rows
+            for row in range(rows - 1):  # -1 because header is already included
+                data_row = "| " + " | ".join([f"Cell {row+1}-{col+1}" for col in range(cols)]) + " |"
+                table_lines.append(data_row)
+        
+            table_text = "\n" + "\n".join(table_lines) + "\n\n"
+        
+            # Insert at cursor position
+            text_area.insert("insert", table_text)
+            dialog.destroy()
+            self.update_preview()
+    
+        button_frame = tk.Frame(dialog)
+        button_frame.grid(row=2, column=0, columnspan=2, pady=20)
+    
+        tk.Button(button_frame, text="Insert", command=create_table, width=10).pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="Cancel", command=dialog.destroy, width=10).pack(side=tk.LEFT, padx=5)
+    
+        dialog.wait_window()
+
+    def show_table_help(self):
+        """Show help dialog for table syntax"""
+        help_text = """Markdown Table Syntax:
+
+| Header 1 | Header 2 | Header 3 |
+| -------- | -------- | -------- |
+| Cell 1   | Cell 2   | Cell 3   |
+| Cell 4   | Cell 5   | Cell 6   |
+
+Tips:
+• Use | to separate columns
+• Use --- in the separator row
+• Alignment:
+  - Left:   | :--- |
+  - Center: | :---: |
+  - Right:  | ---: |
+
+Example with alignment:
+| Left | Center | Right |
+| :--- | :----: | ----: |
+| A    | B      | C     |
+"""
+        messagebox.showinfo("Table Syntax Help", help_text)
