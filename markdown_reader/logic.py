@@ -18,12 +18,13 @@ def update_preview(app):
             try:
                 idx = app.notebook.index(app.notebook.select())
                 current_path = app.file_paths[idx]
-                base_dir = os.path.dirname(current_path)
-                # print("Before fix_image_paths:\n", markdown_text)
-                markdown_text = fix_image_paths(markdown_text, base_dir)
-                # print("After fix_image_paths:\n", markdown_text)
+                # Only process images if we have a valid file path
+                if current_path is not None:
+                    base_dir = os.path.dirname(current_path)
+                    markdown_text = fix_image_paths(markdown_text, base_dir)
             except Exception as e:
-                print(f"Error determining current file path for image fixing: {e}")
+                # Silently handle cases where file hasn't been saved yet
+                pass
         else:
             print("No file_paths attribute or it's empty; skipping fix_image_paths")
         html_content = markdown2.markdown(markdown_text, extras=["fenced-code-blocks", "code-friendly", "tables"])
