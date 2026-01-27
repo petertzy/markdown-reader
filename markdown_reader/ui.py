@@ -9,6 +9,8 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from markdown_reader.logic import update_preview
 from markdown_reader.logic import open_preview_in_browser
+from markdown_reader.logic import export_to_html
+from markdown_reader.logic import convert_html_to_markdown
 from markdown_reader.file_handler import load_file, drop_file
 from markdown_reader.utils import get_preview_file
 import tkinter.font  # moved here from inside methods
@@ -48,6 +50,9 @@ class MarkdownReader:
         filemenu.add_command(label="New", command=self.new_file)
         filemenu.add_command(label="Open File", command=self.open_file)
         filemenu.add_command(label="Save File", command=self.save_file)
+        filemenu.add_separator()
+        filemenu.add_command(label="Export to HTML", command=self.export_to_html_dialog)
+        filemenu.add_separator()
         filemenu.add_command(label="Close", command=self.close_current_tab)
         filemenu.add_command(label="Close All", command=self.close_all_tabs)
         filemenu.add_separator()
@@ -142,9 +147,10 @@ class MarkdownReader:
     def open_file(self):
         file_path = filedialog.askopenfilename(filetypes=[
             ("Markdown files", "*.md *.MD"),
+            ("HTML files", "*.html *.HTML *.htm *.HTM"),
             ("All files", "*.*")
         ])
-        if file_path and file_path.lower().endswith(".md"):
+        if file_path and (file_path.lower().endswith(".md") or file_path.lower().endswith((".html", ".htm"))):
             abs_path = os.path.abspath(file_path)
             self.md_filepath_list = []
             self.md_filepath_list.append(abs_path)
@@ -167,11 +173,23 @@ class MarkdownReader:
         try:
             with open(abs_path, "r", encoding="utf-8") as f:
                 content = f.read()
+            
+            # Check if file is HTML and convert to Markdown
+            if abs_path.lower().endswith((".html", ".htm")):
+                content = convert_html_to_markdown(content)
+                # Update tab name to show it's converted
+                base_name = os.path.splitext(os.path.basename(abs_path))[0]
+                self.notebook.tab(idx, text=f"{base_name}.md (converted)")
+                # Don't set file_paths to HTML file - treat as new unsaved file
+                self.file_paths[idx] = None
+                self.current_file_path = None
+            else:
+                self.file_paths[idx] = abs_path
+                self.notebook.tab(idx, text=os.path.basename(abs_path))
+                self.current_file_path = abs_path
+            
             text_area.delete("1.0", tk.END)
             text_area.insert(tk.END, content)
-            self.file_paths[idx] = abs_path
-            self.notebook.tab(idx, text=os.path.basename(abs_path))
-            self.current_file_path = abs_path
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load file: {e}")
 
@@ -590,3 +608,34 @@ Example with alignment:
 | A    | B      | C     |
 """
         messagebox.showinfo("Table Syntax Help", help_text)
+
+    def export_to_html_dialog(self):
+        """Show dialog to export current markdown document to HTML"""
+        if not self.editors:
+            messagebox.showinfo("Info", "No document to export.")
+            return
+        
+        # Get current file path to suggest HTML filename
+        idx = self.notebook.index(self.notebook.select())
+        current_path = self.file_paths[idx]
+        
+        # Suggest filename
+        if current_path:
+            base_name = os.path.splitext(os.path.basename(current_path))[0]
+            initial_dir = os.path.dirname(current_path)
+            initial_file = f"{base_name}.html"
+        else:
+            initial_dir = os.path.expanduser("~")
+            initial_file = "document.html"
+        
+        # Show save dialog
+        output_path = filedialog.asksaveasfilename(
+            defaultextension=".html",
+            filetypes=[("HTML files", "*.html"), ("All files", "*.*")],
+            initialdir=initial_dir,
+            initialfile=initial_file,
+            title="Export to HTML"
+        )
+        
+        if output_path:
+            export_to_html(self, output_path)
