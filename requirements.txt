@@ -3,3 +3,4 @@ tkinterdnd2>=0.3.0
 py2app>=0.28
 watchdog
 html2text>=2020.1.16
+python-docx>=1.1.0

@@ -4,6 +4,9 @@ import webbrowser
 import re
 import html2text
 from tkinter import messagebox
+from docx import Document
+from docx.shared import Pt, RGBColor, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 def update_preview(app):
     if not app.editors:
@@ -507,3 +510,234 @@ def convert_html_to_markdown(html_content):
     except Exception as e:
         messagebox.showerror("Conversion Error", f"Failed to convert HTML to Markdown: {e}")
         return html_content  # Return original HTML if conversion fails
+
+
+def export_to_docx(app, output_path):
+    """
+    Export the current markdown document to a Word (.docx) file.
+    
+    Args:
+        app: The MarkdownReader application instance
+        output_path: The path where the .docx file should be saved
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    if not app.editors:
+        messagebox.showinfo("Info", "No document to export.")
+        return False
+    
+    try:
+        idx = app.notebook.index(app.notebook.select())
+        text_area = app.editors[idx]
+        markdown_text = text_area.get("1.0", "end-1c")
+        
+        # Create a new Word document
+        doc = Document()
+        
+        # Parse and convert markdown to Word
+        lines = markdown_text.split('\n')
+        i = 0
+        in_code_block = False
+        code_block_lines = []
+        in_list = False
+        
+        while i < len(lines):
+            line = lines[i]
+            
+            # Handle code blocks
+            if line.strip().startswith('```'):
+                if not in_code_block:
+                    in_code_block = True
+                    code_block_lines = []
+                else:
+                    # End of code block
+                    in_code_block = False
+                    if code_block_lines:
+                        code_text = '\n'.join(code_block_lines)
+                        p = doc.add_paragraph(code_text)
+                        p.style = 'Intense Quote'
+                        for run in p.runs:
+                            run.font.name = 'Courier New'
+                            run.font.size = Pt(10)
+                    code_block_lines = []
+                i += 1
+                continue
+            
+            if in_code_block:
+                code_block_lines.append(line)
+                i += 1
+                continue
+            
+            # Skip empty lines
+            if not line.strip():
+                i += 1
+                continue
+            
+            # Headings
+            if line.startswith('#'):
+                level = len(line) - len(line.lstrip('#'))
+                text = line.lstrip('#').strip()
+                if level == 1:
+                    doc.add_heading(text, level=1)
+                elif level == 2:
+                    doc.add_heading(text, level=2)
+                elif level == 3:
+                    doc.add_heading(text, level=3)
+                else:
+                    doc.add_heading(text, level=4)
+            
+            # Horizontal rule
+            elif line.strip() in ['---', '***', '___']:
+                doc.add_paragraph('_' * 50)
+            
+            # Unordered list
+            elif re.match(r'^\s*[-*+]\s+', line):
+                text = re.sub(r'^\s*[-*+]\s+', '', line)
+                text = process_inline_formatting(text)
+                p = doc.add_paragraph(text, style='List Bullet')
+                apply_inline_formatting(p, text)
+            
+            # Ordered list
+            elif re.match(r'^\s*\d+\.\s+', line):
+                text = re.sub(r'^\s*\d+\.\s+', '', line)
+                text = process_inline_formatting(text)
+                p = doc.add_paragraph(text, style='List Number')
+                apply_inline_formatting(p, text)
+            
+            # Blockquote
+            elif line.strip().startswith('>'):
+                text = line.strip().lstrip('>').strip()
+                text = process_inline_formatting(text)
+                p = doc.add_paragraph(text, style='Intense Quote')
+                apply_inline_formatting(p, text)
+            
+            # Table detection (simple)
+            elif '|' in line and line.strip().startswith('|'):
+                table_lines = [line]
+                i += 1
+                # Collect table rows
+                while i < len(lines) and '|' in lines[i]:
+                    table_lines.append(lines[i])
+                    i += 1
+                
+                # Parse and create table
+                if len(table_lines) > 2:  # Header + separator + at least one row
+                    rows_data = []
+                    for tline in table_lines:
+                        if not re.match(r'^\s*\|[\s:-]+\|', tline):  # Skip separator
+                            cells = [c.strip() for c in tline.split('|')[1:-1]]
+                            rows_data.append(cells)
+                    
+                    if rows_data:
+                        table = doc.add_table(rows=len(rows_data), cols=len(rows_data[0]))
+                        table.style = 'Light Grid Accent 1'
+                        
+                        for row_idx, row_data in enumerate(rows_data):
+                            for col_idx, cell_text in enumerate(row_data):
+                                cell = table.rows[row_idx].cells[col_idx]
+                                cell.text = cell_text
+                                if row_idx == 0:  # Header row
+                                    for paragraph in cell.paragraphs:
+                                        for run in paragraph.runs:
+                                            run.font.bold = True
+                continue
+            
+            # Regular paragraph
+            else:
+                text = process_inline_formatting(line)
+                p = doc.add_paragraph()
+                apply_inline_formatting(p, line)
+            
+            i += 1
+        
+        # Save the document
+        doc.save(output_path)
+        messagebox.showinfo("Success", f"Document exported successfully to:\n{output_path}")
+        return True
+        
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to export to Word: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def process_inline_formatting(text):
+    """Remove markdown formatting markers for plain text extraction"""
+    # Remove bold
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'__(.+?)__', r'\1', text)
+    # Remove italic
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    text = re.sub(r'_(.+?)_', r'\1', text)
+    # Remove inline code
+    text = re.sub(r'`(.+?)`', r'\1', text)
+    # Remove links but keep text
+    text = re.sub(r'\[(.+?)\]\(.+?\)', r'\1', text)
+    return text
+
+
+def apply_inline_formatting(paragraph, text):
+    """Apply bold, italic, and other inline formatting to Word paragraph"""
+    # Clear existing runs
+    paragraph.clear()
+    
+    # Pattern to match markdown inline formatting
+    # This is a simplified version - handles bold, italic, code, and links
+    parts = []
+    current_pos = 0
+    
+    # Find all formatting markers
+    patterns = [
+        (r'\*\*(.+?)\*\*', 'bold'),      # Bold with **
+        (r'__(.+?)__', 'bold'),          # Bold with __
+        (r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', 'italic'),  # Italic with *
+        (r'(?<!_)_(?!_)(.+?)(?<!_)_(?!_)', 'italic'),        # Italic with _
+        (r'`(.+?)`', 'code'),            # Inline code
+        (r'\[(.+?)\]\((.+?)\)', 'link'), # Links
+    ]
+    
+    segments = []
+    i = 0
+    while i < len(text):
+        matched = False
+        for pattern, style in patterns:
+            match = re.match(pattern, text[i:])
+            if match:
+                if style == 'link':
+                    segments.append(('normal', match.group(1)))
+                else:
+                    segments.append((style, match.group(1)))
+                i += match.end()
+                matched = True
+                break
+        
+        if not matched:
+            # Find next formatting marker
+            next_marker = len(text)
+            for pattern, _ in patterns:
+                match = re.search(pattern, text[i:])
+                if match:
+                    next_marker = min(next_marker, i + match.start())
+            
+            if next_marker > i:
+                segments.append(('normal', text[i:next_marker]))
+                i = next_marker
+            else:
+                i += 1
+    
+    # If no formatting found, just add the text
+    if not segments:
+        paragraph.add_run(text)
+    else:
+        for style, content in segments:
+            run = paragraph.add_run(content)
+            if style == 'bold':
+                run.font.bold = True
+            elif style == 'italic':
+                run.font.italic = True
+            elif style == 'code':
+                run.font.name = 'Courier New'
+                run.font.size = Pt(10)
+                run.font.color.rgb = RGBColor(212, 73, 80)
