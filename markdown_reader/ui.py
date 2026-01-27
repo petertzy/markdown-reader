@@ -10,6 +10,7 @@ from watchdog.events import FileSystemEventHandler
 from markdown_reader.logic import update_preview
 from markdown_reader.logic import open_preview_in_browser
 from markdown_reader.logic import export_to_html
+from markdown_reader.logic import export_to_docx
 from markdown_reader.logic import convert_html_to_markdown
 from markdown_reader.file_handler import load_file, drop_file
 from markdown_reader.utils import get_preview_file
@@ -52,6 +53,7 @@ class MarkdownReader:
         filemenu.add_command(label="Save File", command=self.save_file)
         filemenu.add_separator()
         filemenu.add_command(label="Export to HTML", command=self.export_to_html_dialog)
+        filemenu.add_command(label="Export to Word", command=self.export_to_docx_dialog)
         filemenu.add_separator()
         filemenu.add_command(label="Close", command=self.close_current_tab)
         filemenu.add_command(label="Close All", command=self.close_all_tabs)
@@ -639,3 +641,34 @@ Example with alignment:
         
         if output_path:
             export_to_html(self, output_path)
+
+    def export_to_docx_dialog(self):
+        """Show dialog to export current markdown document to Word"""
+        if not self.editors:
+            messagebox.showinfo("Info", "No document to export.")
+            return
+        
+        # Get current file path to suggest Word filename
+        idx = self.notebook.index(self.notebook.select())
+        current_path = self.file_paths[idx]
+        
+        # Suggest filename
+        if current_path:
+            base_name = os.path.splitext(os.path.basename(current_path))[0]
+            initial_dir = os.path.dirname(current_path)
+            initial_file = f"{base_name}.docx"
+        else:
+            initial_dir = os.path.expanduser("~")
+            initial_file = "document.docx"
+        
+        # Show save dialog
+        output_path = filedialog.asksaveasfilename(
+            defaultextension=".docx",
+            filetypes=[("Word documents", "*.docx"), ("All files", "*.*")],
+            initialdir=initial_dir,
+            initialfile=initial_file,
+            title="Export to Word"
+        )
+        
+        if output_path:
+            export_to_docx(self, output_path)
