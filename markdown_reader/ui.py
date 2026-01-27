@@ -41,6 +41,15 @@ class MarkdownReader:
         self.current_font_size = 14
         self.current_fg_color = "#000000"
         self.current_bg_color = "#ffffff"
+        
+        # Track which tabs have unsaved modifications
+        self.modified_tabs = set()
+        
+        # Flag to prevent marking as modified during file loading
+        self._loading_file = False
+        
+        # Flag to prevent marking as modified right after saving
+        self._just_saved = False
 
         self.create_widgets()
         self.bind_events()
@@ -171,14 +180,28 @@ class MarkdownReader:
         abs_path = os.path.abspath(path)
         idx = self.notebook.index(self.notebook.select())
         text_area = self.get_current_text_area()
+        is_html = abs_path.lower().endswith((".html", ".htm"))
 
         try:
+            # Set loading flag to prevent marking as modified
+            self._loading_file = True
+            
             with open(abs_path, "r", encoding="utf-8") as f:
                 content = f.read()
             
             # Check if file is HTML and convert to Markdown
-            if abs_path.lower().endswith((".html", ".htm")):
+            if is_html:
                 content = convert_html_to_markdown(content)
+            
+            # Clear the text area and insert new content
+            text_area.delete("1.0", tk.END)
+            text_area.insert(tk.END, content)
+            
+            # Reset the modified flag
+            text_area.edit_modified(False)
+            
+            # Update tab info and save state
+            if is_html:
                 # Update tab name to show it's converted
                 base_name = os.path.splitext(os.path.basename(abs_path))[0]
                 self.notebook.tab(idx, text=f"{base_name}.md (converted)")
@@ -189,16 +212,33 @@ class MarkdownReader:
                 self.file_paths[idx] = abs_path
                 self.notebook.tab(idx, text=os.path.basename(abs_path))
                 self.current_file_path = abs_path
-            
-            text_area.delete("1.0", tk.END)
-            text_area.insert(tk.END, content)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load file: {e}")
+        finally:
+            # Always clear the loading flag first
+            self._loading_file = False
+            
+            # Delay marking tab state to ensure all events are processed
+            # Use after_idle to run after all pending events in the queue
+            if is_html:
+                # Mark as modified since it's converted content
+                self.root.after(100, lambda: self.mark_tab_modified(idx))
+            else:
+                # Mark as saved since we just loaded from file
+                self.root.after(100, lambda: self.mark_tab_saved(idx))
 
     def close_current_tab(self):
         if not self.editors:
             return
         idx = self.notebook.index(self.notebook.select())
+        
+        # Remove from modified tabs if present
+        if idx in self.modified_tabs:
+            self.modified_tabs.remove(idx)
+        
+        # Update indices in modified_tabs for tabs after the closed one
+        self.modified_tabs = {i if i < idx else i - 1 for i in self.modified_tabs}
+        
         self.notebook.forget(idx)
         del self.editors[idx]
         del self.file_paths[idx]
@@ -208,6 +248,8 @@ class MarkdownReader:
             self.notebook.forget(0)
             del self.editors[0]
             del self.file_paths[0]
+        # Clear modified tabs set
+        self.modified_tabs.clear()
 
     def start_watching(self, path):
         if self.observer:
@@ -223,6 +265,16 @@ class MarkdownReader:
     def on_text_change(self, event):
         widget = event.widget
         widget.edit_modified(False)
+        
+        # Don't mark as modified if we're loading a file or just saved
+        if not self._loading_file and not self._just_saved:
+            # Mark current tab as modified
+            try:
+                idx = self.notebook.index(self.notebook.select())
+                self.mark_tab_modified(idx)
+            except:
+                pass
+        
         self.highlight_markdown()
         self.update_preview()
 
@@ -299,6 +351,28 @@ class MarkdownReader:
                 text_area.tag_add("link", s, e)
             pos += 1
 
+    def mark_tab_modified(self, tab_index):
+        """Mark a tab as having unsaved modifications"""
+        if tab_index not in self.modified_tabs:
+            self.modified_tabs.add(tab_index)
+            # Get current tab title
+            current_title = self.notebook.tab(tab_index, "text")
+            # Add asterisk if not already present
+            if not current_title.startswith("* "):
+                self.notebook.tab(tab_index, text=f"* {current_title}")
+    
+    def mark_tab_saved(self, tab_index):
+        """Mark a tab as saved (remove unsaved indicator)"""
+        if tab_index in self.modified_tabs:
+            self.modified_tabs.remove(tab_index)
+        # Get current tab title and remove asterisk if present
+        try:
+            current_title = self.notebook.tab(tab_index, "text")
+            if current_title.startswith("* "):
+                self.notebook.tab(tab_index, text=current_title[2:])
+        except:
+            pass
+
     def quit(self):
         if self.observer:
             self.observer.stop()
@@ -317,6 +391,12 @@ class MarkdownReader:
                 content = text_area.get("1.0", "end-1c")
                 with open(current_path, "w", encoding="utf-8") as f:
                     f.write(content)
+                # Mark tab as saved
+                self.mark_tab_saved(idx)
+                # Set flag to ignore the next file change event
+                self._just_saved = True
+                # Clear flag after a short delay
+                self.root.after(1000, lambda: setattr(self, '_just_saved', False))
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save file: {e}")
         else:
@@ -332,6 +412,8 @@ class MarkdownReader:
                         f.write(content)
                     self.file_paths[idx] = file_path
                     self.notebook.tab(idx, text=os.path.basename(file_path))
+                    # Mark tab as saved (will ensure no asterisk)
+                    self.mark_tab_saved(idx)
                 except Exception as e:
                     messagebox.showerror("Error", f"Failed to save file: {e}")
 
