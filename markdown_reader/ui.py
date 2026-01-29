@@ -555,7 +555,7 @@ class MarkdownReader:
 
             if selected_text.strip() == "" or "\n" in selected_text:
                 from tkinter import messagebox
-                messagebox.showinfo("提示", "请选择单行非空文本设置颜色。")
+                messagebox.showinfo("Tip", "Please select single-line non-empty text to set color.")
                 return
 
             cleaned_text = re.sub(
@@ -608,65 +608,151 @@ class MarkdownReader:
                 pass
 
     def insert_table(self):
-        """Insert a basic table template at cursor position"""
+        """Insert a table with customizable cell content at cursor position"""
         text_area = self.get_current_text_area()
         if not text_area:
             return
     
-        # Create a dialog to get table dimensions
+        # Create dialog
         dialog = tk.Toplevel(self.root)
         dialog.title("Insert Table")
-        dialog.geometry("300x180")
         dialog.transient(self.root)
         dialog.grab_set()
+        
+        # Configuration frame at top
+        config_frame = tk.Frame(dialog, relief=tk.RAISED, borderwidth=1)
+        config_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
+        
+        tk.Label(config_frame, text="Rows (including header):", anchor="w").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        rows_var = tk.IntVar(value=3)
+        rows_spinbox = tk.Spinbox(config_frame, from_=2, to=20, textvariable=rows_var, width=10)
+        rows_spinbox.grid(row=0, column=1, padx=5, pady=5)
     
+        tk.Label(config_frame, text="Columns:", anchor="w").grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        cols_var = tk.IntVar(value=3)
+        cols_spinbox = tk.Spinbox(config_frame, from_=2, to=10, textvariable=cols_var, width=10)
+        cols_spinbox.grid(row=0, column=3, padx=5, pady=5)
+        
+        # Canvas frame for table grid
+        canvas_frame = tk.Frame(dialog)
+        canvas_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        canvas = tk.Canvas(canvas_frame, borderwidth=0)
+        scrollbar_v = tk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+        scrollbar_h = tk.Scrollbar(canvas_frame, orient="horizontal", command=canvas.xview)
+        scrollable_frame = tk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar_v.set, xscrollcommand=scrollbar_h.set)
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar_v.pack(side="right", fill="y")
+        scrollbar_h.pack(side="bottom", fill="x")
+        
+        # Store cell entries
+        cell_entries = []
+        
+        def create_table_grid():
+            """Create or recreate the table grid based on current dimensions"""
+            # Clear existing entries
+            for widget in scrollable_frame.winfo_children():
+                widget.destroy()
+            cell_entries.clear()
+            
+            rows = rows_var.get()
+            cols = cols_var.get()
+            
+            # Create grid of entry widgets
+            for r in range(rows):
+                row_entries = []
+                for c in range(cols):
+                    # Determine default content
+                    if r == 0:
+                        default_text = f"Header {c+1}"
+                    else:
+                        default_text = f"Cell {r}-{c+1}"
+                    
+                    # Create entry with label
+                    cell_frame = tk.Frame(scrollable_frame, relief=tk.RIDGE, borderwidth=1)
+                    cell_frame.grid(row=r, column=c, padx=2, pady=2, sticky="nsew")
+                    
+                    label = tk.Label(cell_frame, text=f"[{r},{c}]", font=("Arial", 8), fg="gray")
+                    label.pack(anchor="nw", padx=2, pady=2)
+                    
+                    entry = tk.Entry(cell_frame, width=15)
+                    entry.insert(0, default_text)
+                    entry.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
+                    
+                    row_entries.append(entry)
+                
+                cell_entries.append(row_entries)
+            
+            # Make columns expandable
+            for c in range(cols):
+                scrollable_frame.columnconfigure(c, weight=1)
+        
+        def update_table_grid(*args):
+            """Update table grid when dimensions change"""
+            create_table_grid()
+        
+        # Bind spinbox changes to update grid
+        rows_var.trace_add("write", update_table_grid)
+        cols_var.trace_add("write", update_table_grid)
+        
+        # Initial table grid
+        create_table_grid()
+        
+        def insert_table_content():
+            """Generate table markdown from entry widgets"""
+            rows = rows_var.get()
+            cols = cols_var.get()
+            table_lines = []
+            
+            # Header row
+            header_values = [entry.get().strip() or f"Header {i+1}" for i, entry in enumerate(cell_entries[0])]
+            header = "| " + " | ".join(header_values) + " |"
+            table_lines.append(header)
+            
+            # Separator row
+            separator = "| " + " | ".join(["---" for _ in range(cols)]) + " |"
+            table_lines.append(separator)
+            
+            # Data rows
+            for row_idx in range(1, rows):
+                row_values = [entry.get().strip() or f"Cell {row_idx}-{i+1}" for i, entry in enumerate(cell_entries[row_idx])]
+                data_row = "| " + " | ".join(row_values) + " |"
+                table_lines.append(data_row)
+            
+            table_text = "\n" + "\n".join(table_lines) + "\n\n"
+            
+            # Insert at cursor position
+            text_area.insert("insert", table_text)
+            dialog.destroy()
+            self.update_preview()
+        
+        # Button frame
+        button_frame = tk.Frame(dialog)
+        button_frame.pack(side=tk.BOTTOM, pady=10)
+        
+        tk.Button(button_frame, text="Insert Table", command=insert_table_content, width=15, height=1, bg="#4CAF50", fg="black").pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="Cancel", command=dialog.destroy, width=15, height=1).pack(side=tk.LEFT, padx=5)
+        
+        # Set dialog size based on initial table dimensions
+        width = min(800, 180 * cols_var.get() + 120)
+        height = min(650, 80 * rows_var.get() + 200)
+        dialog.geometry(f"{width}x{height}")
+        
         # Center the dialog
         dialog.update_idletasks()
         x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
         y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
         dialog.geometry(f"+{x}+{y}")
-    
-        tk.Label(dialog, text="Rows (including header):", anchor="w").grid(row=0, column=0, padx=10, pady=10, sticky="w")
-        rows_var = tk.IntVar(value=3)
-        tk.Spinbox(dialog, from_=2, to=20, textvariable=rows_var, width=10).grid(row=0, column=1, padx=10, pady=10)
-    
-        tk.Label(dialog, text="Columns:", anchor="w").grid(row=1, column=0, padx=10, pady=10, sticky="w")
-        cols_var = tk.IntVar(value=3)
-        tk.Spinbox(dialog, from_=2, to=10, textvariable=cols_var, width=10).grid(row=1, column=1, padx=10, pady=10)
-    
-        def create_table():
-            rows = rows_var.get()
-            cols = cols_var.get()
         
-            # Generate table markdown
-            table_lines = []
-        
-            # Header row
-            header = "| " + " | ".join([f"Header {i+1}" for i in range(cols)]) + " |"
-            table_lines.append(header)
-        
-            # Separator row
-            separator = "| " + " | ".join(["---" for _ in range(cols)]) + " |"
-            table_lines.append(separator)
-        
-            # Data rows
-            for row in range(rows - 1):  # -1 because header is already included
-                data_row = "| " + " | ".join([f"Cell {row+1}-{col+1}" for col in range(cols)]) + " |"
-                table_lines.append(data_row)
-        
-            table_text = "\n" + "\n".join(table_lines) + "\n\n"
-        
-            # Insert at cursor position
-            text_area.insert("insert", table_text)
-            dialog.destroy()
-            self.update_preview()
-    
-        button_frame = tk.Frame(dialog)
-        button_frame.grid(row=2, column=0, columnspan=2, pady=20)
-    
-        tk.Button(button_frame, text="Insert", command=create_table, width=10).pack(side=tk.LEFT, padx=5)
-        tk.Button(button_frame, text="Cancel", command=dialog.destroy, width=10).pack(side=tk.LEFT, padx=5)
-    
         dialog.wait_window()
 
     def show_table_help(self):
