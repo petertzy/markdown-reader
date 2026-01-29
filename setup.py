@@ -5,8 +5,8 @@ DATA_FILES = []
 OPTIONS = {
     'argv_emulation': False,
     'iconfile': 'icon.icns',
-    'packages': ['markdown_reader'],
-    'includes': ['tkinter', 'markdown2', 'docx', 'html2text', 'watchdog'],
+    'packages': ['markdown_reader', 'pygments'],
+    'includes': ['tkinter', 'markdown2', 'docx', 'html2text', 'watchdog', 'pygments.lexers', 'pygments.lexers.shell'],
     'excludes': ['PIL', 'numpy', 'scipy', 'matplotlib'],
     'plist': {
         'CFBundleName': 'MarkdownReader',
@@ -18,7 +18,9 @@ OPTIONS = {
         'CFBundleDocumentTypes': [
             {
                 'CFBundleTypeName': 'Markdown File',
-                'CFBundleTypeExtensions': ['md', 'markdown'],
+                # include both lowercase and uppercase extensions to ensure macOS
+                # recognizes files regardless of extension case
+                'CFBundleTypeExtensions': ['md', 'MD', 'markdown', 'MARKDOWN'],
                 'CFBundleTypeMIMETypes': ['text/markdown'],
                 'CFBundleTypeRole': 'Editor',
                 'LSHandlerRank': 'Owner',

@@ -3,14 +3,17 @@ import os
 import webbrowser
 import re
 import html2text
+from html import escape as html_escape
 from tkinter import messagebox
 from docx import Document
 from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+import traceback
 
 def update_preview(app):
     if not app.editors:
         return False
+    # Build HTML content from current editor text, with robust error reporting.
     try:
         idx = app.notebook.index(app.notebook.select())
         text_area = app.editors[idx]
@@ -18,23 +21,50 @@ def update_preview(app):
         markdown_text = getattr(app, '_preview_content_override', None)
         if markdown_text is None:
             markdown_text = text_area.get("1.0", "end-1c")
+
+        # Attempt to fix image paths when a file is open
         if hasattr(app, 'file_paths') and app.file_paths:
             try:
                 idx = app.notebook.index(app.notebook.select())
                 current_path = app.file_paths[idx]
-                # Only process images if we have a valid file path
                 if current_path is not None:
                     base_dir = os.path.dirname(current_path)
                     markdown_text = fix_image_paths(markdown_text, base_dir)
-            except Exception as e:
-                # Silently handle cases where file hasn't been saved yet
+            except Exception:
+                # Non-fatal: continue without fixed image paths
                 pass
+        # If the editor appears empty in the packaged app, try to read
+        # the file contents directly from disk (handles race conditions
+        # where the GUI editor hasn't populated yet).
+        try:
+            if (not isinstance(markdown_text, str) or not markdown_text.strip()) and hasattr(app, 'file_paths') and app.file_paths:
+                current_path = app.file_paths[idx]
+                if current_path and os.path.isfile(current_path):
+                    with open(current_path, 'r', encoding='utf-8', errors='replace') as fh:
+                        disk_text = fh.read()
+                    if isinstance(disk_text, str) and disk_text.strip():
+                        markdown_text = disk_text
+        except Exception:
+            pass
         else:
-            print("No file_paths attribute or it's empty; skipping fix_image_paths")
-        html_content = markdown2.markdown(markdown_text, extras=["fenced-code-blocks", "code-friendly", "tables"])
+            # Helpful debug output when running in development
+            try:
+                print("No file_paths attribute or it's empty; skipping fix_image_paths")
+            except Exception:
+                pass
+
+        # Convert markdown to HTML. Capture errors from the converter separately
+        try:
+            html_content = markdown2.markdown(markdown_text, extras=["fenced-code-blocks", "code-friendly", "tables"])
+        except Exception as e:
+            tb = traceback.format_exc()
+            print(f"markdown2 conversion error: {e}\n{tb}")
+            # Produce an HTML page containing the full traceback for easier debugging
+            html_content = f"<h2>Error generating preview</h2><pre>{html_escape(tb)}</pre>"
     except Exception as e:
-        print(f"update_preview Error: {e}")
-        html_content = "<p>Error generating preview</p>"
+        tb = traceback.format_exc()
+        print(f"update_preview unexpected error: {e}\n{tb}")
+        html_content = f"<h2>Unexpected error generating preview</h2><pre>{html_escape(tb)}</pre>"
 
     # Get style from app (with fallback)
     font_family = getattr(app, 'current_font_family', 'Consolas')
@@ -67,9 +97,26 @@ def update_preview(app):
     base = font_size + 2
 
     try:
+        # Add a small debug comment with a snippet of the markdown text so
+        # packaged runs can reveal what content was actually provided.
+        debug_snippet = ''
+        try:
+            debug_snippet = markdown_text[:1000].replace('--', '- -')
+        except Exception:
+            debug_snippet = '<unable to read markdown snippet>'
+
+        # Also include current file path for debugging when available
+        debug_path = ''
+        try:
+            debug_path = getattr(app, 'file_paths', [None])[idx] if hasattr(app, 'file_paths') else ''
+        except Exception:
+            debug_path = ''
+        debug_comment = f"<!-- DEBUG_MARKDOWN_LEN:{len(markdown_text) if isinstance(markdown_text, str) else 0} DEBUG_PATH:{debug_path}\n{debug_snippet}\n-->"
+
         with open(app.preview_file, 'w', encoding='utf-8') as f:
             f.write(f"""
             <html>
+            {debug_comment}
             <head>
                 <meta charset="UTF-8">
                 <style>
