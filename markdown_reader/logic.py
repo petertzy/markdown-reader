@@ -34,6 +34,7 @@ def update_preview(app):
         html_content = markdown2.markdown(markdown_text, extras=["fenced-code-blocks", "code-friendly", "tables"])
     except Exception as e:
         print(f"update_preview Error: {e}")
+        html_content = "<p>Error generating preview</p>"
 
     # Get style from app (with fallback)
     font_family = getattr(app, 'current_font_family', 'Consolas')
