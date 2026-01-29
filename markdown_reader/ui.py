@@ -127,8 +127,15 @@ class MarkdownReader:
         self.editors = []
         self.file_paths = []
         
+        # Create context menu for tabs
+        self.tab_context_menu = tk.Menu(self.root, tearoff=0)
+        self.tab_context_menu.add_command(label="Close", command=self.close_tab_from_context_menu)
+        
         # Bind click event to detect close button clicks
         self.notebook.bind("<Button-1>", self.on_tab_click)
+        
+        # Bind right-click for context menu
+        self.notebook.bind("<Button-2>" if self.root.tk.call('tk', 'windowingsystem') == 'aqua' else "<Button-3>", self.show_tab_context_menu)
 
         self.new_file()
 
@@ -301,6 +308,24 @@ class MarkdownReader:
                 
         except Exception as e:
             print(f"Error in on_tab_click: {e}")
+
+    def show_tab_context_menu(self, event):
+        """Show context menu when right-clicking on a tab"""
+        try:
+            # Identify which tab was clicked
+            clicked_tab = self.notebook.tk.call(self.notebook._w, "identify", "tab", event.x, event.y)
+            if clicked_tab != "":
+                # Store the clicked tab index for later use
+                self.right_clicked_tab_index = int(clicked_tab)
+                # Show the context menu at cursor position
+                self.tab_context_menu.post(event.x_root, event.y_root)
+        except Exception as e:
+            print(f"Error showing context menu: {e}")
+    
+    def close_tab_from_context_menu(self):
+        """Close the tab that was right-clicked"""
+        if hasattr(self, 'right_clicked_tab_index') and self.right_clicked_tab_index < len(self.editors):
+            self.close_tab_by_index(self.right_clicked_tab_index)
 
     def add_close_button_to_tab(self, tab_index, tab_text):
         """Add a custom tab label with a close button"""
