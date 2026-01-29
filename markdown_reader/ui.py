@@ -126,6 +126,9 @@ class MarkdownReader:
 
         self.editors = []
         self.file_paths = []
+        
+        # Bind click event to detect close button clicks
+        self.notebook.bind("<Button-1>", self.on_tab_click)
 
         self.new_file()
 
@@ -150,10 +153,14 @@ class MarkdownReader:
         text_area = ScrolledText(frame, wrap=tk.WORD, font=base_font, undo=True)
         text_area.pack(fill=tk.BOTH, expand=True)
         text_area.bind("<<Modified>>", self.on_text_change)
-        self.notebook.add(frame, text="Untitled")
-        self.notebook.select(len(self.editors))
+        self.notebook.add(frame, text="")
+        tab_index = len(self.editors)
+        self.notebook.select(tab_index)
         self.editors.append(text_area)
         self.file_paths.append(None)
+        
+        # Add custom tab with close button
+        self.add_close_button_to_tab(tab_index, "Untitled")
 
     def open_file(self):
         file_path = filedialog.askopenfilename(filetypes=[
@@ -204,13 +211,15 @@ class MarkdownReader:
             if is_html:
                 # Update tab name to show it's converted
                 base_name = os.path.splitext(os.path.basename(abs_path))[0]
-                self.notebook.tab(idx, text=f"{base_name}.md (converted)")
+                tab_text = f"{base_name}.md (converted)"
+                self.add_close_button_to_tab(idx, tab_text)
                 # Don't set file_paths to HTML file - treat as new unsaved file
                 self.file_paths[idx] = None
                 self.current_file_path = None
             else:
                 self.file_paths[idx] = abs_path
-                self.notebook.tab(idx, text=os.path.basename(abs_path))
+                tab_text = os.path.basename(abs_path)
+                self.add_close_button_to_tab(idx, tab_text)
                 self.current_file_path = abs_path
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load file: {e}")
@@ -250,6 +259,123 @@ class MarkdownReader:
             del self.file_paths[0]
         # Clear modified tabs set
         self.modified_tabs.clear()
+
+    def on_tab_click(self, event):
+        """Handle click events on notebook tabs to detect close button clicks"""
+        try:
+            # Identify which tab was clicked
+            element = self.notebook.tk.call(self.notebook._w, "identify", "tab", event.x, event.y)
+            if element == "":
+                return
+                
+            tab_index = int(element)
+            tab_text = self.notebook.tab(tab_index, "text")
+            
+            # Only proceed if × is in the tab text
+            if "×" not in tab_text:
+                return
+            
+            # Calculate approximate tab dimensions
+            import tkinter.font as tkfont
+            font = tkfont.Font(family="TkDefaultFont", size=10)
+            
+            # Estimate where this tab starts by summing previous tab widths
+            tab_start_x = 0
+            for i in range(tab_index):
+                prev_text = self.notebook.tab(i, "text")
+                # Estimate width: text width + padding (approximately 20px)
+                prev_width = font.measure(prev_text) + 20
+                tab_start_x += prev_width
+            
+            # Calculate relative x within the clicked tab
+            relative_x = event.x - tab_start_x
+            
+            # Get the width of the current tab
+            current_width = font.measure(tab_text) + 20
+            
+            # If click is in the last 30 pixels of the tab, consider it a close click
+            close_button_width = 30
+            if relative_x > (current_width - close_button_width):
+                self.close_tab_by_index(tab_index)
+                return "break"  # Prevent default tab selection behavior
+                
+        except Exception as e:
+            print(f"Error in on_tab_click: {e}")
+
+    def add_close_button_to_tab(self, tab_index, tab_text):
+        """Add a custom tab label with a close button"""
+        # Create a frame to hold the label and close button
+        tab_frame = tk.Frame(self.notebook, bg='#f0f0f0')
+        
+        # Label for the tab text
+        label = tk.Label(tab_frame, text=tab_text, bg='#f0f0f0', padx=5)
+        label.pack(side=tk.LEFT)
+        
+        # Close button (using × symbol)
+        close_button = tk.Button(
+            tab_frame, 
+            text="×", 
+            command=lambda idx=tab_index: self.close_tab_by_index(idx),
+            relief=tk.FLAT,
+            bg='#f0f0f0',
+            fg='#666666',
+            font=('Arial', 12, 'bold'),
+            padx=3,
+            pady=0,
+            cursor='hand2',
+            borderwidth=0,
+            highlightthickness=0
+        )
+        close_button.pack(side=tk.LEFT, padx=(0, 2))
+        
+        # Hover effects
+        def on_enter(e):
+            close_button.config(fg='#ff0000', bg='#e0e0e0')
+        
+        def on_leave(e):
+            close_button.config(fg='#666666', bg='#f0f0f0')
+        
+        close_button.bind('<Enter>', on_enter)
+        close_button.bind('<Leave>', on_leave)
+        
+        # Set the tab to use this custom frame
+        self.notebook.tab(tab_index, text='')
+        tab_id = self.notebook.tabs()[tab_index]
+        
+        # Use a workaround to add custom widget to tab
+        # Store reference to prevent garbage collection
+        if not hasattr(self, 'tab_widgets'):
+            self.tab_widgets = {}
+        self.tab_widgets[tab_index] = (tab_frame, label)
+        
+        # Update the tab text directly
+        self.notebook.tab(tab_index, text=f"{tab_text}  ×")
+    
+    def close_tab_by_index(self, idx):
+        """Close a specific tab by index"""
+        if idx < len(self.editors):
+            # Remove from modified tabs if present
+            if idx in self.modified_tabs:
+                self.modified_tabs.remove(idx)
+            
+            # Update indices in modified_tabs for tabs after the closed one
+            self.modified_tabs = {i if i < idx else i - 1 for i in self.modified_tabs}
+            
+            self.notebook.forget(idx)
+            del self.editors[idx]
+            del self.file_paths[idx]
+            
+            # Update tab_widgets dictionary
+            if hasattr(self, 'tab_widgets'):
+                # Remove the closed tab
+                if idx in self.tab_widgets:
+                    del self.tab_widgets[idx]
+                # Update indices for remaining tabs
+                new_widgets = {}
+                for key, value in self.tab_widgets.items():
+                    new_key = key if key < idx else key - 1
+                    new_widgets[new_key] = value
+                self.tab_widgets = new_widgets
 
     def start_watching(self, path):
         if self.observer:
@@ -357,9 +483,12 @@ class MarkdownReader:
             self.modified_tabs.add(tab_index)
             # Get current tab title
             current_title = self.notebook.tab(tab_index, "text")
+            # Remove the close button symbol if present
+            if current_title.endswith("  ×"):
+                current_title = current_title[:-3]
             # Add asterisk if not already present
             if not current_title.startswith("* "):
-                self.notebook.tab(tab_index, text=f"* {current_title}")
+                self.notebook.tab(tab_index, text=f"* {current_title}  ×")
     
     def mark_tab_saved(self, tab_index):
         """Mark a tab as saved (remove unsaved indicator)"""
@@ -368,8 +497,13 @@ class MarkdownReader:
         # Get current tab title and remove asterisk if present
         try:
             current_title = self.notebook.tab(tab_index, "text")
+            # Remove the close button symbol if present
+            if current_title.endswith("  ×"):
+                current_title = current_title[:-3]
             if current_title.startswith("* "):
-                self.notebook.tab(tab_index, text=current_title[2:])
+                current_title = current_title[2:]
+            # Re-add close button
+            self.notebook.tab(tab_index, text=f"{current_title}  ×")
         except:
             pass
 
@@ -411,7 +545,8 @@ class MarkdownReader:
                     with open(file_path, "w", encoding="utf-8") as f:
                         f.write(content)
                     self.file_paths[idx] = file_path
-                    self.notebook.tab(idx, text=os.path.basename(file_path))
+                    tab_text = os.path.basename(file_path)
+                    self.notebook.tab(idx, text=f"{tab_text}  ×")
                     # Mark tab as saved (will ensure no asterisk)
                     self.mark_tab_saved(idx)
                 except Exception as e:
