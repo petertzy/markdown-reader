@@ -3,8 +3,11 @@ from setuptools import setup
 APP = ['app.py']
 DATA_FILES = []
 OPTIONS = {
+    'argv_emulation': False,
     'iconfile': 'icon.icns',
-    'packages': ['markdown2'],
+    'packages': ['markdown_reader'],
+    'includes': ['tkinter', 'markdown2', 'docx', 'html2text', 'watchdog'],
+    'excludes': ['PIL', 'numpy', 'scipy', 'matplotlib'],
     'plist': {
         'CFBundleName': 'MarkdownReader',
         'CFBundleDisplayName': 'MarkdownReader',
