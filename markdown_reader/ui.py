@@ -42,14 +42,14 @@ class MarkdownReader:
         self.current_fg_color = "#000000"
         self.current_bg_color = "#ffffff"
         
-        # Track which tabs have unsaved modifications
-        self.modified_tabs = set()
-        
         # Flag to prevent marking as modified during file loading
         self._loading_file = False
         
-        # Flag to prevent marking as modified right after saving
-        self._just_saved = False
+        # Track which tabs have unsaved modifications
+        self.modified_tabs = set()
+        
+        # IME state tracking per widget
+        self._ime_states = {}
 
         self.create_widgets()
         self.bind_events()
@@ -159,7 +159,78 @@ class MarkdownReader:
         text_area = self.get_current_text_area()
         text_area = ScrolledText(frame, wrap=tk.WORD, font=base_font, undo=True)
         text_area.pack(fill=tk.BOTH, expand=True)
-        text_area.bind("<<Modified>>", self.on_text_change)
+        
+        # Setup IME interception
+        wid = str(text_area)
+        self._ime_states[wid] = {'active': False}
+        
+        def intercept_key(event):
+            state = self._ime_states[wid]
+            
+            # Detect IME activation (macOS IME emits empty char with keycode 0)
+            if event.char == '' and event.keycode == 0:
+                state['active'] = True
+                return None
+
+            # Deletion should mark modified but must not toggle IME state
+            if event.keysym in ('BackSpace', 'Delete'):
+                if not self._loading_file:
+                    try:
+                        idx = self.notebook.index(self.notebook.select())
+                        self.mark_tab_modified(idx)
+                    except:
+                        pass
+                return None
+            
+            # Detect IME deactivation (non-ASCII = committed text)
+            if event.char and ord(event.char) > 127:
+                state['active'] = False
+                # Mark tab as modified when committed Chinese text arrives
+                if not self._loading_file:
+                    try:
+                        idx = self.notebook.index(self.notebook.select())
+                        self.mark_tab_modified(idx)
+                    except:
+                        pass
+                return None
+            
+            # For lowercase ASCII letters during IME, delete them immediately
+            if state['active'] and event.char:
+                if event.char.islower() and event.char.isalpha():
+                    # Delete with highest priority (0 delay)
+                    text_area.after(0, lambda: delete_ime_char())
+            # For regular (non-IME) text input, mark as modified
+            elif event.char and not state['active']:
+                if not self._loading_file:
+                    try:
+                        idx = self.notebook.index(self.notebook.select())
+                        self.mark_tab_modified(idx)
+                    except:
+                        pass
+            
+            return None
+        
+        def delete_ime_char():
+            try:
+                # Get current cursor position
+                current_index = text_area.index('insert')
+                # Calculate previous position
+                line, col = current_index.split('.')
+                prev_col = int(col) - 1
+                if prev_col >= 0:
+                    prev_index = f"{line}.{prev_col}"
+                    # Get the character that was just inserted
+                    char = text_area.get(prev_index, current_index)
+                    # Delete it if it's a lowercase letter (IME composition character)
+                    if char and len(char) == 1 and char.islower() and char.isalpha():
+                        text_area.delete(prev_index, current_index)
+            except Exception:
+                pass
+        
+        # Bind KeyPress DIRECTLY with priority
+        text_area.bind('<KeyPress>', intercept_key, add=False)
+        
+        # Other bindings come after
         self.notebook.add(frame, text="")
         tab_index = len(self.editors)
         self.notebook.select(tab_index)
@@ -413,19 +484,7 @@ class MarkdownReader:
         self.observer.schedule(event_handler, path=watch_dir, recursive=False)
         self.observer.start()
 
-    def on_text_change(self, event):
-        widget = event.widget
-        widget.edit_modified(False)
-        
-        # Don't mark as modified if we're loading a file or just saved
-        if not self._loading_file and not self._just_saved:
-            # Mark current tab as modified
-            try:
-                idx = self.notebook.index(self.notebook.select())
-                self.mark_tab_modified(idx)
-            except:
-                pass
-        
+    def on_text_change(self):
         self.highlight_markdown()
         self.update_preview()
 
@@ -552,10 +611,6 @@ class MarkdownReader:
                     f.write(content)
                 # Mark tab as saved
                 self.mark_tab_saved(idx)
-                # Set flag to ignore the next file change event
-                self._just_saved = True
-                # Clear flag after a short delay
-                self.root.after(1000, lambda: setattr(self, '_just_saved', False))
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to save file: {e}")
         else:
