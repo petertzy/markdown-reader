@@ -45,6 +45,9 @@ class MarkdownReader:
         # Flag to prevent marking as modified during file loading
         self._loading_file = False
         
+        # Track which tabs have unsaved modifications
+        self.modified_tabs = set()
+        
         # IME state tracking per widget
         self._ime_states = {}
 
@@ -164,14 +167,31 @@ class MarkdownReader:
         def intercept_key(event):
             state = self._ime_states[wid]
             
-            # Detect IME activation
-            if event.char == '' or event.keycode == 0:
+            # Detect IME activation (macOS IME emits empty char with keycode 0)
+            if event.char == '' and event.keycode == 0:
                 state['active'] = True
+                return None
+
+            # Deletion should mark modified but must not toggle IME state
+            if event.keysym in ('BackSpace', 'Delete'):
+                if not self._loading_file:
+                    try:
+                        idx = self.notebook.index(self.notebook.select())
+                        self.mark_tab_modified(idx)
+                    except:
+                        pass
                 return None
             
             # Detect IME deactivation (non-ASCII = committed text)
             if event.char and ord(event.char) > 127:
                 state['active'] = False
+                # Mark tab as modified when committed Chinese text arrives
+                if not self._loading_file:
+                    try:
+                        idx = self.notebook.index(self.notebook.select())
+                        self.mark_tab_modified(idx)
+                    except:
+                        pass
                 return None
             
             # For lowercase ASCII letters during IME, delete them immediately
@@ -179,6 +199,14 @@ class MarkdownReader:
                 if event.char.islower() and event.char.isalpha():
                     # Delete with highest priority (0 delay)
                     text_area.after(0, lambda: delete_ime_char())
+            # For regular (non-IME) text input, mark as modified
+            elif event.char and not state['active']:
+                if not self._loading_file:
+                    try:
+                        idx = self.notebook.index(self.notebook.select())
+                        self.mark_tab_modified(idx)
+                    except:
+                        pass
             
             return None
         
@@ -535,11 +563,33 @@ class MarkdownReader:
 
     def mark_tab_modified(self, tab_index):
         """Mark a tab as having unsaved modifications"""
-        pass
+        if tab_index not in self.modified_tabs:
+            self.modified_tabs.add(tab_index)
+            # Get current tab title
+            current_title = self.notebook.tab(tab_index, "text")
+            # Remove the close button symbol if present
+            if current_title.endswith("  ×"):
+                current_title = current_title[:-3]
+            # Add asterisk if not already present
+            if not current_title.startswith("* "):
+                self.notebook.tab(tab_index, text=f"* {current_title}  ×")
     
     def mark_tab_saved(self, tab_index):
         """Mark a tab as saved (remove unsaved indicator)"""
-        pass
+        if tab_index in self.modified_tabs:
+            self.modified_tabs.remove(tab_index)
+        # Get current tab title and remove asterisk if present
+        try:
+            current_title = self.notebook.tab(tab_index, "text")
+            # Remove the close button symbol if present
+            if current_title.endswith("  ×"):
+                current_title = current_title[:-3]
+            if current_title.startswith("* "):
+                current_title = current_title[2:]
+            # Re-add close button
+            self.notebook.tab(tab_index, text=f"{current_title}  ×")
+        except:
+            pass
 
     def quit(self):
         if self.observer:
