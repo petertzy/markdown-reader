@@ -5,8 +5,8 @@ DATA_FILES = []
 OPTIONS = {
     'argv_emulation': False,
     'iconfile': 'icon.icns',
-    'packages': ['markdown_reader', 'pygments'],
-    'includes': ['tkinter', 'markdown2', 'docx', 'html2text', 'watchdog', 'pygments.lexers', 'pygments.lexers.shell'],
+    'packages': ['markdown_reader', 'pygments', 'tkinterdnd2'],
+    'includes': ['tkinter', 'markdown2', 'docx', 'html2text', 'watchdog', 'tkinterdnd2', 'pygments.lexers', 'pygments.lexers.shell'],
     'excludes': ['PIL', 'numpy', 'scipy', 'matplotlib'],
     'plist': {
         'CFBundleName': 'MarkdownReader',
