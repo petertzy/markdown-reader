@@ -150,6 +150,7 @@ class MarkdownReader:
         self.root.bind_all("<Command-s>", lambda event: self.save_file())
         self.root.bind_all("<Control-z>", lambda event: self.undo_action())
         self.root.bind_all("<Control-y>", lambda event: self.redo_action())
+        self.root.bind_all("<Control-n>", lambda event: self.new_file())
         self.root.bind_all("<Command-z>", lambda event: self.undo_action())
         self.root.bind_all("<Command-Shift-Z>", lambda event: self.redo_action())
 
@@ -507,7 +508,7 @@ class MarkdownReader:
 
         # Use the selected font for highlighting
         import tkinter.font
-        font_name = getattr(self, 'current_font_family', 'Consolas')
+        font_name = getattr(self, 'current_font_family', 'Ubuntu')
         font_size = getattr(self, 'current_font_size', 14)
         text_area.tag_configure("heading", foreground="#333333", font=(font_name, font_size + 4, "bold"))
         text_area.tag_configure("bold", font=(font_name, font_size, "bold"))
