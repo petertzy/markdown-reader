@@ -508,7 +508,15 @@ class MarkdownReader:
 
         # Use the selected font for highlighting
         import tkinter.font
-        font_name = getattr(self, 'current_font_family', 'Ubuntu')
+        import platform
+        system = platform.system()
+        if system == "Darwin":          # macOS
+            default_font = "Menlo"
+        elif system == "Windows":
+            default_font = "Consolas"
+        else:                           # Linux
+            default_font = "Ubuntu Mono"
+        font_name = getattr(self, 'current_font_family', default_font)
         font_size = getattr(self, 'current_font_size', 14)
         text_area.tag_configure("heading", foreground="#333333", font=(font_name, font_size + 4, "bold"))
         text_area.tag_configure("bold", font=(font_name, font_size, "bold"))
