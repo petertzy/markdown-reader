@@ -796,39 +796,40 @@ class MarkdownReader:
         self.update_preview()
 
     def choose_fg_color(self):
-        from tkinter.colorchooser import askcolor
         import re
+        cd = dialogs.ColorChooserDialog()
+        cd.show()
+        color = cd.result
+        if color:
+            color.hex
+            text_area = self.get_current_text_area()
+            if text_area:
+                try:
+                    sel_start = text_area.index("sel.first")
+                    sel_end = text_area.index("sel.last")
+                    selected_text = text_area.get(sel_start, sel_end)
 
-        text_area = self.get_current_text_area()
-        if not text_area:
-            return
-        color = askcolor()[1]
-        if not color:
-            return
+                    if selected_text.strip() == "" or "\n" in selected_text:
+                        from tkinter import messagebox
+                        messagebox.showinfo("Tip", "Please select single-line non-empty text to set color.")
+                        return
 
-        try:
-            sel_start = text_area.index("sel.first")
-            sel_end = text_area.index("sel.last")
-            selected_text = text_area.get(sel_start, sel_end)
+                    cleaned_text = re.sub(
+                        r'<span style="color:[^">]+?">(.*?)</span>', r'\1', selected_text, flags=re.DOTALL
+                    )
+                    new_text = f'<span style="color:{color}">{cleaned_text}</span>'
 
-            if selected_text.strip() == "" or "\n" in selected_text:
-                from tkinter import messagebox
-                messagebox.showinfo("Tip", "Please select single-line non-empty text to set color.")
-                return
+                    text_area.delete(sel_start, sel_end)
+                    text_area.insert(sel_start, new_text)
 
-            cleaned_text = re.sub(
-                r'<span style="color:[^">]+?">(.*?)</span>', r'\1', selected_text, flags=re.DOTALL
-            )
-            new_text = f'<span style="color:{color}">{cleaned_text}</span>'
+                    self.current_fg_color = color
+                    self.update_preview()
+                except tk.TclError:
+                    from tkinter import messagebox
+                    messagebox.showinfo("No selection", "Please select text to color.")
 
-            text_area.delete(sel_start, sel_end)
-            text_area.insert(sel_start, new_text)
 
-            self.current_fg_color = color
-            self.update_preview()
-        except tk.TclError:
-            from tkinter import messagebox
-            messagebox.showinfo("No selection", "Please select text to color.")
+            
 
     def choose_bg_color(self):
         cd = dialogs.ColorChooserDialog()
