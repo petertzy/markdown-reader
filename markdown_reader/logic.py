@@ -54,8 +54,9 @@ def update_preview(app):
                 pass
 
         # Convert markdown to HTML. Capture errors from the converter separately
+        # FIX APPLIED: Added "break-on-newline" to extras to preserve line breaks
         try:
-            html_content = markdown2.markdown(markdown_text, extras=["fenced-code-blocks", "code-friendly", "tables"])
+            html_content = markdown2.markdown(markdown_text, extras=["fenced-code-blocks", "code-friendly", "tables", "break-on-newline"])
         except Exception as e:
             tb = traceback.format_exc()
             print(f"markdown2 conversion error: {e}\n{tb}")
@@ -111,7 +112,7 @@ def update_preview(app):
             debug_path = getattr(app, 'file_paths', [None])[idx] if hasattr(app, 'file_paths') else ''
         except Exception:
             debug_path = ''
-        debug_comment = f"<!-- DEBUG_MARKDOWN_LEN:{len(markdown_text) if isinstance(markdown_text, str) else 0} DEBUG_PATH:{debug_path}\n{debug_snippet}\n-->"
+        debug_comment = f""
 
         with open(app.preview_file, 'w', encoding='utf-8') as f:
             f.write(f"""
@@ -368,9 +369,10 @@ def export_to_html(app, output_path):
                 print(f"Warning: Could not process image paths: {e}")
         
         # Convert markdown to HTML
+        # FIX APPLIED: Added "break-on-newline" to extras here as well
         html_content = markdown2.markdown(
             markdown_text, 
-            extras=["fenced-code-blocks", "code-friendly", "tables"]
+            extras=["fenced-code-blocks", "code-friendly", "tables", "break-on-newline"]
         )
         
         # Get style from app (with fallback)
