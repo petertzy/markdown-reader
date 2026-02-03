@@ -17,6 +17,7 @@ from markdown_reader.utils import get_preview_file
 import tkinter.font  # moved here from inside methods
 import ttkbootstrap as ttkb
 from ttkbootstrap.constants import *
+from ttkbootstrap import dialogs
 
 class FileChangeHandler(FileSystemEventHandler):
     def __init__(self, app, filepath):
@@ -79,7 +80,7 @@ class MarkdownReader:
                              command=lambda: open_preview_in_browser(self.preview_file, self))
         menubar.add_cascade(label="View", menu=viewmenu)
 
-        editmenu = tk.Menu(menubar, tearoff=0)
+        editmenu = ttkb.Menu(menubar, tearoff=0)
         editmenu.add_command(label="Undo", command=self.undo_action)
         editmenu.add_command(label="Redo", command=self.redo_action)
         menubar.add_cascade(label="Edit", menu=editmenu)
@@ -94,7 +95,8 @@ class MarkdownReader:
         self.root.config(menu=menubar)
 
         # --- Toolbar ---
-        toolbar = tk.Frame(self.root, bd=1, relief=tk.RAISED, bg="#f7f9fa")
+        style.configure('primary.TFrame')
+        toolbar = ttkb.Frame(self.root, relief=tk.RAISED, style='primary.TFrame', padding=(5, 5, 0, 5))
         # Style dropdown
         self.style_var = tk.StringVar(value="Normal text")
         style_options = ["Normal text", "Heading 1", "Heading 2", "Heading 3"]
@@ -829,15 +831,17 @@ class MarkdownReader:
             messagebox.showinfo("No selection", "Please select text to color.")
 
     def choose_bg_color(self):
-        from tkinter.colorchooser import askcolor
-        text_area = self.get_current_text_area()
-        if not text_area:
-            return
-        color = askcolor()[1]
+        cd = dialogs.ColorChooserDialog()
+        cd.show()
+        color = cd.result
         if color:
+            color = color.hex
+            text_area = self.get_current_text_area()
+        if text_area:
             text_area.config(bg=color)
             self.current_bg_color = color
             self.update_preview()
+            
 
     def update_preview(self):
         if not self.current_file_path:
