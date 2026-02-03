@@ -335,7 +335,7 @@ class MarkdownReader:
                 self.add_close_button_to_tab(idx, tab_text)
                 self.current_file_path = abs_path
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to load file: {e}")
+            dialogs.Messagebox.show_error("Error", f"Failed to load file: {e}")
         finally:
             # Always clear the loading flag first
             self._loading_file = False
@@ -655,7 +655,7 @@ class MarkdownReader:
                 # Mark tab as saved
                 self.mark_tab_saved(idx)
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to save file: {e}")
+                dialogs.Messagebox.show_error("Error", f"Failed to save file: {e}")
         else:
             file_path = filedialog.asksaveasfilename(
                 defaultextension=".md",
@@ -673,7 +673,7 @@ class MarkdownReader:
                     # Mark tab as saved (will ensure no asterisk)
                     self.mark_tab_saved(idx)
                 except Exception as e:
-                    messagebox.showerror("Error", f"Failed to save file: {e}")
+                    dialogs.Messagebox.show_error("Error", f"Failed to save file: {e}")
 
     # --- Toolbar functions ---
     def get_current_text_area(self):
@@ -747,8 +747,7 @@ class MarkdownReader:
             text_area.delete(sel_start, sel_end)
             text_area.insert(sel_start, new_text)
         except tk.TclError:
-            from tkinter import messagebox
-            messagebox.showinfo("No selection", "Please select text to make bold.")
+            dialogs.Messagebox.show_info("No selection", "Please select text to make bold.")
             return
         self.update_preview()
 
@@ -769,8 +768,7 @@ class MarkdownReader:
             text_area.delete(sel_start, sel_end)
             text_area.insert(sel_start, new_text)
         except tk.TclError:
-            from tkinter import messagebox
-            messagebox.showinfo("No selection", "Please select text to make italic.")
+            dialogs.Messagebox.show_info("No selection", "Please select text to make italic.")
             return
         self.update_preview()
 
@@ -790,8 +788,7 @@ class MarkdownReader:
             text_area.delete(sel_start, sel_end)
             text_area.insert(sel_start, new_text)
         except tk.TclError:
-            from tkinter import messagebox
-            messagebox.showinfo("No selection", "Please select text to underline.")
+            dialogs.Messagebox.show_info("No selection", "Please select text to underline.")
             return
         self.update_preview()
 
@@ -810,8 +807,7 @@ class MarkdownReader:
                     selected_text = text_area.get(sel_start, sel_end)
 
                     if selected_text.strip() == "" or "\n" in selected_text:
-                        from tkinter import messagebox
-                        messagebox.showinfo("Tip", "Please select single-line non-empty text to set color.")
+                        dialogs.Messagebox.show_info("Tip", "Please select single-line non-empty text to set color.")
                         return
 
                     cleaned_text = re.sub(
@@ -825,8 +821,7 @@ class MarkdownReader:
                     self.current_fg_color = color
                     self.update_preview()
                 except tk.TclError:
-                    from tkinter import messagebox
-                    messagebox.showinfo("No selection", "Please select text to color.")
+                    dialogs.Messagebox.show_info("No selection", "Please select text to color.")
 
 
             
@@ -1038,7 +1033,7 @@ Example with alignment:
 | :--- | :----: | ----: |
 | A    | B      | C     |
 """
-        messagebox.showinfo("Table Syntax Help", help_text)
+        dialogs.Messagebox.show_info("Table Syntax Help", help_text)
 
     def export_to_html_dialog(self):
         """Show dialog to export current markdown document to HTML"""
