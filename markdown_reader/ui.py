@@ -15,6 +15,8 @@ from markdown_reader.logic import convert_html_to_markdown
 from markdown_reader.file_handler import load_file, drop_file
 from markdown_reader.utils import get_preview_file
 import tkinter.font  # moved here from inside methods
+import ttkbootstrap as ttkb
+from ttkbootstrap.constants import *
 
 class FileChangeHandler(FileSystemEventHandler):
     def __init__(self, app, filepath):
@@ -55,6 +57,7 @@ class MarkdownReader:
         self.bind_events()
 
     def create_widgets(self):
+        style = ttkb.Style()
         menubar = tk.Menu(self.root)
         filemenu = tk.Menu(menubar, tearoff=0)
         filemenu.add_command(label="New", command=self.new_file)
@@ -95,30 +98,59 @@ class MarkdownReader:
         # Style dropdown
         self.style_var = tk.StringVar(value="Normal text")
         style_options = ["Normal text", "Heading 1", "Heading 2", "Heading 3"]
-        style_menu = tk.OptionMenu(toolbar, self.style_var, *style_options, command=self.apply_style)
+        style.configure('info.Outline.TMenubutton')
+        # style_menu = tk.OptionMenu(toolbar, self.style_var, *style_options, command=self.apply_style)
+        style_menu = ttkb.Menubutton(toolbar, text=self.style_var, style='info.Outline.TMenubutton')
         style_menu.config(width=12)
         style_menu.pack(side=tk.LEFT, padx=2, pady=2)
+        menu_ = tk.Menu(style_menu, tearoff=0)
+        for s in style_options:
+            menu_.add_radiobutton(label=s, variable=self.style_var, command=lambda s=s: self.apply_style(s))
+        style_menu['menu'] = menu_
         # Font family dropdown
         fonts = sorted(set(tkinter.font.families()))
-        self.font_var = tk.StringVar(value="Consolas")
-        font_menu = tk.OptionMenu(toolbar, self.font_var, *fonts, command=self.apply_font)
+        self.font_var = ttkb.StringVar(value="Consolas")
+        font_menu = ttkb.Menubutton(toolbar, text=self.font_var, style='info.Outline.TMenubutton')
+        
         font_menu.config(width=10)
         font_menu.pack(side=tk.LEFT, padx=2)
+        
+        menu = tk.Menu(font_menu, tearoff=0)
+        for f in fonts[:20]:
+            menu.add_radiobutton(label=f, variable=self.font_var, command=lambda f=f: self.apply_font(f))
+        font_menu['menu'] = menu
         # Font size
         self.font_size_var = tk.IntVar(value=14)
-        tk.Button(toolbar, text="-", command=lambda: self.change_font_size(-1)).pack(side=tk.LEFT, padx=1)
-        tk.Entry(toolbar, textvariable=self.font_size_var, width=3, justify='center').pack(side=tk.LEFT)
-        tk.Button(toolbar, text="+", command=lambda: self.change_font_size(1)).pack(side=tk.LEFT, padx=1)
-        # Bold, Italic, Underline
-        tk.Button(toolbar, text="B", font=("Arial", 10, "bold"), command=self.toggle_bold).pack(side=tk.LEFT, padx=2)
-        tk.Button(toolbar, text="I", font=("Arial", 10, "italic"), command=self.toggle_italic).pack(side=tk.LEFT, padx=2)
-        tk.Button(toolbar, text="U", font=("Arial", 10, "underline"), command=self.toggle_underline).pack(side=tk.LEFT, padx=2)
-        # Insert table button
-        tk.Button(toolbar, text="⊞", font=("Arial", 12), command=self.insert_table).pack(side=tk.LEFT, padx=2)
+        button_width = 3
+        # entry config
+        style.configure('info.TEntry')
+        ttkb.Button(toolbar, text="-", bootstyle=(DANGER, OUTLINE), width=button_width, command=lambda: self.change_font_size(-1)).pack(side=tk.LEFT, padx=5)
+        ttkb.Entry(toolbar, textvariable=self.font_size_var, width=3, style='info.TEntry', justify='center').pack(side=tk.LEFT)
+        ttkb.Button(toolbar, text="+", bootstyle=(SUCCESS, OUTLINE), width=button_width, command=lambda: self.change_font_size(1)).pack(side=tk.LEFT, padx=5)
+
+        # font configuration
+        
+        # toggle bold
+        style.configure('bold.info.TButton', font=("Arial", 10, "bold"))
+        # toggle italic
+        style.configure('italic.info.TButton', font=("Arial", 10, "italic"))
+        # toggle underline
+        style.configure('underline.info.TButton', font=("Arial", 10, "underline"))
+        # insert table
+        style.configure('insert.info.TButton', font=("Arial", 12))
+        # choose fg color
+        style.configure('fg.info.TButton')
+        # highlight
+        style.configure('bg.info.Tbutton', font=("Arial", 10))
+
+        ttkb.Button(toolbar, text="B", style='bold.info.TButton', width=button_width, command=self.toggle_bold).pack(side=tk.LEFT, padx=5)
+        ttkb.Button(toolbar, text="I", style='italic.info.Tbutton', width=button_width, command=self.toggle_italic).pack(side=tk.LEFT, padx=5)
+        ttkb.Button(toolbar, text="U", style='italic.info.Underline', width=button_width, command=self.toggle_underline).pack(side=tk.LEFT, padx=5)
+        ttkb.Button(toolbar, text="⊞", style='insert.info.TButton', command=self.insert_table).pack(side=tk.LEFT, padx=5)
         # Text color
-        tk.Button(toolbar, text="A", command=self.choose_fg_color).pack(side=tk.LEFT, padx=2)
+        ttkb.Button(toolbar, text="A", style='fg.info.TButton', command=self.choose_fg_color).pack(side=tk.LEFT, padx=5)
         # Highlight color
-        tk.Button(toolbar, text="\u0332", font=("Arial", 10), command=self.choose_bg_color).pack(side=tk.LEFT, padx=2)
+        ttkb.Button(toolbar, text="\u0332", style='bg.info.TButton', command=self.choose_bg_color).pack(side=tk.LEFT, padx=5)
         toolbar.pack(fill=tk.X)
 
         self.notebook = ttk.Notebook(self.root)

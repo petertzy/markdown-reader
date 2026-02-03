@@ -5,3 +5,4 @@ watchdog
 html2text>=2020.1.16
 python-docx>=1.1.0
 pygments
+ttkbootstrap
