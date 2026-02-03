@@ -102,7 +102,7 @@ class MarkdownReader:
         style_options = ["Normal text", "Heading 1", "Heading 2", "Heading 3"]
         style.configure('info.Outline.TMenubutton')
         # style_menu = tk.OptionMenu(toolbar, self.style_var, *style_options, command=self.apply_style)
-        style_menu = ttkb.Menubutton(toolbar, text=self.style_var, style='info.Outline.TMenubutton')
+        style_menu = ttkb.Menubutton(toolbar, textvariable=self.style_var, style='info.Outline.TMenubutton')
         style_menu.config(width=12)
         style_menu.pack(side=tk.LEFT, padx=2, pady=2)
         menu_ = tk.Menu(style_menu, tearoff=0)
@@ -112,7 +112,7 @@ class MarkdownReader:
         # Font family dropdown
         fonts = sorted(set(tkinter.font.families()))
         self.font_var = ttkb.StringVar(value="Consolas")
-        font_menu = ttkb.Menubutton(toolbar, text=self.font_var, style='info.Outline.TMenubutton')
+        font_menu = ttkb.Menubutton(toolbar, textvariable=self.font_var, style='info.Outline.TMenubutton')
         
         font_menu.config(width=10)
         font_menu.pack(side=tk.LEFT, padx=2)
