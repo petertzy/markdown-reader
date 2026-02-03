@@ -2,6 +2,8 @@ import tkinter as tk
 from markdown_reader.ui import MarkdownReader
 import sys
 import os
+import ttkbootstrap as ttkb
+
 
 def handle_open_file(event):
     """Handle file open events from macOS"""
@@ -11,11 +13,12 @@ def handle_open_file(event):
 
 if __name__ == "__main__":
     try:
-        from tkinterdnd2 import TkinterDnD
-        root = TkinterDnD.Tk()
+        # from tkinterdnd2 import TkinterDnD
+        # # root = TkinterDnD.Tk()
+        root = ttkb.Window(themename="darkly")
     except ImportError:
         print("Note: tkinterdnd2 not installed, drag-and-drop will be disabled")
-        root = tk.Tk()
+        # root = tk.Tk()
 
     app = MarkdownReader(root)
     

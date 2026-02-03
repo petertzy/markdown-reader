@@ -1043,7 +1043,7 @@ Example with alignment:
     def export_to_html_dialog(self):
         """Show dialog to export current markdown document to HTML"""
         if not self.editors:
-            messagebox.showinfo("Info", "No document to export.")
+            dialogs.Messagebox.show_info("Info", "No document to export.")
             return
         
         # Get current file path to suggest HTML filename
@@ -1074,7 +1074,7 @@ Example with alignment:
     def export_to_docx_dialog(self):
         """Show dialog to export current markdown document to Word"""
         if not self.editors:
-            messagebox.showinfo("Info", "No document to export.")
+            dialogs.Messagebox.show_info("Info", "No document to export.")
             return
         
         # Get current file path to suggest Word filename
