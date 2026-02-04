@@ -796,9 +796,9 @@ class MarkdownReader:
         import re
         cd = dialogs.ColorChooserDialog()
         cd.show()
-        color = cd.result
-        if color:
-            color.hex
+        result = cd.result
+        if result:
+            color_hex = result.hex if hasattr(result, 'hex') else result
             text_area = self.get_current_text_area()
             if text_area:
                 try:
@@ -813,12 +813,12 @@ class MarkdownReader:
                     cleaned_text = re.sub(
                         r'<span style="color:[^">]+?">(.*?)</span>', r'\1', selected_text, flags=re.DOTALL
                     )
-                    new_text = f'<span style="color:{color}">{cleaned_text}</span>'
+                    new_text = f'<span style="color:{color_hex}">{cleaned_text}</span>'
 
                     text_area.delete(sel_start, sel_end)
                     text_area.insert(sel_start, new_text)
 
-                    self.current_fg_color = color
+                    self.current_fg_color = color_hex
                     self.update_preview()
                 except tk.TclError:
                     dialogs.Messagebox.show_info("No selection", "Please select text to color.")
