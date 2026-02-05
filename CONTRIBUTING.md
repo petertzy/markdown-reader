@@ -12,9 +12,7 @@ Markdown Reader is a clean and intuitive Markdown reader with real-time preview 
 
 ## How to Get Started
 
-### 1. Clone the Repository
-
-1. Fork the repo
+1. Fork the repogit
 ![fork](image.png)
 2. Clone the repo
 ```bash
