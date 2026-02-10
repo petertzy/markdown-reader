@@ -9,7 +9,7 @@ from ttkbootstrap.constants import *
 def handle_open_file(event):
     """Handle file open events from macOS"""
     file_path = event
-    if os.path.isfile(file_path) and file_path.lower().endswith(('.md', '.markdown')):
+    if os.path.isfile(file_path) and file_path.lower().endswith(('.md', '.markdown', '.html', '.htm', '.pdf')):
         app.load_file(file_path)
 
 if __name__ == "__main__":
@@ -39,7 +39,7 @@ if __name__ == "__main__":
                 continue
             # Convert to absolute path
             file_path = os.path.abspath(arg)
-            if os.path.isfile(file_path) and file_path.lower().endswith(('.md', '.markdown')):
+            if os.path.isfile(file_path) and file_path.lower().endswith(('.md', '.markdown', '.html', '.htm', '.pdf')):
                 app.load_file(file_path)
                 break  # Only open the first file
 
