@@ -752,6 +752,226 @@ def export_to_docx(app, output_path):
         return False
 
 
+def export_to_pdf(app, output_path):
+    """
+    Export the current markdown document to a PDF file.
+    
+    Args:
+        app: The MarkdownReader application instance
+        output_path: The path where the PDF file should be saved
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    if not app.editors:
+        messagebox.showinfo("Info", "No document to export.")
+        return False
+    
+    try:
+        from weasyprint import HTML, CSS
+        import tempfile
+        
+        idx = app.notebook.index(app.notebook.select())
+        text_area = app.editors[idx]
+        markdown_text = text_area.get("1.0", "end-1c")
+        
+        # Fix image paths if a file is currently open
+        if hasattr(app, 'file_paths') and app.file_paths:
+            try:
+                current_path = app.file_paths[idx]
+                if current_path is not None:
+                    base_dir = os.path.dirname(current_path)
+                    # Convert file:// paths to relative paths for export
+                    def convert_file_url_to_relative(text, base_dir):
+                        def repl(m):
+                            alt = m.group(1)
+                            src = m.group(2)
+                            if src.startswith('file://'):
+                                # Convert file:// URL back to relative path
+                                file_path = src.replace('file://', '')
+                                try:
+                                    rel_path = os.path.relpath(file_path, base_dir)
+                                    return f'![{alt}]({rel_path})'
+                                except:
+                                    return m.group(0)
+                            return m.group(0)
+                        return re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', repl, text)
+                    
+                    markdown_text = convert_file_url_to_relative(markdown_text, base_dir)
+            except Exception as e:
+                print(f"Warning: Could not process image paths: {e}")
+        
+        # Convert markdown to HTML
+        html_content = markdown2.markdown(
+            markdown_text, 
+            extras=["fenced-code-blocks", "code-friendly", "tables", "break-on-newline"]
+        )
+        
+        # Get style from app (with fallback)
+        font_family = getattr(app, 'current_font_family', 'Consolas')
+        font_size = getattr(app, 'current_font_size', 14)
+        fg_color = getattr(app, 'current_fg_color', '#000000')
+        bg_color = getattr(app, 'current_bg_color', 'white')
+        
+        if getattr(app, 'dark_mode', False):
+            bg_color = '#1e1e1e'
+            fg_color = '#dcdcdc'
+        
+        # For PDF, use generic font fallbacks
+        web_font_family = font_family
+        if font_family.lower() in ["arial", "helvetica", "verdana", "tahoma", "trebuchet ms"]:
+            web_font_family += ", sans-serif"
+        elif font_family.lower() in ["times new roman", "georgia", "garamond", "serif"]:
+            web_font_family += ", serif"
+        elif font_family.lower() in ["consolas", "courier new", "monospace"]:
+            web_font_family += ", monospace"
+        else:
+            web_font_family += ", sans-serif"
+        
+        # Heading sizes relative to base font size
+        h1 = font_size + 18
+        h2 = font_size + 12
+        h3 = font_size + 8
+        h4 = font_size + 4
+        h5 = font_size + 2
+        h6 = font_size + 1
+        base = font_size + 2
+        
+        # Generate complete HTML document for PDF
+        html_document = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Exported Markdown</title>
+    <style>
+        @page {{
+            size: A4;
+            margin: 2cm;
+        }}
+        body {{
+            background-color: {bg_color};
+            color: {fg_color};
+            font-family: {web_font_family};
+            font-size: {base}px;
+            line-height: 1.6;
+        }}
+        h1 {{ font-size: {h1}px; margin-top: 1em; margin-bottom: 0.5em; }}
+        h2 {{ font-size: {h2}px; margin-top: 0.8em; margin-bottom: 0.4em; }}
+        h3 {{ font-size: {h3}px; margin-top: 0.6em; margin-bottom: 0.3em; }}
+        h4 {{ font-size: {h4}px; margin-top: 0.5em; margin-bottom: 0.25em; }}
+        h5 {{ font-size: {h5}px; margin-top: 0.4em; margin-bottom: 0.2em; }}
+        h6 {{ font-size: {h6}px; margin-top: 0.3em; margin-bottom: 0.2em; }}
+        b, strong {{ font-weight: bold; }}
+        i, em {{ font-style: italic; }}
+        u {{ text-decoration: underline; }}
+        pre {{
+            background-color: #f4f4f4;
+            color: #000000;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            page-break-inside: avoid;
+        }}
+        pre code {{
+            font-family: {web_font_family};
+            font-size: {max(font_size - 2, 10)}px;
+            white-space: pre;
+            display: block;
+        }}
+        code {{
+            background-color: #f4f4f4;
+            color: #000000;
+            font-family: {web_font_family};
+            font-size: {max(font_size - 2, 10)}px;
+            padding: 2px 4px;
+            border-radius: 4px;
+        }}
+        img {{
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 10px 0;
+        }}
+        table {{
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+            font-size: {base}px;
+            page-break-inside: avoid;
+        }}
+        th, td {{
+            text-align: left;
+            border: 1px solid #ccc;
+            padding: 12px 16px;
+            vertical-align: top;
+            font-size: {base}px;
+        }}
+        th {{
+            background-color: #f3f3f3;
+            color: #333;
+        }}
+        tr:nth-child(even) {{
+            background-color: #fafafa;
+        }}
+        blockquote {{
+            border-left: 4px solid #ddd;
+            padding-left: 15px;
+            color: #666;
+            margin: 15px 0;
+        }}
+        a {{
+            color: #0066cc;
+            text-decoration: none;
+        }}
+        ul, ol {{
+            margin: 0.5em 0;
+            padding-left: 2em;
+        }}
+        li {{
+            margin: 0.25em 0;
+        }}
+    </style>
+</head>
+<body>
+{html_content}
+</body>
+</html>"""
+        
+        # Create temporary HTML file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as tmp_file:
+            tmp_file.write(html_document)
+            tmp_html_path = tmp_file.name
+        
+        try:
+            # Convert HTML to PDF using weasyprint
+            # Set base_url to the directory of the current file for relative image paths
+            base_url = None
+            if hasattr(app, 'file_paths') and app.file_paths:
+                current_path = app.file_paths[idx]
+                if current_path is not None:
+                    base_url = f"file://{os.path.dirname(os.path.abspath(current_path))}/"
+            
+            HTML(filename=tmp_html_path, base_url=base_url).write_pdf(output_path)
+            
+            messagebox.showinfo("Success", f"PDF exported successfully to:\n{output_path}")
+            return True
+        finally:
+            # Clean up temporary HTML file
+            try:
+                os.unlink(tmp_html_path)
+            except:
+                pass
+        
+    except ImportError as e:
+        messagebox.showerror("Error", "WeasyPrint library is required for PDF export.\nPlease install it: pip install weasyprint")
+        return False
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to export PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def process_inline_formatting(text):
     """Remove markdown formatting markers for plain text extraction"""
     # Remove bold

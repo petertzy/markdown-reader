@@ -11,6 +11,7 @@ from markdown_reader.logic import update_preview
 from markdown_reader.logic import open_preview_in_browser
 from markdown_reader.logic import export_to_html
 from markdown_reader.logic import export_to_docx
+from markdown_reader.logic import export_to_pdf
 from markdown_reader.logic import convert_html_to_markdown
 from markdown_reader.logic import convert_pdf_to_markdown
 from markdown_reader.file_handler import load_file, drop_file
@@ -68,6 +69,7 @@ class MarkdownReader:
         filemenu.add_separator()
         filemenu.add_command(label="Export to HTML", command=self.export_to_html_dialog)
         filemenu.add_command(label="Export to Word", command=self.export_to_docx_dialog)
+        filemenu.add_command(label="Export to PDF", command=self.export_to_pdf_dialog)
         filemenu.add_separator()
         filemenu.add_command(label="Close", command=self.close_current_tab)
         filemenu.add_command(label="Close All", command=self.close_all_tabs)
@@ -1119,3 +1121,34 @@ Example with alignment:
         
         if output_path:
             export_to_docx(self, output_path)
+
+    def export_to_pdf_dialog(self):
+        """Show dialog to export current markdown document to PDF"""
+        if not self.editors:
+            dialogs.Messagebox.show_info("Info", "No document to export.")
+            return
+        
+        # Get current file path to suggest PDF filename
+        idx = self.notebook.index(self.notebook.select())
+        current_path = self.file_paths[idx]
+        
+        # Suggest filename
+        if current_path:
+            base_name = os.path.splitext(os.path.basename(current_path))[0]
+            initial_dir = os.path.dirname(current_path)
+            initial_file = f"{base_name}.pdf"
+        else:
+            initial_dir = os.path.expanduser("~")
+            initial_file = "document.pdf"
+        
+        # Show save dialog
+        output_path = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF documents", "*.pdf"), ("All files", "*.*")],
+            initialdir=initial_dir,
+            initialfile=initial_file,
+            title="Export to PDF"
+        )
+        
+        if output_path:
+            export_to_pdf(self, output_path)
