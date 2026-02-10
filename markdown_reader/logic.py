@@ -828,6 +828,9 @@ def export_to_pdf(app, output_path):
         else:
             web_font_family += ", sans-serif"
         
+        # Code blocks should always use monospace fonts
+        code_font_family = "Consolas, 'Courier New', monospace"
+        
         # Heading sizes relative to base font size
         h1 = font_size + 18
         h2 = font_size + 12
@@ -873,7 +876,7 @@ def export_to_pdf(app, output_path):
             page-break-inside: avoid;
         }}
         pre code {{
-            font-family: {web_font_family};
+            font-family: {code_font_family};
             font-size: {max(font_size - 2, 10)}px;
             white-space: pre;
             display: block;
@@ -881,7 +884,7 @@ def export_to_pdf(app, output_path):
         code {{
             background-color: #f4f4f4;
             color: #000000;
-            font-family: {web_font_family};
+            font-family: {code_font_family};
             font-size: {max(font_size - 2, 10)}px;
             padding: 2px 4px;
             border-radius: 4px;
