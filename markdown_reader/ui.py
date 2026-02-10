@@ -175,11 +175,14 @@ class MarkdownReader:
 
     def bind_events(self):
         try:
+            # Register drag-and-drop support
             self.root.drop_target_register('DND_Files')
-            self.root.dnd_bind('<<Drop>>', lambda event: drop_file(event, self))
-        except Exception:
-            pass
+            self.root.dnd_bind('<<Drop>>', self._on_drop_files)
+            print("✅ Drag-and-drop support enabled")
+        except Exception as e:
+            print(f"⚠️  Drag-and-drop binding failed: {e}")
 
+        # Keyboard shortcuts
         self.root.bind_all("<Control-s>", lambda event: self.save_file())
         self.root.bind_all("<Command-s>", lambda event: self.save_file())
         self.root.bind_all("<Control-z>", lambda event: self.undo_action())
@@ -187,6 +190,19 @@ class MarkdownReader:
         self.root.bind_all("<Control-n>", lambda event: self.new_file())
         self.root.bind_all("<Command-z>", lambda event: self.undo_action())
         self.root.bind_all("<Command-Shift-Z>", lambda event: self.redo_action())
+
+    def _on_drop_files(self, event):
+        """Handle file drop events"""
+        print(f"🔍 Drop event triggered")
+        print(f"   Event data type: {type(event.data)}")
+        print(f"   Event data: {event.data}")
+        
+        try:
+            drop_file(event, self)
+        except Exception as e:
+            print(f"❌ Error handling drop: {e}")
+            import traceback
+            traceback.print_exc()
 
     def new_file(self):
         frame = tk.Frame(self.notebook)
