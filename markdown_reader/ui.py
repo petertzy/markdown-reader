@@ -1035,8 +1035,8 @@ class MarkdownReader:
             cursor_pos = text_area.index("insert")
             text_area.insert(cursor_pos, "[text](url)")
             # Select "text" part
-            text_area.tag_add("sel", cursor_pos + "+1c", cursor_pos + "+5c")
-            text_area.mark_set("insert", cursor_pos + "+5c")
+            text_area.tag_add("sel", f"{cursor_pos}+1c", f"{cursor_pos}+5c")
+            text_area.mark_set("insert", f"{cursor_pos}+5c")
         self.update_preview()
 
     def toggle_heading(self, level=1):
@@ -1425,9 +1425,9 @@ class MarkdownReader:
 | Cell 4   | Cell 5   | Cell 6   |
 
 Tips:
-• Use | to separate columns
-• Use --- in the separator row
-• Alignment:
+- Use | to separate columns
+- Use --- in the separator row
+- Alignment:
   - Left:   | :--- |
   - Center: | :---: |
   - Right:  | ---: |
@@ -1466,10 +1466,10 @@ SECTION MOVEMENT:
   Cmd+Opt+Down    Move section down (Mac)
 
 TIPS:
-  • Select text before applying formatting
-  • Without selection, templates are inserted
-  • Most shortcuts work on Mac with Cmd key
-  • Sections are defined by markdown headers (#)
+  - Select text before applying formatting
+  - Without selection, templates are inserted
+  - Most shortcuts work on Mac with Cmd key
+  - Sections are defined by markdown headers (#)
 """
         dialogs.Messagebox.show_info("Keyboard Shortcuts", shortcuts_text)
 
