@@ -101,6 +101,10 @@ class MarkdownReader:
         }
         self.current_theme = "Default"
         
+        # Split preview mode
+        self.split_preview_enabled = False
+        self.preview_panes = []  # Store PanedWindow instances for each tab
+        
         # Flag to prevent marking as modified during file loading
         self._loading_file = False
         
@@ -133,6 +137,7 @@ class MarkdownReader:
 
         viewmenu = tk.Menu(menubar, tearoff=0)
         viewmenu.add_command(label="Toggle Dark Mode", command=self.toggle_dark_mode)
+        viewmenu.add_command(label="Toggle Split Preview", command=self.toggle_split_preview)
         viewmenu.add_command(label="Open Preview in Browser",
                              command=lambda: open_preview_in_browser(self.preview_file, self))
         viewmenu.add_separator()
@@ -150,6 +155,9 @@ class MarkdownReader:
         editmenu = ttkb.Menu(menubar, tearoff=0)
         editmenu.add_command(label="Undo", command=self.undo_action)
         editmenu.add_command(label="Redo", command=self.redo_action)
+        editmenu.add_separator()
+        editmenu.add_command(label="Move Section Up", command=self.move_section_up)
+        editmenu.add_command(label="Move Section Down", command=self.move_section_down)
         editmenu.add_separator()
         editmenu.add_command(label="Keyboard Shortcuts...", command=self.show_keyboard_shortcuts)
         menubar.add_cascade(label="Edit", menu=editmenu)
@@ -281,6 +289,12 @@ class MarkdownReader:
         self.root.bind_all("<Control-Key-4>", lambda event: self.toggle_heading(4))
         self.root.bind_all("<Control-Key-5>", lambda event: self.toggle_heading(5))
         self.root.bind_all("<Control-Key-6>", lambda event: self.toggle_heading(6))
+        
+        # Section movement shortcuts
+        self.root.bind_all("<Alt-Up>", lambda event: self.move_section_up())
+        self.root.bind_all("<Alt-Down>", lambda event: self.move_section_down())
+        self.root.bind_all("<Command-Option-Up>", lambda event: self.move_section_up())
+        self.root.bind_all("<Command-Option-Down>", lambda event: self.move_section_down())
 
     def _on_drop_files(self, event):
         """Handle file drop events"""
@@ -673,6 +687,22 @@ class MarkdownReader:
         # Update preview
         self.update_preview()
 
+    def toggle_split_preview(self):
+        """Toggle split preview mode showing markdown structure"""
+        self.split_preview_enabled = not self.split_preview_enabled
+        
+        if self.split_preview_enabled:
+            messagebox.showinfo(
+                "Split Preview", 
+                "Split preview will open markdown in browser side-by-side.\n\n"
+                "The preview updates automatically as you type.\n"
+                "Use 'View → Open Preview in Browser' to see live updates."
+            )
+            # Open preview in browser for split view
+            open_preview_in_browser(self.preview_file, self)
+        else:
+            messagebox.showinfo("Split Preview", "Split preview disabled. Use browser for preview.")
+
     def highlight_markdown(self):
         # Get the current editor
         text_area = self.get_current_text_area()
@@ -1036,6 +1066,136 @@ class MarkdownReader:
             print(f"Error toggling heading: {e}")
         self.update_preview()
 
+    def move_section_up(self):
+        """Move the current section (from heading to next heading) up"""
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+        
+        try:
+            # Get cursor position
+            cursor_line = int(text_area.index("insert").split('.')[0])
+            content = text_area.get("1.0", "end-1c")
+            lines = content.split('\n')
+            
+            # Find current section boundaries
+            section_start = cursor_line - 1  # Convert to 0-indexed
+            section_end = len(lines)
+            
+            # Find start of current section (previous heading or start)
+            for i in range(section_start, -1, -1):
+                if re.match(r'^#{1,6} ', lines[i]):
+                    section_start = i
+                    break
+            
+            # Find end of current section (next heading or end)
+            for i in range(section_start + 1, len(lines)):
+                if re.match(r'^#{1,6} ', lines[i]):
+                    section_end = i
+                    break
+            
+            # Find previous section start
+            prev_section_start = None
+            for i in range(section_start - 1, -1, -1):
+                if re.match(r'^#{1,6} ', lines[i]):
+                    prev_section_start = i
+                    break
+            
+            if prev_section_start is None:
+                dialogs.Messagebox.show_info("Info", "Already at the top section")
+                return
+            
+            # Extract sections
+            current_section = lines[section_start:section_end]
+            prev_section = lines[prev_section_start:section_start]
+            
+            # Rebuild content with swapped sections
+            new_lines = (
+                lines[:prev_section_start] +
+                current_section +
+                prev_section +
+                lines[section_end:]
+            )
+            
+            # Update editor
+            text_area.delete("1.0", tk.END)
+            text_area.insert("1.0", '\n'.join(new_lines))
+            
+            # Move cursor to new position
+            new_cursor_line = prev_section_start + (cursor_line - section_start) + 1
+            text_area.mark_set("insert", f"{new_cursor_line}.0")
+            text_area.see("insert")
+            
+            self.update_preview()
+        except Exception as e:
+            print(f"Error moving section up: {e}")
+
+    def move_section_down(self):
+        """Move the current section (from heading to next heading) down"""
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+        
+        try:
+            # Get cursor position
+            cursor_line = int(text_area.index("insert").split('.')[0])
+            content = text_area.get("1.0", "end-1c")
+            lines = content.split('\n')
+            
+            # Find current section boundaries
+            section_start = cursor_line - 1  # Convert to 0-indexed
+            section_end = len(lines)
+            
+            # Find start of current section (previous heading or start)
+            for i in range(section_start, -1, -1):
+                if re.match(r'^#{1,6} ', lines[i]):
+                    section_start = i
+                    break
+            
+            # Find end of current section (next heading or end)
+            next_section_start = None
+            for i in range(section_start + 1, len(lines)):
+                if re.match(r'^#{1,6} ', lines[i]):
+                    section_end = i
+                    next_section_start = i
+                    break
+            
+            if next_section_start is None:
+                dialogs.Messagebox.show_info("Info", "Already at the bottom section")
+                return
+            
+            # Find end of next section
+            next_section_end = len(lines)
+            for i in range(next_section_start + 1, len(lines)):
+                if re.match(r'^#{1,6} ', lines[i]):
+                    next_section_end = i
+                    break
+            
+            # Extract sections
+            current_section = lines[section_start:section_end]
+            next_section = lines[next_section_start:next_section_end]
+            
+            # Rebuild content with swapped sections
+            new_lines = (
+                lines[:section_start] +
+                next_section +
+                current_section +
+                lines[next_section_end:]
+            )
+            
+            # Update editor
+            text_area.delete("1.0", tk.END)
+            text_area.insert("1.0", '\n'.join(new_lines))
+            
+            # Move cursor to new position
+            new_cursor_line = section_start + len(next_section) + (cursor_line - section_start) + 1
+            text_area.mark_set("insert", f"{new_cursor_line}.0")
+            text_area.see("insert")
+            
+            self.update_preview()
+        except Exception as e:
+            print(f"Error moving section down: {e}")
+
     def choose_fg_color(self):
         import re
         cd = dialogs.ColorChooserDialog()
@@ -1299,10 +1459,17 @@ FORMATTING:
   Ctrl/Cmd + H    Toggle heading
   Ctrl + 1-6      Set heading level (H1-H6)
 
+SECTION MOVEMENT:
+  Alt + Up        Move section up
+  Alt + Down      Move section down
+  Cmd+Opt+Up      Move section up (Mac)
+  Cmd+Opt+Down    Move section down (Mac)
+
 TIPS:
   • Select text before applying formatting
   • Without selection, templates are inserted
   • Most shortcuts work on Mac with Cmd key
+  • Sections are defined by markdown headers (#)
 """
         dialogs.Messagebox.show_info("Keyboard Shortcuts", shortcuts_text)
 
