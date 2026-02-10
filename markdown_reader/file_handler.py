@@ -17,7 +17,7 @@ def load_file(path, app):
 
 def drop_file(event, app):
     file_path = event.data.strip('{}')
-    if file_path.endswith('.md') or file_path.endswith('.MD') or file_path.lower().endswith(('.html', '.htm')):
+    if file_path.lower().endswith(('.md', '.html', '.htm')):
         app.new_file()
         idx = app.notebook.index(app.notebook.select())
         app.load_file(file_path)
