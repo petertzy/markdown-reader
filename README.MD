@@ -6,7 +6,7 @@ A clean and intuitive Markdown reader with real-time preview support, dark mode 
 
 * Real-time preview of Markdown rendered to HTML
 * Dark mode toggle
-* Drag-and-drop support for `.md` and `.html` files with automatic HTML-to-Markdown conversion (requires `tkinterdnd2`)
+* Drag-and-drop support for `.md`, `.html`, and `.pdf` files with automatic conversion to Markdown (requires `tkinterdnd2`)
 * Built with pure Python and Tkinter — cross-platform
 * Can be bundled as a macOS app using `py2app`
 * Opens preview automatically and avoids multiple browser tabs for a smoother experience
@@ -60,8 +60,8 @@ python app.py
 
 ### How to Use
 
-* Open File: Choose `.md` or `.html` file from the “File → Open File” menu
-* Drag-and-Drop: Drag `.md` or `.html` files directly into the app window (HTML files are automatically converted to Markdown)
+* Open File: Choose `.md`, `.html`, or `.pdf` file from the "File → Open File" menu
+* Drag-and-Drop: Drag `.md`, `.html`, or `.pdf` files directly into the app window (HTML and PDF files are automatically converted to Markdown)
 * Dark Mode: Toggle via “View → Toggle Dark Mode”
 * Preview: Automatically opens in your web browser, only one tab is opened per session
 
@@ -99,6 +99,7 @@ git push
 * GUI: `tkinter`, `tkinterdnd2`
 * Markdown Engine: `markdown2`
 * HTML Preview: Dynamically generated HTML opened in the default browser
+* File Conversion: `html2text` for HTML, `pypdf` for PDF
 * Supports drag-and-drop and live preview updates while avoiding multiple browser tabs
 
 ---

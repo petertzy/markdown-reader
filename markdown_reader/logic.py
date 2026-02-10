@@ -562,6 +562,45 @@ def convert_html_to_markdown(html_content):
         return html_content  # Return original HTML if conversion fails
 
 
+def convert_pdf_to_markdown(pdf_path):
+    """
+    Convert PDF file content to Markdown format.
+    
+    Args:
+        pdf_path: Path to the PDF file
+    
+    Returns:
+        str: Converted Markdown text
+    """
+    try:
+        from pypdf import PdfReader
+        
+        # Read the PDF file
+        reader = PdfReader(pdf_path)
+        
+        # Extract text from all pages
+        markdown_text = ""
+        for page_num, page in enumerate(reader.pages, 1):
+            text = page.extract_text()
+            if text.strip():
+                # Add page number as heading
+                if len(reader.pages) > 1:
+                    markdown_text += f"## Page {page_num}\n\n"
+                markdown_text += text + "\n\n"
+        
+        # Clean up excessive blank lines
+        markdown_text = re.sub(r'\n{3,}', '\n\n', markdown_text)
+        
+        return markdown_text.strip()
+        
+    except ImportError:
+        messagebox.showerror("Import Error", "pypdf library is not installed. Please install it using: pip install pypdf")
+        return ""
+    except Exception as e:
+        messagebox.showerror("Conversion Error", f"Failed to convert PDF to Markdown: {e}")
+        return ""
+
+
 def export_to_docx(app, output_path):
     """
     Export the current markdown document to a Word (.docx) file.

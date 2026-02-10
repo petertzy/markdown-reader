@@ -70,9 +70,9 @@ def drop_file(event, app):
                 continue
             
             # Check file extension
-            if not file_path.lower().endswith(('.md', '.markdown', '.html', '.htm')):
+            if not file_path.lower().endswith(('.md', '.markdown', '.html', '.htm', '.pdf')):
                 print(f"   ⚠️  Unsupported file type: {file_path}")
-                messagebox.showwarning("Warning", f"Only .md and .html files are supported")
+                messagebox.showwarning("Warning", f"Only .md, .html, and .pdf files are supported")
                 continue
             
             # Create a new tab and load the file

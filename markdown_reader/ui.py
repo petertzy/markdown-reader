@@ -12,6 +12,7 @@ from markdown_reader.logic import open_preview_in_browser
 from markdown_reader.logic import export_to_html
 from markdown_reader.logic import export_to_docx
 from markdown_reader.logic import convert_html_to_markdown
+from markdown_reader.logic import convert_pdf_to_markdown
 from markdown_reader.file_handler import load_file, drop_file
 from markdown_reader.utils import get_preview_file
 import tkinter.font  # moved here from inside methods
@@ -295,9 +296,10 @@ class MarkdownReader:
         file_path = filedialog.askopenfilename(filetypes=[
             ("Markdown files", "*.md *.MD"),
             ("HTML files", "*.html *.HTML *.htm *.HTM"),
+            ("PDF files", "*.pdf *.PDF"),
             ("All files", "*.*")
         ])
-        if file_path and (file_path.lower().endswith(".md") or file_path.lower().endswith((".html", ".htm"))):
+        if file_path and (file_path.lower().endswith(".md") or file_path.lower().endswith((".html", ".htm", ".pdf"))):
             abs_path = os.path.abspath(file_path)
             self.md_filepath_list = []
             self.md_filepath_list.append(abs_path)
@@ -317,17 +319,22 @@ class MarkdownReader:
         idx = self.notebook.index(self.notebook.select())
         text_area = self.get_current_text_area()
         is_html = abs_path.lower().endswith((".html", ".htm"))
+        is_pdf = abs_path.lower().endswith(".pdf")
 
         try:
             # Set loading flag to prevent marking as modified
             self._loading_file = True
             
-            with open(abs_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            
-            # Check if file is HTML and convert to Markdown
-            if is_html:
-                content = convert_html_to_markdown(content)
+            # Check if file is PDF and convert to Markdown
+            if is_pdf:
+                content = convert_pdf_to_markdown(abs_path)
+            else:
+                with open(abs_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                
+                # Check if file is HTML and convert to Markdown
+                if is_html:
+                    content = convert_html_to_markdown(content)
             
             # Clear the text area and insert new content
             text_area.delete("1.0", tk.END)
@@ -337,12 +344,12 @@ class MarkdownReader:
             text_area.edit_modified(False)
             
             # Update tab info and save state
-            if is_html:
+            if is_html or is_pdf:
                 # Update tab name to show it's converted
                 base_name = os.path.splitext(os.path.basename(abs_path))[0]
                 tab_text = f"{base_name}.md (converted)"
                 self.add_close_button_to_tab(idx, tab_text)
-                # Don't set file_paths to HTML file - treat as new unsaved file
+                # Don't set file_paths to HTML/PDF file - treat as new unsaved file
                 self.file_paths[idx] = None
                 self.current_file_path = None
             else:
@@ -358,7 +365,7 @@ class MarkdownReader:
             
             # Delay marking tab state to ensure all events are processed
             # Use after_idle to run after all pending events in the queue
-            if is_html:
+            if is_html or is_pdf:
                 # Mark as modified since it's converted content
                 self.root.after(100, lambda: self.mark_tab_modified(idx))
             else:
