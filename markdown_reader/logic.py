@@ -792,7 +792,7 @@ def export_to_pdf(app, output_path):
                                 try:
                                     rel_path = os.path.relpath(file_path, base_dir)
                                     return f'![{alt}]({rel_path})'
-                                except:
+                                except (ValueError, OSError):
                                     return m.group(0)
                             return m.group(0)
                         return re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', repl, text)
@@ -959,7 +959,7 @@ def export_to_pdf(app, output_path):
             # Clean up temporary HTML file
             try:
                 os.unlink(tmp_html_path)
-            except:
+            except OSError:
                 pass
         
     except ImportError as e:
