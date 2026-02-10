@@ -755,10 +755,13 @@ def export_to_docx(app, output_path):
 def export_to_pdf(app, output_path):
     """
     Export the current markdown document to a PDF file.
+    Since PDF generation libraries have complex dependencies,
+    this creates a print-friendly HTML file and opens it in the browser
+    for the user to print to PDF using the browser's built-in functionality.
     
     Args:
         app: The MarkdownReader application instance
-        output_path: The path where the PDF file should be saved
+        output_path: The path where the PDF file should be saved (used as suggestion)
     
     Returns:
         bool: True if successful, False otherwise
@@ -768,8 +771,8 @@ def export_to_pdf(app, output_path):
         return False
     
     try:
-        from weasyprint import HTML, CSS
         import tempfile
+        import webbrowser
         
         idx = app.notebook.index(app.notebook.select())
         text_area = app.editors[idx]
@@ -840,133 +843,224 @@ def export_to_pdf(app, output_path):
         h6 = font_size + 1
         base = font_size + 2
         
-        # Generate complete HTML document for PDF
+        # Generate complete HTML document for PDF printing
+        # Optimized for print media with @media print styles
         html_document = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <title>Exported Markdown</title>
     <style>
-        @page {{
-            size: A4;
-            margin: 2cm;
+        @media print {{
+            body {{
+                background-color: white !important;
+                color: black !important;
+                margin: 0;
+                padding: 20px;
+            }}
+            
+            /* Hide print button when actually printing */
+            .print-instructions {{
+                display: none;
+            }}
+            
+            /* Page break control */
+            h1, h2, h3, h4, h5, h6 {{
+                page-break-after: avoid;
+                page-break-inside: avoid;
+            }}
+            
+            pre, code, table, img {{
+                page-break-inside: avoid;
+            }}
         }}
+        
+        @media screen {{
+            body {{
+                max-width: 800px;
+                margin: 20px auto;
+                padding: 40px;
+                background-color: white;
+                box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            }}
+            
+            /* Show print instructions on screen */
+            .print-instructions {{
+                background-color: #e3f2fd;
+                border: 2px solid #2196F3;
+                border-radius: 8px;
+                padding: 20px;
+                margin: 20px 0;
+                text-align: center;
+            }}
+            
+            .print-button {{
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                font-size: 16px;
+                border-radius: 4px;
+                cursor: pointer;
+                margin: 10px;
+            }}
+            
+            .print-button:hover {{
+                background-color: #1976D2;
+            }}
+        }}
+        
+        /* Common styles for both screen and print */
         body {{
-            background-color: {bg_color};
-            color: {fg_color};
             font-family: {web_font_family};
-            font-size: {base}px;
+            font-size: {base}pt;
             line-height: 1.6;
+            color: #333;
         }}
-        h1 {{ font-size: {h1}px; margin-top: 1em; margin-bottom: 0.5em; }}
-        h2 {{ font-size: {h2}px; margin-top: 0.8em; margin-bottom: 0.4em; }}
-        h3 {{ font-size: {h3}px; margin-top: 0.6em; margin-bottom: 0.3em; }}
-        h4 {{ font-size: {h4}px; margin-top: 0.5em; margin-bottom: 0.25em; }}
-        h5 {{ font-size: {h5}px; margin-top: 0.4em; margin-bottom: 0.2em; }}
-        h6 {{ font-size: {h6}px; margin-top: 0.3em; margin-bottom: 0.2em; }}
+        
+        h1 {{ font-size: {h1}pt; margin-top: 1.5em; margin-bottom: 0.5em; font-weight: bold; }}
+        h2 {{ font-size: {h2}pt; margin-top: 1.2em; margin-bottom: 0.4em; font-weight: bold; }}
+        h3 {{ font-size: {h3}pt; margin-top: 1em; margin-bottom: 0.3em; font-weight: bold; }}
+        h4 {{ font-size: {h4}pt; margin-top: 0.8em; margin-bottom: 0.25em; font-weight: bold; }}
+        h5 {{ font-size: {h5}pt; margin-top: 0.6em; margin-bottom: 0.2em; font-weight: bold; }}
+        h6 {{ font-size: {h6}pt; margin-top: 0.5em; margin-bottom: 0.2em; font-weight: bold; }}
+        
         b, strong {{ font-weight: bold; }}
         i, em {{ font-style: italic; }}
         u {{ text-decoration: underline; }}
+        
         pre {{
-            background-color: #f4f4f4;
-            color: #000000;
-            padding: 12px;
-            border-radius: 6px;
+            background-color: #f5f5f5;
+            color: #000;
+            padding: 12pt;
+            border: 1pt solid #ddd;
+            border-radius: 4px;
+            margin: 10pt 0;
             overflow-x: auto;
-            page-break-inside: avoid;
         }}
+        
         pre code {{
-            font-family: {code_font_family};
-            font-size: {max(font_size - 2, 10)}px;
+            font-family: Consolas, 'Courier New', monospace;
+            font-size: {max(font_size - 2, 10)}pt;
             white-space: pre;
             display: block;
         }}
+        
         code {{
-            background-color: #f4f4f4;
-            color: #000000;
-            font-family: {code_font_family};
-            font-size: {max(font_size - 2, 10)}px;
-            padding: 2px 4px;
-            border-radius: 4px;
+            background-color: #f5f5f5;
+            color: #c7254e;
+            font-family: Consolas, 'Courier New', monospace;
+            font-size: {max(font_size - 1, 10)}pt;
+            padding: 2pt 4pt;
+            border-radius: 3px;
+            border: 1pt solid #e1e1e8;
         }}
+        
         img {{
             max-width: 100%;
             height: auto;
             display: block;
-            margin: 10px 0;
+            margin: 15pt auto;
         }}
+        
         table {{
             border-collapse: collapse;
             width: 100%;
-            margin-top: 20px;
-            font-size: {base}px;
-            page-break-inside: avoid;
+            margin: 15pt 0;
         }}
+        
         th, td {{
             text-align: left;
-            border: 1px solid #ccc;
-            padding: 12px 16px;
+            border: 1pt solid #ddd;
+            padding: 8pt 12pt;
             vertical-align: top;
-            font-size: {base}px;
         }}
+        
         th {{
-            background-color: #f3f3f3;
+            background-color: #f5f5f5;
             color: #333;
+            font-weight: bold;
         }}
+        
         tr:nth-child(even) {{
             background-color: #fafafa;
         }}
+        
         blockquote {{
-            border-left: 4px solid #ddd;
-            padding-left: 15px;
+            border-left: 4pt solid #ddd;
+            padding-left: 15pt;
             color: #666;
-            margin: 15px 0;
+            margin: 15pt 0;
+            font-style: italic;
         }}
+        
         a {{
             color: #0066cc;
-            text-decoration: none;
+            text-decoration: underline;
         }}
+        
         ul, ol {{
-            margin: 0.5em 0;
-            padding-left: 2em;
+            margin: 8pt 0;
+            padding-left: 30pt;
         }}
+        
         li {{
-            margin: 0.25em 0;
+            margin: 4pt 0;
+        }}
+        
+        p {{
+            margin: 8pt 0;
         }}
     </style>
 </head>
 <body>
+    <div class="print-instructions">
+        <h2>📄 Ready to Print as PDF</h2>
+        <p>This page has been optimized for printing. Please use one of the following methods:</p>
+        <button class="print-button" onclick="window.print()">🖨️ Print this page</button>
+        <div style="margin-top: 15px; color: #666; font-size: 14px;">
+            <p><strong>Or use keyboard shortcuts:</strong></p>
+            <p>macOS: Cmd + P | Windows/Linux: Ctrl + P</p>
+            <p><em>Select "Save as PDF" as the printer in the print dialog</em></p>
+        </div>
+    </div>
+    
 {html_content}
+
+    <script>
+        // Auto-trigger print dialog after page loads (optional)
+        // Uncomment the next line if you want automatic print dialog
+        // window.onload = function() {{ setTimeout(function() {{ window.print(); }}, 500); }};
+    </script>
 </body>
 </html>"""
-        
-        # Create temporary HTML file
+
+        # Create a temporary HTML file optimized for printing
+        base_name = os.path.splitext(os.path.basename(output_path))[0]
         with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as tmp_file:
             tmp_file.write(html_document)
             tmp_html_path = tmp_file.name
-        
-        try:
-            # Convert HTML to PDF using weasyprint
-            # Set base_url to the directory of the current file for relative image paths
-            base_url = None
-            if hasattr(app, 'file_paths') and app.file_paths:
-                current_path = app.file_paths[idx]
-                if current_path is not None:
-                    base_url = f"file://{os.path.dirname(os.path.abspath(current_path))}/"
-            
-            HTML(filename=tmp_html_path, base_url=base_url).write_pdf(output_path)
-            
-            messagebox.showinfo("Success", f"PDF exported successfully to:\n{output_path}")
-            return True
-        finally:
-            # Clean up temporary HTML file
-            try:
-                os.unlink(tmp_html_path)
-            except OSError:
-                pass
-        
-    except ImportError as e:
-        messagebox.showerror("Error", "WeasyPrint library is required for PDF export.\nPlease install it: pip install weasyprint")
+
+        # Open the HTML file in the default browser
+        webbrowser.open('file://' + tmp_html_path)
+
+        # Show instructions to the user
+        result = messagebox.showinfo(
+            "Export PDF",
+            f"A print-friendly HTML page has been opened in your browser.\n\n"
+            f"Please follow these steps to export as PDF:\n\n"
+            f"1. Press Cmd+P (macOS) or Ctrl+P (Windows) in your browser\n"
+            f"2. Select 'Save as PDF' as the printer\n"
+            f"3. Choose the save location and name it: {os.path.basename(output_path)}\n\n"
+            f"Or click the 'Print' button on the page."
+        )
+
+        return True
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to export PDF: {e}")
+        import traceback
+        traceback.print_exc()
         return False
     except Exception as e:
         messagebox.showerror("Error", f"Failed to export PDF: {e}")
