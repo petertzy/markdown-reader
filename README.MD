@@ -99,7 +99,8 @@ git push
 * GUI: `tkinter`, `tkinterdnd2`
 * Markdown Engine: `markdown2`
 * HTML Preview: Dynamically generated HTML opened in the default browser
-* File Conversion: `html2text` for HTML, `pypdf` for PDF
+* File Conversion: `html2text` for HTML, `pypdf` for PDF import
+* PDF Export: Browser-based print-to-PDF (no system dependencies required)
 * Supports drag-and-drop and live preview updates while avoiding multiple browser tabs
 
 ---

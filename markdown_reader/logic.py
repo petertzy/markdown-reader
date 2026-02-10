@@ -752,6 +752,323 @@ def export_to_docx(app, output_path):
         return False
 
 
+def export_to_pdf(app, output_path):
+    """
+    Export the current markdown document to a PDF file.
+    Since PDF generation libraries have complex dependencies,
+    this creates a print-friendly HTML file and opens it in the browser
+    for the user to print to PDF using the browser's built-in functionality.
+    
+    Args:
+        app: The MarkdownReader application instance
+        output_path: The path where the PDF file should be saved (used as suggestion)
+    
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    if not app.editors:
+        messagebox.showinfo("Info", "No document to export.")
+        return False
+    
+    try:
+        import tempfile
+        import webbrowser
+        
+        idx = app.notebook.index(app.notebook.select())
+        text_area = app.editors[idx]
+        markdown_text = text_area.get("1.0", "end-1c")
+        
+        # Fix image paths if a file is currently open
+        if hasattr(app, 'file_paths') and app.file_paths:
+            try:
+                current_path = app.file_paths[idx]
+                if current_path is not None:
+                    base_dir = os.path.dirname(current_path)
+                    # Convert file:// paths to relative paths for export
+                    def convert_file_url_to_relative(text, base_dir):
+                        def repl(m):
+                            alt = m.group(1)
+                            src = m.group(2)
+                            if src.startswith('file://'):
+                                # Convert file:// URL back to relative path
+                                file_path = src.replace('file://', '')
+                                try:
+                                    rel_path = os.path.relpath(file_path, base_dir)
+                                    return f'![{alt}]({rel_path})'
+                                except (ValueError, OSError):
+                                    return m.group(0)
+                            return m.group(0)
+                        return re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', repl, text)
+                    
+                    markdown_text = convert_file_url_to_relative(markdown_text, base_dir)
+            except Exception as e:
+                print(f"Warning: Could not process image paths: {e}")
+        
+        # Convert markdown to HTML
+        html_content = markdown2.markdown(
+            markdown_text, 
+            extras=["fenced-code-blocks", "code-friendly", "tables", "break-on-newline"]
+        )
+        
+        # Get style from app (with fallback)
+        font_family = getattr(app, 'current_font_family', 'Consolas')
+        font_size = getattr(app, 'current_font_size', 14)
+        fg_color = getattr(app, 'current_fg_color', '#000000')
+        bg_color = getattr(app, 'current_bg_color', 'white')
+        
+        if getattr(app, 'dark_mode', False):
+            bg_color = '#1e1e1e'
+            fg_color = '#dcdcdc'
+        
+        # For PDF, use generic font fallbacks
+        web_font_family = font_family
+        if font_family.lower() in ["arial", "helvetica", "verdana", "tahoma", "trebuchet ms"]:
+            web_font_family += ", sans-serif"
+        elif font_family.lower() in ["times new roman", "georgia", "garamond", "serif"]:
+            web_font_family += ", serif"
+        elif font_family.lower() in ["consolas", "courier new", "monospace"]:
+            web_font_family += ", monospace"
+        else:
+            web_font_family += ", sans-serif"
+        
+        # Code blocks should always use monospace fonts
+        code_font_family = "Consolas, 'Courier New', monospace"
+        
+        # Heading sizes relative to base font size
+        h1 = font_size + 18
+        h2 = font_size + 12
+        h3 = font_size + 8
+        h4 = font_size + 4
+        h5 = font_size + 2
+        h6 = font_size + 1
+        base = font_size + 2
+        
+        # Generate complete HTML document for PDF printing
+        # Optimized for print media with @media print styles
+        html_document = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Exported Markdown</title>
+    <style>
+        @media print {{
+            body {{
+                background-color: white !important;
+                color: black !important;
+                margin: 0;
+                padding: 20px;
+            }}
+            
+            /* Hide print button when actually printing */
+            .print-instructions {{
+                display: none;
+            }}
+            
+            /* Page break control */
+            h1, h2, h3, h4, h5, h6 {{
+                page-break-after: avoid;
+                page-break-inside: avoid;
+            }}
+            
+            pre, code, table, img {{
+                page-break-inside: avoid;
+            }}
+        }}
+        
+        @media screen {{
+            body {{
+                max-width: 800px;
+                margin: 20px auto;
+                padding: 40px;
+                background-color: white;
+                box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            }}
+            
+            /* Show print instructions on screen */
+            .print-instructions {{
+                background-color: #e3f2fd;
+                border: 2px solid #2196F3;
+                border-radius: 8px;
+                padding: 20px;
+                margin: 20px 0;
+                text-align: center;
+            }}
+            
+            .print-button {{
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                padding: 12px 24px;
+                font-size: 16px;
+                border-radius: 4px;
+                cursor: pointer;
+                margin: 10px;
+            }}
+            
+            .print-button:hover {{
+                background-color: #1976D2;
+            }}
+        }}
+        
+        /* Common styles for both screen and print */
+        body {{
+            font-family: {web_font_family};
+            font-size: {base}pt;
+            line-height: 1.6;
+            color: #333;
+        }}
+        
+        h1 {{ font-size: {h1}pt; margin-top: 1.5em; margin-bottom: 0.5em; font-weight: bold; }}
+        h2 {{ font-size: {h2}pt; margin-top: 1.2em; margin-bottom: 0.4em; font-weight: bold; }}
+        h3 {{ font-size: {h3}pt; margin-top: 1em; margin-bottom: 0.3em; font-weight: bold; }}
+        h4 {{ font-size: {h4}pt; margin-top: 0.8em; margin-bottom: 0.25em; font-weight: bold; }}
+        h5 {{ font-size: {h5}pt; margin-top: 0.6em; margin-bottom: 0.2em; font-weight: bold; }}
+        h6 {{ font-size: {h6}pt; margin-top: 0.5em; margin-bottom: 0.2em; font-weight: bold; }}
+        
+        b, strong {{ font-weight: bold; }}
+        i, em {{ font-style: italic; }}
+        u {{ text-decoration: underline; }}
+        
+        pre {{
+            background-color: #f5f5f5;
+            color: #000;
+            padding: 12pt;
+            border: 1pt solid #ddd;
+            border-radius: 4px;
+            margin: 10pt 0;
+            overflow-x: auto;
+        }}
+        
+        pre code {{
+            font-family: Consolas, 'Courier New', monospace;
+            font-size: {max(font_size - 2, 10)}pt;
+            white-space: pre;
+            display: block;
+        }}
+        
+        code {{
+            background-color: #f5f5f5;
+            color: #c7254e;
+            font-family: Consolas, 'Courier New', monospace;
+            font-size: {max(font_size - 1, 10)}pt;
+            padding: 2pt 4pt;
+            border-radius: 3px;
+            border: 1pt solid #e1e1e8;
+        }}
+        
+        img {{
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 15pt auto;
+        }}
+        
+        table {{
+            border-collapse: collapse;
+            width: 100%;
+            margin: 15pt 0;
+        }}
+        
+        th, td {{
+            text-align: left;
+            border: 1pt solid #ddd;
+            padding: 8pt 12pt;
+            vertical-align: top;
+        }}
+        
+        th {{
+            background-color: #f5f5f5;
+            color: #333;
+            font-weight: bold;
+        }}
+        
+        tr:nth-child(even) {{
+            background-color: #fafafa;
+        }}
+        
+        blockquote {{
+            border-left: 4pt solid #ddd;
+            padding-left: 15pt;
+            color: #666;
+            margin: 15pt 0;
+            font-style: italic;
+        }}
+        
+        a {{
+            color: #0066cc;
+            text-decoration: underline;
+        }}
+        
+        ul, ol {{
+            margin: 8pt 0;
+            padding-left: 30pt;
+        }}
+        
+        li {{
+            margin: 4pt 0;
+        }}
+        
+        p {{
+            margin: 8pt 0;
+        }}
+    </style>
+</head>
+<body>
+    <div class="print-instructions">
+        <h2>📄 Ready to Print as PDF</h2>
+        <p>This page has been optimized for printing. Please use one of the following methods:</p>
+        <button class="print-button" onclick="window.print()">🖨️ Print this page</button>
+        <div style="margin-top: 15px; color: #666; font-size: 14px;">
+            <p><strong>Or use keyboard shortcuts:</strong></p>
+            <p>macOS: Cmd + P | Windows/Linux: Ctrl + P</p>
+            <p><em>Select "Save as PDF" as the printer in the print dialog</em></p>
+        </div>
+    </div>
+    
+{html_content}
+
+    <script>
+        // Auto-trigger print dialog after page loads (optional)
+        // Uncomment the next line if you want automatic print dialog
+        // window.onload = function() {{ setTimeout(function() {{ window.print(); }}, 500); }};
+    </script>
+</body>
+</html>"""
+
+        # Create a temporary HTML file optimized for printing
+        base_name = os.path.splitext(os.path.basename(output_path))[0]
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as tmp_file:
+            tmp_file.write(html_document)
+            tmp_html_path = tmp_file.name
+
+        # Open the HTML file in the default browser
+        webbrowser.open('file://' + tmp_html_path)
+
+        # Show instructions to the user
+        result = messagebox.showinfo(
+            "Export PDF",
+            f"A print-friendly HTML page has been opened in your browser.\n\n"
+            f"Please follow these steps to export as PDF:\n\n"
+            f"1. Press Cmd+P (macOS) or Ctrl+P (Windows) in your browser\n"
+            f"2. Select 'Save as PDF' as the printer\n"
+            f"3. Choose the save location and name it: {os.path.basename(output_path)}\n\n"
+            f"Or click the 'Print' button on the page."
+        )
+
+        return True
+
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to export PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to export PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def process_inline_formatting(text):
     """Remove markdown formatting markers for plain text extraction"""
     # Remove bold
