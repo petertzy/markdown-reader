@@ -1,15 +1,26 @@
 # Markdown Reader
 
-A clean and intuitive Markdown reader with real-time preview support, dark mode toggle, and drag-and-drop file opening. Compatible with macOS and Windows desktop environments.
+A clean and intuitive Markdown reader with real-time preview support, advanced editing features, and customizable themes. Compatible with macOS, Windows, and Linux desktop environments.
 
 ## Features
 
-* Real-time preview of Markdown rendered to HTML
-* Dark mode toggle
+### Core Features
+* Real-time preview of Markdown rendered to HTML with syntax highlighting
+* Dark mode toggle and 7 customizable editor themes
 * Drag-and-drop support for `.md`, `.html`, and `.pdf` files with automatic conversion to Markdown (requires `tkinterdnd2`)
 * Built with pure Python and Tkinter — cross-platform
 * Can be bundled as a macOS app using `py2app`
 * Opens preview automatically and avoids multiple browser tabs for a smoother experience
+
+### Advanced Editing Features (NEW!)
+* **Syntax Highlighting** - Code blocks with Pygments syntax highlighting for 500+ languages
+* **Keyboard Shortcuts** - Comprehensive shortcuts for formatting (Ctrl/Cmd+B for bold, Ctrl/Cmd+I for italic, etc.)
+* **Customizable Themes** - 7 themes including Monokai, Solarized, Dracula, and Nord
+* **Section Reordering** - Move markdown sections up/down with keyboard shortcuts (Alt+Up/Down)
+* **Split Preview Mode** - Toggle real-time preview in browser side-by-side
+* **Enhanced Undo/Redo** - Full history tracking for all editing operations
+
+See [ENHANCEMENTS.md](ENHANCEMENTS.md) for detailed documentation of new features.
 
 ---
 
