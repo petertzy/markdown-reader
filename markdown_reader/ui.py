@@ -86,6 +86,8 @@ class MarkdownReader:
         editmenu = ttkb.Menu(menubar, tearoff=0)
         editmenu.add_command(label="Undo", command=self.undo_action)
         editmenu.add_command(label="Redo", command=self.redo_action)
+        editmenu.add_separator()
+        editmenu.add_command(label="Keyboard Shortcuts...", command=self.show_keyboard_shortcuts)
         menubar.add_cascade(label="Edit", menu=editmenu)
 
         # ADD THIS NEW BLOCK:
@@ -193,6 +195,28 @@ class MarkdownReader:
         self.root.bind_all("<Control-n>", lambda event: self.new_file())
         self.root.bind_all("<Command-z>", lambda event: self.undo_action())
         self.root.bind_all("<Command-Shift-Z>", lambda event: self.redo_action())
+        
+        # Formatting shortcuts
+        self.root.bind_all("<Control-b>", lambda event: self.toggle_bold())
+        self.root.bind_all("<Command-b>", lambda event: self.toggle_bold())
+        self.root.bind_all("<Control-i>", lambda event: self.toggle_italic())
+        self.root.bind_all("<Command-i>", lambda event: self.toggle_italic())
+        self.root.bind_all("<Control-u>", lambda event: self.toggle_underline())
+        self.root.bind_all("<Command-u>", lambda event: self.toggle_underline())
+        self.root.bind_all("<Control-k>", lambda event: self.toggle_inline_code())
+        self.root.bind_all("<Command-k>", lambda event: self.toggle_inline_code())
+        self.root.bind_all("<Control-Shift-K>", lambda event: self.toggle_code_block())
+        self.root.bind_all("<Command-Shift-K>", lambda event: self.toggle_code_block())
+        self.root.bind_all("<Control-l>", lambda event: self.insert_link())
+        self.root.bind_all("<Command-l>", lambda event: self.insert_link())
+        self.root.bind_all("<Control-h>", lambda event: self.toggle_heading(1))
+        self.root.bind_all("<Command-h>", lambda event: self.toggle_heading(1))
+        self.root.bind_all("<Control-Key-1>", lambda event: self.toggle_heading(1))
+        self.root.bind_all("<Control-Key-2>", lambda event: self.toggle_heading(2))
+        self.root.bind_all("<Control-Key-3>", lambda event: self.toggle_heading(3))
+        self.root.bind_all("<Control-Key-4>", lambda event: self.toggle_heading(4))
+        self.root.bind_all("<Control-Key-5>", lambda event: self.toggle_heading(5))
+        self.root.bind_all("<Control-Key-6>", lambda event: self.toggle_heading(6))
 
     def _on_drop_files(self, event):
         """Handle file drop events"""
@@ -817,6 +841,108 @@ class MarkdownReader:
             return
         self.update_preview()
 
+    def toggle_inline_code(self):
+        """Wrap selected text in inline code backticks"""
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+        try:
+            sel_start = text_area.index("sel.first")
+            sel_end = text_area.index("sel.last")
+            selected_text = text_area.get(sel_start, sel_end)
+            # If already inline code, remove backticks, else add them
+            if selected_text.startswith("`") and selected_text.endswith("`") and len(selected_text) > 2:
+                new_text = selected_text[1:-1]
+            else:
+                new_text = f"`{selected_text}`"
+            text_area.delete(sel_start, sel_end)
+            text_area.insert(sel_start, new_text)
+        except tk.TclError:
+            # No selection, insert inline code template at cursor
+            text_area.insert("insert", "``")
+            text_area.mark_set("insert", f"insert-1c")
+        self.update_preview()
+
+    def toggle_code_block(self):
+        """Wrap selected text or current line in code block"""
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+        try:
+            sel_start = text_area.index("sel.first")
+            sel_end = text_area.index("sel.last")
+            selected_text = text_area.get(sel_start, sel_end)
+            # If already in code block, remove it
+            if selected_text.startswith("```") and selected_text.endswith("```"):
+                lines = selected_text.split('\n')
+                if len(lines) >= 3:
+                    new_text = '\n'.join(lines[1:-1])
+                else:
+                    new_text = selected_text[3:-3]
+            else:
+                new_text = f"```\n{selected_text}\n```"
+            text_area.delete(sel_start, sel_end)
+            text_area.insert(sel_start, new_text)
+        except tk.TclError:
+            # No selection, insert code block template at cursor
+            cursor_pos = text_area.index("insert")
+            text_area.insert(cursor_pos, "```\n\n```")
+            text_area.mark_set("insert", f"{cursor_pos}+4c")
+        self.update_preview()
+
+    def insert_link(self):
+        """Insert markdown link syntax"""
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+        try:
+            sel_start = text_area.index("sel.first")
+            sel_end = text_area.index("sel.last")
+            selected_text = text_area.get(sel_start, sel_end)
+            new_text = f"[{selected_text}](url)"
+            text_area.delete(sel_start, sel_end)
+            text_area.insert(sel_start, new_text)
+            # Select the "url" part for easy replacement
+            url_start = text_area.index(f"{sel_start}+{len(selected_text)+2}c")
+            url_end = text_area.index(f"{url_start}+3c")
+            text_area.tag_add("sel", url_start, url_end)
+            text_area.mark_set("insert", url_end)
+        except tk.TclError:
+            # No selection, insert link template at cursor
+            cursor_pos = text_area.index("insert")
+            text_area.insert(cursor_pos, "[text](url)")
+            # Select "text" part
+            text_area.tag_add("sel", cursor_pos + "+1c", cursor_pos + "+5c")
+            text_area.mark_set("insert", cursor_pos + "+5c")
+        self.update_preview()
+
+    def toggle_heading(self, level=1):
+        """Toggle heading level for current line"""
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+        try:
+            # Get current line
+            current_line = text_area.index("insert").split('.')[0]
+            line_start = f"{current_line}.0"
+            line_end = f"{current_line}.end"
+            line_text = text_area.get(line_start, line_end)
+            
+            # Check if line already has heading markers
+            heading_match = re.match(r'^(#{1,6})\s+(.*)$', line_text)
+            if heading_match:
+                # Remove existing heading
+                new_text = heading_match.group(2)
+            else:
+                # Add heading markers
+                new_text = f"{'#' * level} {line_text}"
+            
+            text_area.delete(line_start, line_end)
+            text_area.insert(line_start, new_text)
+        except Exception as e:
+            print(f"Error toggling heading: {e}")
+        self.update_preview()
+
     def choose_fg_color(self):
         import re
         cd = dialogs.ColorChooserDialog()
@@ -1059,6 +1185,33 @@ Example with alignment:
 | A    | B      | C     |
 """
         dialogs.Messagebox.show_info("Table Syntax Help", help_text)
+
+    def show_keyboard_shortcuts(self):
+        """Show keyboard shortcuts reference"""
+        shortcuts_text = """Keyboard Shortcuts:
+
+FILE OPERATIONS:
+  Ctrl/Cmd + N    New file
+  Ctrl/Cmd + S    Save file
+  Ctrl/Cmd + Z    Undo
+  Ctrl/Cmd + Y    Redo (Cmd+Shift+Z on Mac)
+
+FORMATTING:
+  Ctrl/Cmd + B    Bold (**text**)
+  Ctrl/Cmd + I    Italic (*text*)
+  Ctrl/Cmd + U    Underline (<u>text</u>)
+  Ctrl/Cmd + K    Inline code (`code`)
+  Ctrl/Cmd + Shift + K    Code block (```code```)
+  Ctrl/Cmd + L    Insert link ([text](url))
+  Ctrl/Cmd + H    Toggle heading
+  Ctrl + 1-6      Set heading level (H1-H6)
+
+TIPS:
+  • Select text before applying formatting
+  • Without selection, templates are inserted
+  • Most shortcuts work on Mac with Cmd key
+"""
+        dialogs.Messagebox.show_info("Keyboard Shortcuts", shortcuts_text)
 
     def export_to_html_dialog(self):
         """Show dialog to export current markdown document to HTML"""
