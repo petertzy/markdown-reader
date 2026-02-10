@@ -3,6 +3,7 @@ from markdown_reader.ui import MarkdownReader
 import sys
 import os
 import ttkbootstrap as ttkb
+from ttkbootstrap.constants import *
 
 
 def handle_open_file(event):
@@ -13,12 +14,17 @@ def handle_open_file(event):
 
 if __name__ == "__main__":
     try:
-        # from tkinterdnd2 import TkinterDnD
-        # # root = TkinterDnD.Tk()
+        from tkinterdnd2 import TkinterDnD
+        root = TkinterDnD.Tk()
+        
+        # Apply ttkbootstrap theme to TkinterDnD window
+        app_style = ttkb.Style(theme="darkly")
+        
+        print("TkinterDnD enabled - Drag and drop support available")
+    except ImportError as e:
+        print(f"   Warning: tkinterdnd2 not installed, drag-and-drop will be disabled")
+        print(f"   Error: {e}")
         root = ttkb.Window(themename="darkly")
-    except ImportError:
-        print("Note: tkinterdnd2 not installed, drag-and-drop will be disabled")
-        # root = tk.Tk()
 
     app = MarkdownReader(root)
     
