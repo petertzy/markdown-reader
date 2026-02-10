@@ -47,6 +47,60 @@ class MarkdownReader:
         self.current_fg_color = "#000000"
         self.current_bg_color = "#ffffff"
         
+        # Theme definitions
+        self.themes = {
+            "Default": {
+                "fg": "#000000",
+                "bg": "#ffffff",
+                "insert": "#000000",
+                "select_fg": "#ffffff",
+                "select_bg": "#0078d7"
+            },
+            "Dark": {
+                "fg": "#dcdcdc",
+                "bg": "#1e1e1e",
+                "insert": "#dcdcdc",
+                "select_fg": "#ffffff",
+                "select_bg": "#264f78"
+            },
+            "Monokai": {
+                "fg": "#f8f8f2",
+                "bg": "#272822",
+                "insert": "#f8f8f2",
+                "select_fg": "#f8f8f2",
+                "select_bg": "#49483e"
+            },
+            "Solarized Light": {
+                "fg": "#657b83",
+                "bg": "#fdf6e3",
+                "insert": "#657b83",
+                "select_fg": "#eee8d5",
+                "select_bg": "#93a1a1"
+            },
+            "Solarized Dark": {
+                "fg": "#839496",
+                "bg": "#002b36",
+                "insert": "#839496",
+                "select_fg": "#fdf6e3",
+                "select_bg": "#073642"
+            },
+            "Dracula": {
+                "fg": "#f8f8f2",
+                "bg": "#282a36",
+                "insert": "#f8f8f2",
+                "select_fg": "#f8f8f2",
+                "select_bg": "#44475a"
+            },
+            "Nord": {
+                "fg": "#d8dee9",
+                "bg": "#2e3440",
+                "insert": "#d8dee9",
+                "select_fg": "#eceff4",
+                "select_bg": "#434c5e"
+            }
+        }
+        self.current_theme = "Default"
+        
         # Flag to prevent marking as modified during file loading
         self._loading_file = False
         
@@ -81,6 +135,16 @@ class MarkdownReader:
         viewmenu.add_command(label="Toggle Dark Mode", command=self.toggle_dark_mode)
         viewmenu.add_command(label="Open Preview in Browser",
                              command=lambda: open_preview_in_browser(self.preview_file, self))
+        viewmenu.add_separator()
+        
+        # Theme submenu
+        thememenu = tk.Menu(viewmenu, tearoff=0)
+        self.theme_var = tk.StringVar(value="Default")
+        themes = ["Default", "Dark", "Monokai", "Solarized Light", "Solarized Dark", "Dracula", "Nord"]
+        for theme in themes:
+            thememenu.add_radiobutton(label=theme, variable=self.theme_var, command=lambda t=theme: self.apply_theme(t))
+        viewmenu.add_cascade(label="Editor Theme", menu=thememenu)
+        
         menubar.add_cascade(label="View", menu=viewmenu)
 
         editmenu = ttkb.Menu(menubar, tearoff=0)
@@ -579,6 +643,35 @@ class MarkdownReader:
 
         for text_area in self.editors:
             text_area.config(bg=bg, fg=fg, insertbackground=fg)
+
+    def apply_theme(self, theme_name):
+        """Apply a color theme to all editor instances"""
+        if theme_name not in self.themes:
+            return
+        
+        theme = self.themes[theme_name]
+        self.current_theme = theme_name
+        self.theme_var.set(theme_name)
+        
+        # Update current colors
+        self.current_fg_color = theme["fg"]
+        self.current_bg_color = theme["bg"]
+        
+        # Apply to all editors
+        for text_area in self.editors:
+            text_area.config(
+                bg=theme["bg"],
+                fg=theme["fg"],
+                insertbackground=theme["insert"],
+                selectforeground=theme["select_fg"],
+                selectbackground=theme["select_bg"]
+            )
+        
+        # Update dark mode flag based on theme
+        self.dark_mode = theme_name in ["Dark", "Monokai", "Solarized Dark", "Dracula", "Nord"]
+        
+        # Update preview
+        self.update_preview()
 
     def highlight_markdown(self):
         # Get the current editor

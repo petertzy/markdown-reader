@@ -10,6 +10,53 @@ from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import traceback
 
+try:
+    from pygments import highlight
+    from pygments.lexers import get_lexer_by_name, guess_lexer, TextLexer
+    from pygments.formatters import HtmlFormatter
+    from pygments.util import ClassNotFound
+    PYGMENTS_AVAILABLE = True
+except ImportError:
+    PYGMENTS_AVAILABLE = False
+
+def apply_syntax_highlighting(html_content, dark_mode=False):
+    """Apply Pygments syntax highlighting to code blocks in HTML"""
+    if not PYGMENTS_AVAILABLE:
+        return html_content
+    
+    # Find all code blocks with language specification
+    # Pattern matches: <code class="language-python">...</code> or <code>...</code> within <pre>
+    code_pattern = r'<pre><code(?:\s+class="(?:language-)?([^"]+)")?>(.*?)</code></pre>'
+    
+    def highlight_code(match):
+        lang = match.group(1)
+        code = match.group(2)
+        
+        # Unescape HTML entities
+        code = code.replace('&lt;', '<').replace('&gt;', '>').replace('&amp;', '&')
+        
+        try:
+            if lang:
+                lexer = get_lexer_by_name(lang, stripall=True)
+            else:
+                lexer = guess_lexer(code)
+        except ClassNotFound:
+            lexer = TextLexer()
+        
+        # Choose style based on dark mode
+        style = 'monokai' if dark_mode else 'default'
+        formatter = HtmlFormatter(style=style, noclasses=True, cssclass='highlight')
+        highlighted = highlight(code, lexer, formatter)
+        
+        return highlighted
+    
+    try:
+        html_content = re.sub(code_pattern, highlight_code, html_content, flags=re.DOTALL)
+    except Exception as e:
+        print(f"Error applying syntax highlighting: {e}")
+    
+    return html_content
+
 def update_preview(app):
     if not app.editors:
         return False
@@ -57,6 +104,9 @@ def update_preview(app):
         # FIX APPLIED: Added "break-on-newline" to extras to preserve line breaks
         try:
             html_content = markdown2.markdown(markdown_text, extras=["fenced-code-blocks", "code-friendly", "tables", "break-on-newline"])
+            # Apply syntax highlighting to code blocks
+            dark_mode = getattr(app, 'dark_mode', False)
+            html_content = apply_syntax_highlighting(html_content, dark_mode)
         except Exception as e:
             tb = traceback.format_exc()
             print(f"markdown2 conversion error: {e}\n{tb}")
