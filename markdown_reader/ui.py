@@ -36,6 +36,11 @@ class MarkdownReader:
         self.root = root
         self.root.title("Markdown Reader")
         self.root.geometry("1280x795")
+        
+        # Make window resizable with minimum size for responsive design
+        self.root.minsize(800, 600)
+        self.root.resizable(True, True)
+        
         self.dark_mode = False
         self.preview_file = get_preview_file()
         self.current_file_path = None
@@ -86,6 +91,9 @@ class MarkdownReader:
         editmenu = ttkb.Menu(menubar, tearoff=0)
         editmenu.add_command(label="Undo", command=self.undo_action)
         editmenu.add_command(label="Redo", command=self.redo_action)
+        editmenu.add_separator()
+        editmenu.add_command(label="Find", command=self.show_find_dialog, accelerator="Ctrl+F")
+        editmenu.add_command(label="Replace", command=self.show_replace_dialog, accelerator="Ctrl+H")
         menubar.add_cascade(label="Edit", menu=editmenu)
 
         # ADD THIS NEW BLOCK:
@@ -164,12 +172,20 @@ class MarkdownReader:
         self.editors = []
         self.file_paths = []
         
+        # Tab reordering state
+        self._drag_start_index = None
+        
         # Create context menu for tabs
         self.tab_context_menu = tk.Menu(self.root, tearoff=0)
         self.tab_context_menu.add_command(label="Close", command=self.close_tab_from_context_menu)
         
         # Bind click event to detect close button clicks
         self.notebook.bind("<Button-1>", self.on_tab_click)
+        
+        # Bind drag events for tab reordering
+        self.notebook.bind("<ButtonPress-1>", self.on_tab_drag_start)
+        self.notebook.bind("<B1-Motion>", self.on_tab_drag_motion)
+        self.notebook.bind("<ButtonRelease-1>", self.on_tab_drag_end)
         
         # Bind right-click for context menu
         self.notebook.bind("<Button-2>" if self.root.tk.call('tk', 'windowingsystem') == 'aqua' else "<Button-3>", self.show_tab_context_menu)
@@ -193,6 +209,10 @@ class MarkdownReader:
         self.root.bind_all("<Control-n>", lambda event: self.new_file())
         self.root.bind_all("<Command-z>", lambda event: self.undo_action())
         self.root.bind_all("<Command-Shift-Z>", lambda event: self.redo_action())
+        self.root.bind_all("<Control-f>", lambda event: self.show_find_dialog())
+        self.root.bind_all("<Command-f>", lambda event: self.show_find_dialog())
+        self.root.bind_all("<Control-h>", lambda event: self.show_replace_dialog())
+        self.root.bind_all("<Command-h>", lambda event: self.show_replace_dialog())
 
     def _on_drop_files(self, event):
         """Handle file drop events"""
@@ -457,6 +477,89 @@ class MarkdownReader:
         """Close the tab that was right-clicked"""
         if hasattr(self, 'right_clicked_tab_index') and self.right_clicked_tab_index < len(self.editors):
             self.close_tab_by_index(self.right_clicked_tab_index)
+
+    def on_tab_drag_start(self, event):
+        """Start dragging a tab"""
+        try:
+            element = self.notebook.tk.call(self.notebook._w, "identify", "tab", event.x, event.y)
+            if element != "":
+                self._drag_start_index = int(element)
+        except:
+            self._drag_start_index = None
+
+    def on_tab_drag_motion(self, event):
+        """Handle tab dragging motion"""
+        if self._drag_start_index is None:
+            return
+        
+        try:
+            element = self.notebook.tk.call(self.notebook._w, "identify", "tab", event.x, event.y)
+            if element != "" and int(element) != self._drag_start_index:
+                target_index = int(element)
+                self.reorder_tab(self._drag_start_index, target_index)
+                self._drag_start_index = target_index
+        except:
+            pass
+
+    def on_tab_drag_end(self, event):
+        """End tab dragging"""
+        self._drag_start_index = None
+
+    def reorder_tab(self, from_index, to_index):
+        """Reorder tabs by moving a tab from one position to another"""
+        if from_index == to_index or from_index >= len(self.editors) or to_index >= len(self.editors):
+            return
+        
+        # Get the tab widget
+        tab_widget = self.notebook.nametowidget(self.notebook.tabs()[from_index])
+        
+        # Get tab properties
+        tab_text = self.notebook.tab(from_index, "text")
+        
+        # Store editor and file path
+        editor = self.editors[from_index]
+        file_path = self.file_paths[from_index]
+        
+        # Check if tab is modified
+        is_modified = from_index in self.modified_tabs
+        
+        # Remove from old position
+        self.notebook.forget(from_index)
+        del self.editors[from_index]
+        del self.file_paths[from_index]
+        if is_modified:
+            self.modified_tabs.discard(from_index)
+        
+        # Insert at new position
+        self.notebook.insert(to_index, tab_widget, text=tab_text)
+        self.editors.insert(to_index, editor)
+        self.file_paths.insert(to_index, file_path)
+        if is_modified:
+            self.modified_tabs.add(to_index)
+        
+        # Update modified tabs indices
+        new_modified = set()
+        for idx in self.modified_tabs:
+            if from_index < to_index:
+                # Moving forward
+                if idx > from_index and idx <= to_index:
+                    new_modified.add(idx - 1)
+                elif idx == from_index:
+                    new_modified.add(to_index)
+                else:
+                    new_modified.add(idx)
+            else:
+                # Moving backward
+                if idx >= to_index and idx < from_index:
+                    new_modified.add(idx + 1)
+                elif idx == from_index:
+                    new_modified.add(to_index)
+                else:
+                    new_modified.add(idx)
+        self.modified_tabs = new_modified
+        
+        # Select the moved tab
+        self.notebook.select(to_index)
 
     def add_close_button_to_tab(self, tab_index, tab_text):
         """Add a custom tab label with a close button"""
@@ -1152,3 +1255,141 @@ Example with alignment:
         
         if output_path:
             export_to_pdf(self, output_path)
+
+    def show_find_dialog(self):
+        """Show find dialog for searching text"""
+        find_dialog = tk.Toplevel(self.root)
+        find_dialog.title("Find")
+        find_dialog.geometry("400x120")
+        find_dialog.resizable(False, False)
+        
+        # Center the dialog
+        find_dialog.update_idletasks()
+        x = (find_dialog.winfo_screenwidth() // 2) - (find_dialog.winfo_width() // 2)
+        y = (find_dialog.winfo_screenheight() // 2) - (find_dialog.winfo_height() // 2)
+        find_dialog.geometry(f"+{x}+{y}")
+        
+        # Search term
+        tk.Label(find_dialog, text="Find:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        search_entry = tk.Entry(find_dialog, width=30)
+        search_entry.grid(row=0, column=1, padx=10, pady=10)
+        search_entry.focus()
+        
+        # Options
+        case_var = tk.BooleanVar()
+        tk.Checkbutton(find_dialog, text="Case sensitive", variable=case_var).grid(row=1, column=1, sticky="w", padx=10)
+        
+        def find_text():
+            text_area = self.get_current_text_area()
+            if not text_area:
+                return
+            
+            search_term = search_entry.get()
+            if not search_term:
+                return
+            
+            # Remove previous highlights
+            text_area.tag_remove("search_highlight", "1.0", tk.END)
+            
+            # Configure highlight tag
+            text_area.tag_configure("search_highlight", background="yellow", foreground="black")
+            
+            # Search and highlight all occurrences
+            start_pos = "1.0"
+            count = 0
+            while True:
+                if case_var.get():
+                    pos = text_area.search(search_term, start_pos, tk.END)
+                else:
+                    pos = text_area.search(search_term, start_pos, tk.END, nocase=True)
+                
+                if not pos:
+                    break
+                
+                end_pos = f"{pos}+{len(search_term)}c"
+                text_area.tag_add("search_highlight", pos, end_pos)
+                count += 1
+                start_pos = end_pos
+            
+            # Show the first match
+            if count > 0:
+                text_area.see("search_highlight.first")
+                messagebox.showinfo("Find", f"Found {count} occurrence(s)")
+            else:
+                messagebox.showinfo("Find", "No matches found")
+        
+        # Buttons
+        button_frame = tk.Frame(find_dialog)
+        button_frame.grid(row=2, column=0, columnspan=2, pady=10)
+        tk.Button(button_frame, text="Find All", command=find_text, width=10).pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="Close", command=find_dialog.destroy, width=10).pack(side=tk.LEFT, padx=5)
+        
+        # Bind Enter key
+        search_entry.bind("<Return>", lambda e: find_text())
+
+    def show_replace_dialog(self):
+        """Show find and replace dialog"""
+        replace_dialog = tk.Toplevel(self.root)
+        replace_dialog.title("Find and Replace")
+        replace_dialog.geometry("400x180")
+        replace_dialog.resizable(False, False)
+        
+        # Center the dialog
+        replace_dialog.update_idletasks()
+        x = (replace_dialog.winfo_screenwidth() // 2) - (replace_dialog.winfo_width() // 2)
+        y = (replace_dialog.winfo_screenheight() // 2) - (replace_dialog.winfo_height() // 2)
+        replace_dialog.geometry(f"+{x}+{y}")
+        
+        # Find term
+        tk.Label(replace_dialog, text="Find:").grid(row=0, column=0, padx=10, pady=10, sticky="w")
+        find_entry = tk.Entry(replace_dialog, width=30)
+        find_entry.grid(row=0, column=1, padx=10, pady=10)
+        find_entry.focus()
+        
+        # Replace term
+        tk.Label(replace_dialog, text="Replace:").grid(row=1, column=0, padx=10, pady=10, sticky="w")
+        replace_entry = tk.Entry(replace_dialog, width=30)
+        replace_entry.grid(row=1, column=1, padx=10, pady=10)
+        
+        # Options
+        case_var = tk.BooleanVar()
+        tk.Checkbutton(replace_dialog, text="Case sensitive", variable=case_var).grid(row=2, column=1, sticky="w", padx=10)
+        
+        def replace_all():
+            text_area = self.get_current_text_area()
+            if not text_area:
+                return
+            
+            find_term = find_entry.get()
+            replace_term = replace_entry.get()
+            
+            if not find_term:
+                return
+            
+            content = text_area.get("1.0", tk.END)
+            
+            if case_var.get():
+                new_content = content.replace(find_term, replace_term)
+                count = content.count(find_term)
+            else:
+                import re
+                pattern = re.compile(re.escape(find_term), re.IGNORECASE)
+                count = len(pattern.findall(content))
+                new_content = pattern.sub(replace_term, content)
+            
+            if count > 0:
+                text_area.delete("1.0", tk.END)
+                text_area.insert("1.0", new_content)
+                messagebox.showinfo("Replace", f"Replaced {count} occurrence(s)")
+                self.update_preview()
+            else:
+                messagebox.showinfo("Replace", "No matches found")
+        
+        # Buttons
+        button_frame = tk.Frame(replace_dialog)
+        button_frame.grid(row=3, column=0, columnspan=2, pady=10)
+        tk.Button(button_frame, text="Replace All", command=replace_all, width=12).pack(side=tk.LEFT, padx=5)
+        tk.Button(button_frame, text="Close", command=replace_dialog.destroy, width=12).pack(side=tk.LEFT, padx=5)
+        
+        # Bind Enter key
+        find_entry.bind("<Return>", lambda e: replace_all())
