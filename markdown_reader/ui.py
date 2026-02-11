@@ -484,7 +484,7 @@ class MarkdownReader:
             element = self.notebook.tk.call(self.notebook._w, "identify", "tab", event.x, event.y)
             if element != "":
                 self._drag_start_index = int(element)
-        except:
+        except (tk.TclError, ValueError):
             self._drag_start_index = None
 
     def on_tab_drag_motion(self, event):
@@ -498,7 +498,7 @@ class MarkdownReader:
                 target_index = int(element)
                 self.reorder_tab(self._drag_start_index, target_index)
                 self._drag_start_index = target_index
-        except:
+        except (tk.TclError, ValueError):
             pass
 
     def on_tab_drag_end(self, event):
@@ -523,39 +523,38 @@ class MarkdownReader:
         # Check if tab is modified
         is_modified = from_index in self.modified_tabs
         
+        # Update modified tabs indices for tabs between from_index and to_index
+        new_modified = set()
+        for idx in self.modified_tabs:
+            if idx == from_index:
+                # This tab will be at to_index after the move
+                continue
+            elif from_index < to_index:
+                # Moving forward: tabs between from_index and to_index shift left
+                if from_index < idx <= to_index:
+                    new_modified.add(idx - 1)
+                else:
+                    new_modified.add(idx)
+            else:
+                # Moving backward: tabs between to_index and from_index shift right
+                if to_index <= idx < from_index:
+                    new_modified.add(idx + 1)
+                else:
+                    new_modified.add(idx)
+        
         # Remove from old position
         self.notebook.forget(from_index)
         del self.editors[from_index]
         del self.file_paths[from_index]
-        if is_modified:
-            self.modified_tabs.discard(from_index)
         
         # Insert at new position
         self.notebook.insert(to_index, tab_widget, text=tab_text)
         self.editors.insert(to_index, editor)
         self.file_paths.insert(to_index, file_path)
-        if is_modified:
-            self.modified_tabs.add(to_index)
         
-        # Update modified tabs indices
-        new_modified = set()
-        for idx in self.modified_tabs:
-            if from_index < to_index:
-                # Moving forward
-                if idx > from_index and idx <= to_index:
-                    new_modified.add(idx - 1)
-                elif idx == from_index:
-                    new_modified.add(to_index)
-                else:
-                    new_modified.add(idx)
-            else:
-                # Moving backward
-                if idx >= to_index and idx < from_index:
-                    new_modified.add(idx + 1)
-                elif idx == from_index:
-                    new_modified.add(to_index)
-                else:
-                    new_modified.add(idx)
+        # Update modified tabs with the moved tab at its new position
+        if is_modified:
+            new_modified.add(to_index)
         self.modified_tabs = new_modified
         
         # Select the moved tab
@@ -1372,7 +1371,6 @@ Example with alignment:
                 new_content = content.replace(find_term, replace_term)
                 count = content.count(find_term)
             else:
-                import re
                 pattern = re.compile(re.escape(find_term), re.IGNORECASE)
                 count = len(pattern.findall(content))
                 new_content = pattern.sub(replace_term, content)
