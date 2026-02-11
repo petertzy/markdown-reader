@@ -1,11 +1,17 @@
 # Markdown Reader
 
-A clean and intuitive Markdown reader with real-time preview support, dark mode toggle, and drag-and-drop file opening. Compatible with macOS and Windows desktop environments.
+A clean and intuitive Markdown reader with real-time preview support, advanced editing features, and responsive design. Compatible with macOS and Windows desktop environments.
 
 ## Features
 
 * Real-time preview of Markdown rendered to HTML
-* Dark mode toggle
+* **Enhanced UX/UI Features:**
+  * Light/dark mode toggle
+  * Multi-tab editing with drag-and-drop tab reordering
+  * Search and highlight text functionality (Ctrl/Cmd+F)
+  * Find and replace with case sensitivity options (Ctrl/Cmd+H)
+  * Responsive design with resizable window
+  * Quick access toolbar for text formatting (Bold, Italic, Underline, etc.)
 * Drag-and-drop support for `.md`, `.html`, and `.pdf` files with automatic conversion to Markdown (requires `tkinterdnd2`)
 * Built with pure Python and Tkinter — cross-platform
 * Can be bundled as a macOS app using `py2app`
@@ -60,10 +66,21 @@ python app.py
 
 ### How to Use
 
-* Open File: Choose `.md`, `.html`, or `.pdf` file from the "File → Open File" menu
-* Drag-and-Drop: Drag `.md`, `.html`, or `.pdf` files directly into the app window (HTML and PDF files are automatically converted to Markdown)
-* Dark Mode: Toggle via “View → Toggle Dark Mode”
-* Preview: Automatically opens in your web browser, only one tab is opened per session
+* **File Management:**
+  * Open File: Choose `.md`, `.html`, or `.pdf` file from the "File → Open File" menu
+  * Drag-and-Drop: Drag `.md`, `.html`, or `.pdf` files directly into the app window (HTML and PDF files are automatically converted to Markdown)
+  * Multi-tab: Work on multiple documents simultaneously with tab support
+  * Reorder Tabs: Drag and drop tabs to reorder them
+
+* **Editing Features:**
+  * Search: Press `Ctrl+F` (or `Cmd+F` on macOS) to find text and highlight all matches
+  * Replace: Press `Ctrl+H` (or `Cmd+H` on macOS) to find and replace text
+  * Formatting: Use the quick access toolbar for Bold, Italic, Underline, and other formatting options
+  
+* **View Options:**
+  * Dark Mode: Toggle via "View → Toggle Dark Mode"
+  * Preview: Automatically opens in your web browser, only one tab is opened per session
+  * Responsive: Resize the window to fit your screen (minimum size: 800x600)
 
 ---
 
