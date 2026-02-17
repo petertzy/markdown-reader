@@ -858,10 +858,10 @@ class MarkdownReader:
         if color:
             color = color.hex
             text_area = self.get_current_text_area()
-        if text_area:
-            text_area.config(bg=color)
-            self.current_bg_color = color
-            self.update_preview()
+            if text_area:
+                text_area.config(bg=color)
+                self.current_bg_color = color
+                self.update_preview()
             
 
     def update_preview(self):
