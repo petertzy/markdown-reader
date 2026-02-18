@@ -852,7 +852,7 @@ class MarkdownReader:
             
 
     def choose_bg_color(self):
-        cd = dialogs.ColorChooserDialog()
+        cd = dialogs.ColorChooserDialog(initialcolor=self.current_bg_color)
         cd.show()
         color = cd.result
         if color:
