@@ -358,6 +358,7 @@ def export_to_html(app, output_path):
     
     :return: Boolean value, true if successful, false otherwise.
     """
+
     if not app.editors:
         messagebox.showinfo("Info", "No document to export.")
         return False
@@ -550,14 +551,13 @@ def export_to_html(app, output_path):
 
 def convert_html_to_markdown(html_content):
     """
-    Convert HTML content to Markdown format.
+    Converts the HTML content of a file to Markdown format.
     
-    Args:
-        html_content: HTML string to convert
+    :param html_content: (string) The HTML code to be converted.
     
-    Returns:
-        str: Converted Markdown text
+    :return: (string) Markdown code representing the converted HTML.
     """
+    
     try:
         # Create html2text converter instance
         h = html2text.HTML2Text()
