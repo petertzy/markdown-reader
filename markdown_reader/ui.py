@@ -21,6 +21,7 @@ import ttkbootstrap as ttkb
 from ttkbootstrap.constants import *
 from ttkbootstrap import dialogs
 
+
 class FileChangeHandler(FileSystemEventHandler):
     def __init__(self, app, filepath):
         self.app = app

@@ -6,6 +6,8 @@ def load_file(path, app):
     """
     Deprecated: Use app.load_file() instead.
     This function is kept for backward compatibility only.
+
+    :raises RuntimeError: If the file does not load correctly.
     """
     
     try:
@@ -35,6 +37,8 @@ def drop_file(event, app):
 
     :param event event: The drop file event. Child event.data can be of multiple formats (as above).
     :param MarkdownReader app: The MarkdownReader application instance.
+
+    :raises RuntimeError: If the dropped file cannot be processed correctly.
     """
 
     try:

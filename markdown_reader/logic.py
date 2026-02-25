@@ -18,6 +18,10 @@ def update_preview(app):
     :param MarkdownReader app: The MarkdownReader application instance.
 
     :return: A boolean set to true if the preview is updated successfully, and false if not.
+
+    :raises ConversionError: If there is an error converting to Markdown2.
+    :raises RuntimeError: If there is an error updating the preview.
+    :raises RuntimeError: If the preview fails to generate.
     """
 
     if not app.editors:
@@ -316,6 +320,8 @@ def open_preview_in_browser(preview_file, app):
 
     :param string preview_file: The file path for the preview of the Markdown file.
     :param MarkdownReader app: The MarkdownReader application instance.
+
+    :raises RuntimeError: If the preview fails to open.
     """
 
     if update_preview(app):
@@ -357,6 +363,9 @@ def export_to_html(app, output_path):
     :param string output_path: The path where the HTML file should be saved.
     
     :return: A boolean value set to true if the file is successfully exported and false if not.
+
+    :raises RuntimeError: If the image paths cannot be processed.
+    :raises RuntimeError: If the HTML could not be exported.
     """
 
     if not app.editors:
@@ -556,6 +565,8 @@ def convert_html_to_markdown(html_content):
     :param string html_content: The HTML code to be converted.
     
     :return: A string containing Markdown code representing the converted HTML.
+
+    :raises ConversionError: If the HTML could not be converted to Markdown.
     """
 
     try:
@@ -594,6 +605,9 @@ def convert_pdf_to_markdown(pdf_path):
     :param string pdf_path: The file path for the PDF file.
     
     :return: A string containing Markdown code representing the converted PDF file.
+
+    :raises ImportError: If the pypdf library is not installed.
+    :raises ConversionError: If the PDF cannot be converted to Markdown.
     """
 
     try:
@@ -633,6 +647,8 @@ def export_to_docx(app, output_path):
     :param string output_path: The path where the .docx file should be saved.
     
     :return: A boolean set to true if the Markdown is successfully converted, and false otherwise.
+
+    :raises RuntimeError: If the document could not be exported to Word.
     """
 
     if not app.editors:
@@ -786,6 +802,9 @@ def export_to_pdf(app, output_path):
     :param string output_path: The path where the PDF file should be saved (used as suggestion).
     
     :return: A boolean set to true if successfully exported and false otherwise.
+
+    :raises RuntimeError: If the image paths could not be processed.
+    :raises RuntimeError: If the document could not be exported to PDF.
     """
 
     if not app.editors:
@@ -1079,11 +1098,6 @@ def export_to_pdf(app, output_path):
 
         return True
 
-    except Exception as e:
-        messagebox.showerror("Error", f"Failed to export PDF: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
     except Exception as e:
         messagebox.showerror("Error", f"Failed to export PDF: {e}")
         import traceback
