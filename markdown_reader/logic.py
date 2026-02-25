@@ -317,7 +317,7 @@ def open_preview_in_browser(preview_file, app):
     :param preview_file: (string) The file path for the preview of the Markdown file.
     :param app: (MarkdownReader) The MarkdownReader application instance.
     """
-    
+
     if update_preview(app):
         try:
             webbrowser.open(f"file://{os.path.abspath(preview_file)}", new=0)
@@ -328,7 +328,16 @@ def open_preview_in_browser(preview_file, app):
 
 
 def fix_image_paths(markdown_text, base_path):
-    def repl(m):
+    """
+    Takes Markdown code containing images and fixes the file paths of the images.
+
+    :param markdown_text: (string) The Markdown file containing some images. 
+    :param base_path: (string) The file path for the base directory of the images.
+
+    :return: (string) Returns the corrected Markdown file with updated image file paths.
+    """
+    
+    def repl(m): # Callable used to replace the regex pattern with a new one. 
         alt = m.group(1)
         src = m.group(2)
         if src.startswith(('http://', 'https://', 'file://', '/')):
