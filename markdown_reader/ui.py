@@ -127,35 +127,36 @@ class MarkdownReader:
         # Font size
         self.font_size_var = tk.IntVar(value=14)
         button_width = 3
+        uniform_padding = (5, 4)
         # entry config
         style.configure('info.TEntry')
-        ttkb.Button(toolbar, text="-", bootstyle=(DANGER, OUTLINE), width=button_width,padding=(5, 4), command=lambda: self.change_font_size(-1)).pack(side=tk.LEFT, padx = 5)
+        ttkb.Button(toolbar, text="-", bootstyle=(DANGER, OUTLINE), width=button_width,padding=uniform_padding, command=lambda: self.change_font_size(-1)).pack(side=tk.LEFT, padx = 5)
         ttkb.Entry(toolbar, textvariable=self.font_size_var, width=3, style='info.TEntry', justify='center').pack(side=tk.LEFT)
-        ttkb.Button(toolbar, text="+", bootstyle=(SUCCESS, OUTLINE), width=button_width,padding=(5, 4), command=lambda: self.change_font_size(1)).pack(side=tk.LEFT, padx=5)
+        ttkb.Button(toolbar, text="+", bootstyle=(SUCCESS, OUTLINE), width=button_width,padding=uniform_padding, command=lambda: self.change_font_size(1)).pack(side=tk.LEFT, padx=5)
 
         # font configuration
         
         # toggle bold
-        style.configure('bold.info.TButton', font=("Arial", 10, "bold"), padding=(2, 3, 2, 3))
+        style.configure('bold.info.TButton', font=("Arial", 9, "bold"), padding=uniform_padding)
         # toggle italic
-        style.configure('italic.info.TButton', font=("Arial", 10, "italic"), padding=(2, 3, 2, 3))
+        style.configure('italic.info.TButton', font=("Arial", 9, "italic"), padding=uniform_padding)
         # toggle underline
-        style.configure('underline.info.TButton', font=("Arial", 10, "underline"), padding=(2, 3, 2, 3))
+        style.configure('underline.info.TButton', font=("Arial", 9, "underline"), padding=uniform_padding)
         # insert table
-        style.configure('insert.info.TButton', font=("Arial", 20), padding=(2, -5, 2, -5))
+        style.configure('insert.info.TButton', font=("Arial", 9), padding=uniform_padding)
         # choose fg color
-        style.configure('fg.info.TButton', padding=(5, 3, 5 , 3))
+        style.configure('fg.info.TButton', font=("Arial", 9), padding=uniform_padding)
         # highlight
-        style.configure('bg.info.TButton', font=("Arial", 10), padding=(9, 2, 9, 2))
+        style.configure('bg.info.TButton', font=("Arial", 9), padding=uniform_padding)
 
         ttkb.Button(toolbar, text="B", style='bold.info.TButton', width=button_width, command=self.toggle_bold).pack(side=tk.LEFT, padx=5)
         ttkb.Button(toolbar, text="I", style='italic.info.TButton', width=button_width, command=self.toggle_italic).pack(side=tk.LEFT, padx=5)
         ttkb.Button(toolbar, text="U", style='underline.info.TButton', width=button_width, command=self.toggle_underline).pack(side=tk.LEFT, padx=5)
-        ttkb.Button(toolbar, text="⊞", style='insert.info.TButton', command=self.insert_table).pack(side=tk.LEFT, padx=5)
+        ttkb.Button(toolbar, text="⊞", style='insert.info.TButton',width=button_width, command=self.insert_table).pack(side=tk.LEFT, padx=5)
         # Text color
-        ttkb.Button(toolbar, text="A", style='fg.info.TButton', command=self.choose_fg_color).pack(side=tk.LEFT, padx=5)
+        ttkb.Button(toolbar, text="A", style='fg.info.TButton', width=button_width, command=self.choose_fg_color).pack(side=tk.LEFT, padx=5)
         # Highlight color
-        ttkb.Button(toolbar, text="\u0332", style='bg.info.TButton', command=self.choose_bg_color).pack(side=tk.LEFT, padx=5)
+        ttkb.Button(toolbar, text="\u0332", style='bg.info.TButton', width=button_width, command=self.choose_bg_color).pack(side=tk.LEFT, padx=5)
         toolbar.pack(fill=tk.X)
 
         self.notebook = ttk.Notebook(self.root)
