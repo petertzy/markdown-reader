@@ -1092,7 +1092,14 @@ def export_to_pdf(app, output_path):
 
 
 def process_inline_formatting(text):
-    """Remove markdown formatting markers for plain text extraction"""
+    """
+    Removes Markdown formatting markers for plain text extraction.
+
+    :param string text: The text to be processed.
+
+    :return: A string containing the inputted text without the inline formatting.
+    """
+
     # Remove bold
     text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
     text = re.sub(r'__(.+?)__', r'\1', text)
