@@ -23,17 +23,42 @@ from ttkbootstrap import dialogs
 
 
 class FileChangeHandler(FileSystemEventHandler):
+    """
+    The class that handles changes to files.
+
+    :param FileSystemEventHandler: The file system event handler from the watchdog.events library.
+    """
+    
     def __init__(self, app, filepath):
+        """
+        :param MarkdownReader app: The instance of the MarkdownReader application.
+        :param string filepath: The file path for the file to be monitored.
+        """
+
         self.app = app
         self.filepath = os.path.abspath(filepath)
 
     def on_modified(self, event):
+        """
+        When the file is modified, reload the file after 100ms.
+
+        :param event event: The file modification event. 
+        """
+        
         if os.path.abspath(event.src_path) == self.filepath:
             self.app.root.after(100, lambda: self.app.load_file(self.filepath))
 
 
 class MarkdownReader:
+    """
+    The class that creates the instance of the Markdown reader application.
+    """
+    
     def __init__(self, root):
+        """
+        :param TkinterDnD.Tk root: The window that the application uses as a display.
+        """
+        
         self.root = root
         self.root.title("Markdown Reader")
         self.root.geometry("1280x795")
@@ -60,7 +85,12 @@ class MarkdownReader:
         self.create_widgets()
         self.bind_events()
 
+
     def create_widgets(self):
+        """
+        Sets up the various menus, toolbar, and fonts.
+        """
+        
         style = ttkb.Style()
         menubar = tk.Menu(self.root)
         filemenu = tk.Menu(menubar, tearoff=0)
@@ -178,7 +208,14 @@ class MarkdownReader:
 
         self.new_file()
 
+
     def bind_events(self):
+        """
+        Sets up drag-and-drop support alongside key binds for shortcuts.
+
+        :raises RuntimeError: If the drag-and-drop binding fails.
+        """
+        
         try:
             # Register drag-and-drop support
             self.root.drop_target_register('DND_Files')
@@ -196,8 +233,16 @@ class MarkdownReader:
         self.root.bind_all("<Command-z>", lambda event: self.undo_action())
         self.root.bind_all("<Command-Shift-Z>", lambda event: self.redo_action())
 
+
     def _on_drop_files(self, event):
-        """Handle file drop events"""
+        """
+        Handles file drop events.
+
+        :param event event: The file drop event to be processed.
+
+        :raises RuntimeError: If the error handling drop fails.
+        """
+
         print(f"🔍 Drop event triggered")
         print(f"   Event data type: {type(event.data)}")
         print(f"   Event data: {event.data}")
@@ -209,7 +254,12 @@ class MarkdownReader:
             import traceback
             traceback.print_exc()
 
+
     def new_file(self):
+        """
+        Handles opening a new file and deals with relevant IME files.
+        """
+        
         frame = tk.Frame(self.notebook)
         base_font = (self.current_font_family, self.current_font_size)
         text_area = self.get_current_text_area()
@@ -294,9 +344,14 @@ class MarkdownReader:
         self.file_paths.append(None)
         
         # Add custom tab with close button
-        self.add_close_button_to_tab(tab_index, "Untitled")
+        self.add_label_and_close_button_to_tab(tab_index, "Untitled")
+
 
     def open_file(self):
+        """
+        Handles opening a file and sets up its file handler.
+        """
+
         file_path = filedialog.askopenfilename(filetypes=[
             ("Markdown files", "*.md *.MD"),
             ("HTML files", "*.html *.HTML *.htm *.HTM"),
@@ -318,7 +373,16 @@ class MarkdownReader:
             self.load_file(abs_path)
             self.start_watching(abs_path)
 
+
     def load_file(self, path):
+        """
+        Loads the file from the given path and converts it to Markdown.
+
+        :param string path: The path for the file to load.
+
+        :raises RuntimeError: If the file fails to load.
+        """
+        
         abs_path = os.path.abspath(path)
         idx = self.notebook.index(self.notebook.select())
         text_area = self.get_current_text_area()
@@ -352,14 +416,14 @@ class MarkdownReader:
                 # Update tab name to show it's converted
                 base_name = os.path.splitext(os.path.basename(abs_path))[0]
                 tab_text = f"{base_name}.md (converted)"
-                self.add_close_button_to_tab(idx, tab_text)
+                self.add_label_and_close_button_to_tab(idx, tab_text)
                 # Don't set file_paths to HTML/PDF file - treat as new unsaved file
                 self.file_paths[idx] = None
                 self.current_file_path = None
             else:
                 self.file_paths[idx] = abs_path
                 tab_text = os.path.basename(abs_path)
-                self.add_close_button_to_tab(idx, tab_text)
+                self.add_label_and_close_button_to_tab(idx, tab_text)
                 self.current_file_path = abs_path
         except Exception as e:
             dialogs.Messagebox.show_error("Error", f"Failed to load file: {e}")
@@ -376,7 +440,12 @@ class MarkdownReader:
                 # Mark as saved since we just loaded from file
                 self.root.after(100, lambda: self.mark_tab_saved(idx))
 
+
     def close_current_tab(self):
+        """
+        Closes the current tab and lets the notebook forget it.
+        """
+
         if not self.editors:
             return
         idx = self.notebook.index(self.notebook.select())
@@ -392,7 +461,12 @@ class MarkdownReader:
         del self.editors[idx]
         del self.file_paths[idx]
 
+
     def close_all_tabs(self):
+        """
+        Closes all tabs and empties the notebook.
+        """
+
         while self.editors:
             self.notebook.forget(0)
             del self.editors[0]
@@ -400,8 +474,18 @@ class MarkdownReader:
         # Clear modified tabs set
         self.modified_tabs.clear()
 
+
     def on_tab_click(self, event):
-        """Handle click events on notebook tabs to detect close button clicks"""
+        """
+        Handles click events on notebook tabs to detect close button clicks.
+
+        :param event event: The click event to be handled.
+
+        :return: The string "break" if a tab was closed, else does not return anything.
+
+        :raises RuntimeError: If there is an unspecified error in the function.
+        """
+
         try:
             # Identify which tab was clicked
             element = self.notebook.tk.call(self.notebook._w, "identify", "tab", event.x, event.y)
@@ -442,8 +526,16 @@ class MarkdownReader:
         except Exception as e:
             print(f"Error in on_tab_click: {e}")
 
+
     def show_tab_context_menu(self, event):
-        """Show context menu when right-clicking on a tab"""
+        """
+        Shows the context menu when right-clicking on a tab.
+
+        :param event event: The click event to be handled.
+
+        :raises RuntimeError: If there is an error when attempting to display the context menu.
+        """
+        
         try:
             # Identify which tab was clicked
             clicked_tab = self.notebook.tk.call(self.notebook._w, "identify", "tab", event.x, event.y)
@@ -455,13 +547,24 @@ class MarkdownReader:
         except Exception as e:
             print(f"Error showing context menu: {e}")
     
+
     def close_tab_from_context_menu(self):
-        """Close the tab that was right-clicked"""
+        """
+        Close the tab that was right-clicked.
+        """
+
         if hasattr(self, 'right_clicked_tab_index') and self.right_clicked_tab_index < len(self.editors):
             self.close_tab_by_index(self.right_clicked_tab_index)
 
-    def add_close_button_to_tab(self, tab_index, tab_text):
-        """Add a custom tab label with a close button"""
+
+    def add_label_and_close_button_to_tab(self, tab_index, tab_text):
+        """
+        Add a custom tab label with a close button.
+
+        :param int tab_index: The index of the tab to add the label and close button to.
+        :param string tab_text: The text for the tab label.
+        """
+
         # Create a frame to hold the label and close button
         tab_frame = tk.Frame(self.notebook, bg='#f0f0f0')
         
@@ -508,6 +611,7 @@ class MarkdownReader:
         
         # Update the tab text directly
         self.notebook.tab(tab_index, text=f"{tab_text}  ×")
+    
     
     def close_tab_by_index(self, idx):
         """Close a specific tab by index"""
