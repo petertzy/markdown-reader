@@ -1,11 +1,13 @@
 import os
 from tkinter import messagebox
 
+
 def load_file(path, app):
     """
     Deprecated: Use app.load_file() instead.
     This function is kept for backward compatibility only.
     """
+    
     try:
         with open(path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -22,15 +24,19 @@ def load_file(path, app):
 
 def drop_file(event, app):
     """
-    Handle dropped files (Markdown or HTML).
-    HTML files are automatically converted to Markdown.
+    Handles dropped files (Markdown or HTML).
+    - HTML files are automatically converted to Markdown.
     
     Supports multiple formats of event.data:
-    - Single file: "path/to/file.md"
-    - Quoted: "{/path/to/file.md}"
-    - Multiple files (space-separated)
-    - macOS format
+    - Single file: "path/to/file.md".
+    - Quoted: "{/path/to/file.md}".
+    - Multiple files (space-separated).
+    - macOS format.
+
+    :param event event: The drop file event. Child event.data can be of multiple formats (as above).
+    :param MarkdownReader app: The MarkdownReader application instance.
     """
+
     try:
         # Parse the event data - handle various formats
         raw_data = str(event.data)
