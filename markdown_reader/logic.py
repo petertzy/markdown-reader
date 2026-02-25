@@ -1114,7 +1114,13 @@ def process_inline_formatting(text):
 
 
 def apply_inline_formatting(paragraph, text):
-    """Apply bold, italic, and other inline formatting to Word paragraph"""
+    """
+    Applies bold, italic, and other inline formatting to a Word paragraph.
+
+    :param paragraph: The paragraph of text with Word formatting.
+    :param text: The text with no inline formatting.
+    """
+
     # Clear existing runs
     paragraph.clear()
     
