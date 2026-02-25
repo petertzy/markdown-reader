@@ -595,7 +595,7 @@ def convert_pdf_to_markdown(pdf_path):
     
     :return: (string) Markdown code representing the converted PDF file.
     """
-    
+
     try:
         from pypdf import PdfReader
         
@@ -627,15 +627,14 @@ def convert_pdf_to_markdown(pdf_path):
 
 def export_to_docx(app, output_path):
     """
-    Export the current markdown document to a Word (.docx) file.
+    Exports the current Markdown document to a Word (.docx) file.
     
-    Args:
-        app: The MarkdownReader application instance
-        output_path: The path where the .docx file should be saved
+    :param app: (MarkdownReader) The MarkdownReader application instance.
+    :param output_path: (string) The path where the .docx file should be saved.
     
-    Returns:
-        bool: True if successful, False otherwise
+    :return: (bool) Returns true if the Markdown is successfully converted and false otherwise.
     """
+    
     if not app.editors:
         messagebox.showinfo("Info", "No document to export.")
         return False
