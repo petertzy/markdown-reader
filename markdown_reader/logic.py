@@ -11,6 +11,77 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 import traceback
 
 
+def _protect_math(markdown_text):
+    """
+    Protects math expressions from being escaped by markdown2.
+    """
+    replacements = {}
+    counter = [0]
+
+    def make_placeholder(content, display=False):
+        key = f"MATHPLACEHOLDER{counter[0]}X"
+        counter[0] += 1
+        if display:
+            replacements[key] = f'<div class="math-display">\\[{content}\\]</div>'
+        else:
+            replacements[key] = f'<span class="math-inline">\\({content}\\)</span>'
+        return key
+
+    def replace_block(m):
+        return make_placeholder(m.group(1), display=True)
+
+    def replace_inline(m):
+        return make_placeholder(m.group(1), display=False)
+
+    text = re.sub(r'\$\$([\s\S]+?)\$\$', replace_block, markdown_text)
+    text = re.sub(r'(?<!\$)\$(?!\$)([^\$\n]+?)(?<!\$)\$(?!\$)', replace_inline, text)
+
+    return text, replacements
+
+
+def _restore_math(html_content, replacements):
+    """
+    Restores math placeholders back to MathJax-compatible HTML.
+    """
+    for key, value in replacements.items():
+        html_content = html_content.replace(key, value)
+        html_content = html_content.replace(f'<p>{key}</p>', value)
+    return html_content
+
+
+def _get_math_styles():
+    return """
+        .math-display {
+            display: block;
+            text-align: center;
+            margin: 1em 0;
+            overflow-x: auto;
+        }
+        .math-inline {
+            display: inline;
+        }
+    """
+
+
+def _get_mathjax_script():
+    return """
+        <script>
+            window.MathJax = {
+                tex: {
+                    inlineMath: [['\\\\(', '\\\\)']],
+                    displayMath: [['\\\\[', '\\\\]']],
+                    processEscapes: true,
+                    processEnvironments: true
+                },
+                options: {
+                    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+                }
+            };
+        </script>
+        <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+    """
+
+
 def update_preview(app):
     """
     Updates the preview of the Markdown file when the file is changed.
@@ -32,6 +103,7 @@ def update_preview(app):
             markdown_text = text_area.get("1.0", "end-1c")
 
         # Attempt to fix image paths when a file is open
+
         if hasattr(app, 'file_paths') and app.file_paths:
             try:
                 idx = app.notebook.index(app.notebook.select())
@@ -39,10 +111,10 @@ def update_preview(app):
                 if current_path is not None:
                     base_dir = os.path.dirname(current_path)
                     markdown_text = fix_image_paths(markdown_text, base_dir)
-            except Exception:
+            except Exception:                
                 # Non-fatal: continue without fixed image paths
                 pass
-        # If the editor appears empty in the packaged app, try to read
+# If the editor appears empty in the packaged app, try to read
         # the file contents directly from disk (handles race conditions
         # where the GUI editor hasn't populated yet).
         try:
@@ -56,20 +128,30 @@ def update_preview(app):
         except Exception:
             pass
         else:
-            # Helpful debug output when running in development
+        # Helpful debug output when running in development
+
             try:
                 print("No file_paths attribute or it's empty; skipping fix_image_paths")
             except Exception:
                 pass
 
-        # Convert markdown to HTML. Capture errors from the converter separately
-        # FIX APPLIED: Added "break-on-newline" to extras to preserve line breaks
         try:
-            html_content = markdown2.markdown(markdown_text, extras=["fenced-code-blocks", "code-friendly", "tables", "break-on-newline"])
+            # Protect math BEFORE markdown2 processes it
+            protected_text, math_replacements = _protect_math(markdown_text)
+
+            html_content = markdown2.markdown(
+                protected_text,
+                extras=["fenced-code-blocks", "code-friendly", "tables", "break-on-newline"]
+            )
+
+            # Restore math expressions AFTER markdown2
+            html_content = _restore_math(html_content, math_replacements)
+
         except Exception as e:
             tb = traceback.format_exc()
             print(f"markdown2 conversion error: {e}\n{tb}")
-            # Produce an HTML page containing the full traceback for easier debugging
+                        # Produce an HTML page containing the full traceback for easier debugging
+
             html_content = f"<h2>Error generating preview</h2><pre>{html_escape(tb)}</pre>"
     except Exception as e:
         tb = traceback.format_exc()
@@ -77,6 +159,7 @@ def update_preview(app):
         html_content = f"<h2>Unexpected error generating preview</h2><pre>{html_escape(tb)}</pre>"
 
     # Get style from app (with fallback)
+
     font_family = getattr(app, 'current_font_family', 'Consolas')
     font_size = getattr(app, 'current_font_size', 14)
     fg_color = getattr(app, 'current_fg_color', '#000000')
@@ -85,9 +168,7 @@ def update_preview(app):
         bg_color = '#1e1e1e'
         fg_color = '#dcdcdc'
 
-    # For web, use a generic fallback for common fonts
     web_font_family = font_family
-    # Add common web-safe fallbacks
     if font_family.lower() in ["arial", "helvetica", "verdana", "tahoma", "trebuchet ms"]:
         web_font_family += ", sans-serif"
     elif font_family.lower() in ["times new roman", "georgia", "garamond", "serif"]:
@@ -97,7 +178,6 @@ def update_preview(app):
     else:
         web_font_family += ", sans-serif"
 
-    # Heading sizes relative to base font size
     h1 = font_size + 18
     h2 = font_size + 12
     h3 = font_size + 8
@@ -107,15 +187,12 @@ def update_preview(app):
     base = font_size + 2
 
     try:
-        # Add a small debug comment with a snippet of the markdown text so
-        # packaged runs can reveal what content was actually provided.
         debug_snippet = ''
         try:
             debug_snippet = markdown_text[:1000].replace('--', '- -')
         except Exception:
             debug_snippet = '<unable to read markdown snippet>'
 
-        # Also include current file path for debugging when available
         debug_path = ''
         try:
             debug_path = getattr(app, 'file_paths', [None])[idx] if hasattr(app, 'file_paths') else ''
@@ -130,6 +207,7 @@ def update_preview(app):
             <head>
                 <meta charset="UTF-8">
                 <style>
+                    {_get_math_styles()}
                     .copy-button:hover {{
                         background-color: #a5a8b6;
                     }}
@@ -290,15 +368,8 @@ def update_preview(app):
                         }});
                     }}
                     document.addEventListener('DOMContentLoaded', addCopyButtonToAllCodeBlocks);
-                    window.MathJax = {{
-                        tex: {{
-                            inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
-                            displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']]
-                        }},
-                        svg: {{ fontCache: 'global' }}
-                    }};
                 </script>
-                <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+                {_get_mathjax_script()}
             </head>
             <body>
                 {html_content}
@@ -385,7 +456,7 @@ def export_to_html(app, output_path):
                                 try:
                                     rel_path = os.path.relpath(file_path, base_dir)
                                     return f'![{alt}]({rel_path})'
-                                except:
+                                except (ValueError, OSError):
                                     return m.group(0)
                             return m.group(0)
                         return re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', repl, text)
@@ -458,7 +529,7 @@ def export_to_html(app, output_path):
         b, strong {{ font-weight: bold; }}
         i, em {{ font-style: italic; }}
         u {{ text-decoration: underline; }}
-        pre code {{
+        pre code{{
             background-color: #f4f4f4;
             color: #000000;
             font-family: {web_font_family};
@@ -1109,7 +1180,7 @@ def process_inline_formatting(text):
     # Remove inline code
     text = re.sub(r'`(.+?)`', r'\1', text)
     # Remove links but keep text
-    text = re.sub(r'\[(.+?)\]\(.+?\)', r'\1', text)
+    text = re.sub(r'\[(.+?)\]\((.+?)\)', r'\1', text)
     return text
 
 
