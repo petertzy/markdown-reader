@@ -634,7 +634,7 @@ def export_to_docx(app, output_path):
     
     :return: (bool) Returns true if the Markdown is successfully converted and false otherwise.
     """
-    
+
     if not app.editors:
         messagebox.showinfo("Info", "No document to export.")
         return False
@@ -777,18 +777,17 @@ def export_to_docx(app, output_path):
 
 def export_to_pdf(app, output_path):
     """
-    Export the current markdown document to a PDF file.
-    Since PDF generation libraries have complex dependencies,
-    this creates a print-friendly HTML file and opens it in the browser
-    for the user to print to PDF using the browser's built-in functionality.
+    Exports the current Markdown document to a PDF file.
+    - Since PDF generation libraries have complex dependencies,
+      this creates a print-friendly HTML file and opens it in the browser
+      for the user to print to PDF using the browser's built-in functionality.
     
-    Args:
-        app: The MarkdownReader application instance
-        output_path: The path where the PDF file should be saved (used as suggestion)
+    :param app: (MarkdownReader) The MarkdownReader application instance.
+    :param output_path: (string) The path where the PDF file should be saved (used as suggestion).
     
-    Returns:
-        bool: True if successful, False otherwise
+    return: (boolean) Returns true if successfully exported and false otherwise.
     """
+    
     if not app.editors:
         messagebox.showinfo("Info", "No document to export.")
         return False
