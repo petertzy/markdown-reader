@@ -15,9 +15,9 @@ def update_preview(app):
     """
     Updates the preview of the Markdown file when the file is changed.
 
-    :param app: (MarkdownReader) The MarkdownReader application instance.
+    :param MarkdownReader app: The MarkdownReader application instance.
 
-    :return: (Boolean) Returns true if the preview is updated successfully, and false if not.
+    :return: A boolean set to true if the preview is updated successfully, and false if not.
     """
 
     if not app.editors:
@@ -314,8 +314,8 @@ def open_preview_in_browser(preview_file, app):
     """
     Opens a preview of the Markdown file into the browser. 
 
-    :param preview_file: (string) The file path for the preview of the Markdown file.
-    :param app: (MarkdownReader) The MarkdownReader application instance.
+    :param string preview_file: The file path for the preview of the Markdown file.
+    :param MarkdownReader app: The MarkdownReader application instance.
     """
 
     if update_preview(app):
@@ -331,10 +331,10 @@ def fix_image_paths(markdown_text, base_path):
     """
     Takes Markdown code containing images and fixes the file paths of the images.
 
-    :param markdown_text: (string) The Markdown file containing some images. 
-    :param base_path: (string) The file path for the base directory of the images.
+    :param string markdown_text: The Markdown file containing some images. 
+    :param string base_path: The file path for the base directory of the images.
 
-    :return: (string) Returns the corrected Markdown file with updated image file paths.
+    :return: A string containing the corrected Markdown file with updated image file paths.
     """
     
     def repl(m): # Callable used to replace the regex pattern with a new one. 
@@ -353,10 +353,10 @@ def export_to_html(app, output_path):
     """
     Exports the current markdown document to an HTML file.
     
-    :param app: (MarkdownReader) The MarkdownReader application instance.
-    :param output_path: (string) The path where the HTML file should be saved.
+    :param MarkdownReader app: The MarkdownReader application instance.
+    :param string output_path: The path where the HTML file should be saved.
     
-    :return: Boolean value, true if successful, false otherwise.
+    :return: A boolean value set to true if the file is successfully exported and false if not.
     """
 
     if not app.editors:
@@ -553,9 +553,9 @@ def convert_html_to_markdown(html_content):
     """
     Converts the HTML content of a file to Markdown format.
     
-    :param html_content: (string) The HTML code to be converted.
+    :param string html_content: The HTML code to be converted.
     
-    :return: (string) Markdown code representing the converted HTML.
+    :return: A string containing Markdown code representing the converted HTML.
     """
 
     try:
@@ -591,9 +591,9 @@ def convert_pdf_to_markdown(pdf_path):
     """
     Converts a PDF file's content to Markdown format.
     
-    :param pdf_path: (string) The file path for the PDF file.
+    :param string pdf_path: The file path for the PDF file.
     
-    :return: (string) Markdown code representing the converted PDF file.
+    :return: A string containing Markdown code representing the converted PDF file.
     """
 
     try:
@@ -629,10 +629,10 @@ def export_to_docx(app, output_path):
     """
     Exports the current Markdown document to a Word (.docx) file.
     
-    :param app: (MarkdownReader) The MarkdownReader application instance.
-    :param output_path: (string) The path where the .docx file should be saved.
+    :param MarkdownReader app: The MarkdownReader application instance.
+    :param string output_path: The path where the .docx file should be saved.
     
-    :return: (bool) Returns true if the Markdown is successfully converted and false otherwise.
+    :return: A boolean set to true if the Markdown is successfully converted, and false otherwise.
     """
 
     if not app.editors:
@@ -782,12 +782,12 @@ def export_to_pdf(app, output_path):
       this creates a print-friendly HTML file and opens it in the browser
       for the user to print to PDF using the browser's built-in functionality.
     
-    :param app: (MarkdownReader) The MarkdownReader application instance.
-    :param output_path: (string) The path where the PDF file should be saved (used as suggestion).
+    :param MarkdownReader app: The MarkdownReader application instance.
+    :param string output_path: The path where the PDF file should be saved (used as suggestion).
     
-    return: (boolean) Returns true if successfully exported and false otherwise.
+    :return: A boolean set to true if successfully exported and false otherwise.
     """
-    
+
     if not app.editors:
         messagebox.showinfo("Info", "No document to export.")
         return False
