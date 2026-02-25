@@ -10,7 +10,16 @@ from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import traceback
 
+
 def update_preview(app):
+    """
+    Updates the preview of the Markdown file when the file is changed.
+
+    :param app: (MarkdownReader) The MarkdownReader application instance.
+
+    :return: (Boolean) Returns true if the preview is updated successfully, and false if not.
+    """
+
     if not app.editors:
         return False
     # Build HTML content from current editor text, with robust error reporting.
@@ -300,6 +309,7 @@ def update_preview(app):
     except Exception as e:
         messagebox.showerror("Error", f"Failed to generate preview: {e}")
 
+
 def open_preview_in_browser(preview_file, app):
     if update_preview(app):
         try:
@@ -308,6 +318,7 @@ def open_preview_in_browser(preview_file, app):
             messagebox.showerror("Error", f"Failed to open preview: {e}")
     else:
         messagebox.showinfo("Info", "No document to preview.")
+
 
 def fix_image_paths(markdown_text, base_path):
     def repl(m):
@@ -324,14 +335,12 @@ def fix_image_paths(markdown_text, base_path):
 
 def export_to_html(app, output_path):
     """
-    Export the current markdown document to an HTML file.
+    Exports the current markdown document to an HTML file.
     
-    Args:
-        app: The MarkdownReader application instance
-        output_path: The path where the HTML file should be saved
+    :param app: (MarkdownReader) The MarkdownReader application instance.
+    :param output_path: (string) The path where the HTML file should be saved.
     
-    Returns:
-        bool: True if successful, False otherwise
+    :return: Boolean value, true if successful, false otherwise.
     """
     if not app.editors:
         messagebox.showinfo("Info", "No document to export.")
