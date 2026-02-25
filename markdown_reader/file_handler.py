@@ -19,6 +19,7 @@ def load_file(path, app):
     except Exception as e:
         messagebox.showerror("Error", f"Failed to load file: {e}")
 
+
 def drop_file(event, app):
     """
     Handle dropped files (Markdown or HTML).
@@ -95,5 +96,3 @@ def drop_file(event, app):
         import traceback
         traceback.print_exc()
         messagebox.showerror("Error", f"Failed to process dropped file: {e}")
-
-

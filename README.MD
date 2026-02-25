@@ -1,15 +1,15 @@
 # Markdown Reader
 
-A clean and intuitive Markdown reader with real-time preview support, dark mode toggle, and drag-and-drop file opening. Compatible with macOS and Windows desktop environments.
+Markdown Reader is a clean and intuitive Markdown reader with real-time preview support, dark mode toggle, and drag-and-drop file opening. It is compatible with macOS and Windows desktop environments and built with pure Python and Tkinter.
 
 ## Features
 
-* Real-time preview of Markdown rendered to HTML
-* Dark mode toggle
-* Drag-and-drop support for `.md`, `.html`, and `.pdf` files with automatic conversion to Markdown (requires `tkinterdnd2`)
-* Built with pure Python and Tkinter — cross-platform
-* Can be bundled as a macOS app using `py2app`
-* Opens preview automatically and avoids multiple browser tabs for a smoother experience
+* Real-time preview of Markdown rendered to HTML.
+* Dark mode toggle.
+* Drag-and-drop support for `.md`, `.html`, and `.pdf` files with automatic conversion to Markdown (requires `tkinterdnd2`).
+* Built with pure Python and Tkinter — cross-platform.
+* Can be bundled as a macOS app using `py2app`.
+* Opens preview automatically and avoids multiple browser tabs for a smoother experience.
 
 ---
 
@@ -27,14 +27,14 @@ A clean and intuitive Markdown reader with real-time preview support, dark mode 
 
 ## Installation & Usage
 
-### 1. Clone the repository
+#### 1. Clone the repository
 
 ```bash
 git clone https://github.com/petertzy/markdown-reader.git
 cd markdown-reader
 ```
 
-### 2. Create a virtual environment (recommended)
+#### 2. Create a virtual environment (recommended)
 
 ```bash
 python -m venv venv
@@ -42,7 +42,7 @@ source venv/bin/activate  # macOS/Linux
 # .\venv\Scripts\activate  # Windows (cmd/powershell)
 ```
 
-### 3. Install dependencies
+#### 3. Install dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -60,10 +60,10 @@ python app.py
 
 ### How to Use
 
-* Open File: Choose `.md`, `.html`, or `.pdf` file from the "File → Open File" menu
-* Drag-and-Drop: Drag `.md`, `.html`, or `.pdf` files directly into the app window (HTML and PDF files are automatically converted to Markdown)
-* Dark Mode: Toggle via “View → Toggle Dark Mode”
-* Preview: Automatically opens in your web browser, only one tab is opened per session
+* Open File: Choose `.md`, `.html`, or `.pdf` file from the "File → Open File" menu.
+* Drag-and-Drop: Drag `.md`, `.html`, or `.pdf` files directly into the app window (HTML and PDF files are automatically converted to Markdown).
+* Dark Mode: Toggle via “View → Toggle Dark Mode”.
+* Preview: Automatically opens in your web browser, only one tab is opened per session.
 
 ---
 

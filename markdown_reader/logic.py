@@ -10,7 +10,16 @@ from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import traceback
 
+
 def update_preview(app):
+    """
+    Updates the preview of the Markdown file when the file is changed.
+
+    :param MarkdownReader app: The MarkdownReader application instance.
+
+    :return: A boolean set to true if the preview is updated successfully, and false if not.
+    """
+
     if not app.editors:
         return False
     # Build HTML content from current editor text, with robust error reporting.
@@ -300,7 +309,15 @@ def update_preview(app):
     except Exception as e:
         messagebox.showerror("Error", f"Failed to generate preview: {e}")
 
+
 def open_preview_in_browser(preview_file, app):
+    """
+    Opens a preview of the Markdown file into the browser. 
+
+    :param string preview_file: The file path for the preview of the Markdown file.
+    :param MarkdownReader app: The MarkdownReader application instance.
+    """
+
     if update_preview(app):
         try:
             webbrowser.open(f"file://{os.path.abspath(preview_file)}", new=0)
@@ -309,8 +326,18 @@ def open_preview_in_browser(preview_file, app):
     else:
         messagebox.showinfo("Info", "No document to preview.")
 
+
 def fix_image_paths(markdown_text, base_path):
-    def repl(m):
+    """
+    Takes Markdown code containing images and fixes the file paths of the images.
+
+    :param string markdown_text: The Markdown file containing some images. 
+    :param string base_path: The file path for the base directory of the images.
+
+    :return: A string containing the corrected Markdown file with updated image file paths.
+    """
+    
+    def repl(m): # Callable used to replace the regex pattern with a new one. 
         alt = m.group(1)
         src = m.group(2)
         if src.startswith(('http://', 'https://', 'file://', '/')):
@@ -324,15 +351,14 @@ def fix_image_paths(markdown_text, base_path):
 
 def export_to_html(app, output_path):
     """
-    Export the current markdown document to an HTML file.
+    Exports the current markdown document to an HTML file.
     
-    Args:
-        app: The MarkdownReader application instance
-        output_path: The path where the HTML file should be saved
+    :param MarkdownReader app: The MarkdownReader application instance.
+    :param string output_path: The path where the HTML file should be saved.
     
-    Returns:
-        bool: True if successful, False otherwise
+    :return: A boolean value set to true if the file is successfully exported and false if not.
     """
+
     if not app.editors:
         messagebox.showinfo("Info", "No document to export.")
         return False
@@ -525,14 +551,13 @@ def export_to_html(app, output_path):
 
 def convert_html_to_markdown(html_content):
     """
-    Convert HTML content to Markdown format.
+    Converts the HTML content of a file to Markdown format.
     
-    Args:
-        html_content: HTML string to convert
+    :param string html_content: The HTML code to be converted.
     
-    Returns:
-        str: Converted Markdown text
+    :return: A string containing Markdown code representing the converted HTML.
     """
+
     try:
         # Create html2text converter instance
         h = html2text.HTML2Text()
@@ -564,14 +589,13 @@ def convert_html_to_markdown(html_content):
 
 def convert_pdf_to_markdown(pdf_path):
     """
-    Convert PDF file content to Markdown format.
+    Converts a PDF file's content to Markdown format.
     
-    Args:
-        pdf_path: Path to the PDF file
+    :param string pdf_path: The file path for the PDF file.
     
-    Returns:
-        str: Converted Markdown text
+    :return: A string containing Markdown code representing the converted PDF file.
     """
+
     try:
         from pypdf import PdfReader
         
@@ -603,15 +627,14 @@ def convert_pdf_to_markdown(pdf_path):
 
 def export_to_docx(app, output_path):
     """
-    Export the current markdown document to a Word (.docx) file.
+    Exports the current Markdown document to a Word (.docx) file.
     
-    Args:
-        app: The MarkdownReader application instance
-        output_path: The path where the .docx file should be saved
+    :param MarkdownReader app: The MarkdownReader application instance.
+    :param string output_path: The path where the .docx file should be saved.
     
-    Returns:
-        bool: True if successful, False otherwise
+    :return: A boolean set to true if the Markdown is successfully converted, and false otherwise.
     """
+
     if not app.editors:
         messagebox.showinfo("Info", "No document to export.")
         return False
@@ -754,18 +777,17 @@ def export_to_docx(app, output_path):
 
 def export_to_pdf(app, output_path):
     """
-    Export the current markdown document to a PDF file.
-    Since PDF generation libraries have complex dependencies,
-    this creates a print-friendly HTML file and opens it in the browser
-    for the user to print to PDF using the browser's built-in functionality.
+    Exports the current Markdown document to a PDF file.
+    - Since PDF generation libraries have complex dependencies,
+      this creates a print-friendly HTML file and opens it in the browser
+      for the user to print to PDF using the browser's built-in functionality.
     
-    Args:
-        app: The MarkdownReader application instance
-        output_path: The path where the PDF file should be saved (used as suggestion)
+    :param MarkdownReader app: The MarkdownReader application instance.
+    :param string output_path: The path where the PDF file should be saved (used as suggestion).
     
-    Returns:
-        bool: True if successful, False otherwise
+    :return: A boolean set to true if successfully exported and false otherwise.
     """
+
     if not app.editors:
         messagebox.showinfo("Info", "No document to export.")
         return False
@@ -1070,7 +1092,14 @@ def export_to_pdf(app, output_path):
 
 
 def process_inline_formatting(text):
-    """Remove markdown formatting markers for plain text extraction"""
+    """
+    Removes Markdown formatting markers for plain text extraction.
+
+    :param string text: The text to be processed.
+
+    :return: A string containing the inputted text without the inline formatting.
+    """
+
     # Remove bold
     text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
     text = re.sub(r'__(.+?)__', r'\1', text)
@@ -1085,7 +1114,13 @@ def process_inline_formatting(text):
 
 
 def apply_inline_formatting(paragraph, text):
-    """Apply bold, italic, and other inline formatting to Word paragraph"""
+    """
+    Applies bold, italic, and other inline formatting to a Word paragraph.
+
+    :param paragraph: The paragraph of text with Word formatting.
+    :param text: The text with no inline formatting.
+    """
+
     # Clear existing runs
     paragraph.clear()
     
