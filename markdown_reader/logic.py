@@ -557,7 +557,7 @@ def convert_html_to_markdown(html_content):
     
     :return: (string) Markdown code representing the converted HTML.
     """
-    
+
     try:
         # Create html2text converter instance
         h = html2text.HTML2Text()
@@ -589,14 +589,13 @@ def convert_html_to_markdown(html_content):
 
 def convert_pdf_to_markdown(pdf_path):
     """
-    Convert PDF file content to Markdown format.
+    Converts a PDF file's content to Markdown format.
     
-    Args:
-        pdf_path: Path to the PDF file
+    :param pdf_path: (string) The file path for the PDF file.
     
-    Returns:
-        str: Converted Markdown text
+    :return: (string) Markdown code representing the converted PDF file.
     """
+    
     try:
         from pypdf import PdfReader
         
