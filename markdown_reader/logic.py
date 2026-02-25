@@ -311,6 +311,13 @@ def update_preview(app):
 
 
 def open_preview_in_browser(preview_file, app):
+    """
+    Opens a preview of the Markdown file into the browser. 
+
+    :param preview_file: (string) The file path for the preview of the Markdown file.
+    :param app: (MarkdownReader) The MarkdownReader application instance.
+    """
+    
     if update_preview(app):
         try:
             webbrowser.open(f"file://{os.path.abspath(preview_file)}", new=0)
