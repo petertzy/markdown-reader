@@ -21,7 +21,7 @@ def load_file(path, app):
 
 
 def drop_file(event, app):
-    """
+    """ 
     Handle dropped files (Markdown or HTML).
     HTML files are automatically converted to Markdown.
     
