@@ -614,7 +614,12 @@ class MarkdownReader:
     
     
     def close_tab_by_index(self, idx):
-        """Close a specific tab by index"""
+        """
+        Closes the tab at the specified index.
+
+        :param int idx: The index of the tab to be closed.
+        """
+        
         if idx < len(self.editors):
             # Remove from modified tabs if present
             if idx in self.modified_tabs:
@@ -639,7 +644,14 @@ class MarkdownReader:
                     new_widgets[new_key] = value
                 self.tab_widgets = new_widgets
 
+
     def start_watching(self, path):
+        """
+        Sets up a watchdog.observers Observer instance to monitor the file for modifications.
+
+        :param string path: The file path for the file to be monitored.
+        """
+        
         if self.observer:
             self.observer.stop()
             self.observer.join()
@@ -650,11 +662,21 @@ class MarkdownReader:
         self.observer.schedule(event_handler, path=watch_dir, recursive=False)
         self.observer.start()
 
+
     def on_text_change(self):
+        """
+        When the text is changed, reapply all formatting and update the preview file.
+        """
+        
         self.highlight_markdown()
         self.update_preview()
 
+
     def toggle_dark_mode(self):
+        """
+        Toggles between light and dark mode.
+        """
+
         self.dark_mode = not self.dark_mode
         bg = "#1e1e1e" if self.dark_mode else "white"
         fg = "#dcdcdc" if self.dark_mode else "black"
@@ -662,7 +684,18 @@ class MarkdownReader:
         for text_area in self.editors:
             text_area.config(bg=bg, fg=fg, insertbackground=fg)
 
+
     def highlight_markdown(self):
+        """
+        Removes all existing formatting and inserts new tags based on the updated Markdown syntax.
+        Implementation in place for:
+        - Headings (#, ##, ### ... to 6).
+        - Bold or italic text.
+        - Links, blockquotes, and inline code.
+        - Lists (unordered and ordered).
+        - Tables.
+        """
+        
         # Get the current editor
         text_area = self.get_current_text_area()
         content = text_area.get("1.0", tk.END)
@@ -735,8 +768,14 @@ class MarkdownReader:
                 text_area.tag_add("link", s, e)
             pos += 1
 
+
     def mark_tab_modified(self, tab_index):
-        """Mark a tab as having unsaved modifications"""
+        """
+        Marks a tab as having unsaved modifications.
+
+        :param int tab_index: The index of the tab to be marked as modified.
+        """
+
         if tab_index not in self.modified_tabs:
             self.modified_tabs.add(tab_index)
             # Get current tab title
@@ -748,8 +787,14 @@ class MarkdownReader:
             if not current_title.startswith("* "):
                 self.notebook.tab(tab_index, text=f"* {current_title}  ×")
     
+
     def mark_tab_saved(self, tab_index):
-        """Mark a tab as saved (remove unsaved indicator)"""
+        """
+        Marks a tab as saved and removes the unsaved indicator.
+        
+        :param int tab_index: The index of the tab to be marked as saved.
+        """
+        
         if tab_index in self.modified_tabs:
             self.modified_tabs.remove(tab_index)
         # Get current tab title and remove asterisk if present
@@ -765,13 +810,26 @@ class MarkdownReader:
         except:
             pass
 
+
     def quit(self):
+        """
+        Stops the file observer if it's running, and then quits the application.
+        """
+
         if self.observer:
             self.observer.stop()
             self.observer.join()
         self.root.quit()
 
+
     def save_file(self):
+        """
+        Saves the current file. If the file has been previously saved, it will overwrite the existing file. If not, the user will be prompted to choose a save location and file name.
+        
+        :raises RuntimeError: If there is an error saving the file to current_path.
+        :raises RuntimeError: If there is an error saving the file to the user-selected path.
+        """
+        
         text_area = self.get_current_text_area()
         if not text_area:
             return
@@ -806,14 +864,30 @@ class MarkdownReader:
                 except Exception as e:
                     dialogs.Messagebox.show_error("Error", f"Failed to save file: {e}")
 
+
     # --- Toolbar functions ---
     def get_current_text_area(self):
+        """
+        Returns the current text editor in the active tab.
+
+        :return: The text editor for the active tab, or None if there are no editors.
+        """
+        
         if not self.editors:
             return None
         idx = self.notebook.index(self.notebook.select())
         return self.editors[idx]
 
+
     def apply_style(self, style):
+        """
+        Applies the heading styles to the relevant lines, or removes the heading if it is normal text, then updates the preview.
+
+        :param string style: The style to be applied, which can be "Heading 1", "Heading 2", or "Heading 3". Any other value will be treated as normal text and will remove heading formatting.
+        
+        :raises tk.TclError: If there is an error accessing the text area or its contents.
+        """
+        
         text_area = self.get_current_text_area()
         if not text_area:
             return
@@ -842,6 +916,7 @@ class MarkdownReader:
             text_area.delete(line_start, line_end)
             text_area.insert(line_start, new_text)
         self.update_preview()
+
 
     def apply_font(self, font_name):
         # Change the font for all editors
