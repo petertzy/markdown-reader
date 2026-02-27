@@ -251,7 +251,7 @@ class MarkdownReader:
             drop_file(event, self)
         except Exception as e:
             print(f"❌ Error handling drop: {e}")
-            import traceback
+            import traceback 
             traceback.print_exc()
 
 

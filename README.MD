@@ -107,14 +107,8 @@ git push
 
 ## License
 
-This project is licensed under a **custom license**:
-
-- All contributors have full rights to use, modify, distribute, and use this project for commercial or non-commercial purposes.
-- All other users may use and modify the code for **non-commercial purposes only**.
-- **Commercial use by non-contributors is strictly prohibited** without explicit written permission from the project creator.
-
-Please contact the project owner to request commercial licensing.
-
+This project is licensed under the **MIT License**.  
+See the [LICENSE](LICENSE.md) file for the full text.
 
 ---
 
@@ -122,7 +116,9 @@ Please contact the project owner to request commercial licensing.
 
 All contributions are welcome, including:
 
-* Bug reports
-* Feature suggestions
-* Pull requests
-* Documentation improvements
+- Bug reports
+- Feature suggestions
+- Pull requests
+- Documentation improvements
+
+Please see our [CONTRIBUTING](CONTRIBUTING.md) guide for more details on how to get started, submit changes, or report issues.
