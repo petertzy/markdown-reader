@@ -23,18 +23,44 @@ from ttkbootstrap import dialogs
 import markdown
 from .plugins.pdf_exporter import export_markdown_to_pdf
 
+
 class FileChangeHandler(FileSystemEventHandler):
+    """
+    The class that handles changes to files.
+
+    :param FileSystemEventHandler: The file system event handler from the watchdog.events library.
+    """
+    
     def __init__(self, app, filepath):
+        """
+        :param MarkdownReader app: The instance of the MarkdownReader application.
+        :param string filepath: The file path for the file to be monitored.
+        """
+
         self.app = app
         self.filepath = os.path.abspath(filepath)
 
     def on_modified(self, event):
+        """
+        When the file is modified, reload the file after 100ms.
+
+        :param event event: The file modification event. 
+        """
+        
         if os.path.abspath(event.src_path) == self.filepath:
             self.app.root.after(100, lambda: self.app.load_file(self.filepath))
 
 
 class MarkdownReader:
+    """
+    The class that creates the instance of the Markdown reader application.
+    """
+    
     def __init__(self, root):
+        """
+        :param TkinterDnD.Tk root: The window that the application uses as a display.
+        """
+        
         self.root = root
         self.root.title("Markdown Reader")
         self.root.geometry("1280x795")
@@ -61,7 +87,12 @@ class MarkdownReader:
         self.create_widgets()
         self.bind_events()
 
+
     def create_widgets(self):
+        """
+        Sets up the various menus, toolbar, and fonts.
+        """
+        
         style = ttkb.Style()
         menubar = tk.Menu(self.root)
         filemenu = tk.Menu(menubar, tearoff=0)
@@ -179,7 +210,14 @@ class MarkdownReader:
 
         self.new_file()
 
+
     def bind_events(self):
+        """
+        Sets up drag-and-drop support alongside key binds for shortcuts.
+
+        :raises RuntimeError: If the drag-and-drop binding fails.
+        """
+        
         try:
             # Register drag-and-drop support
             self.root.drop_target_register('DND_Files')
@@ -197,8 +235,16 @@ class MarkdownReader:
         self.root.bind_all("<Command-z>", lambda event: self.undo_action())
         self.root.bind_all("<Command-Shift-Z>", lambda event: self.redo_action())
 
+
     def _on_drop_files(self, event):
-        """Handle file drop events"""
+        """
+        Handles file drop events.
+
+        :param event event: The file drop event to be processed.
+
+        :raises RuntimeError: If the error handling drop fails.
+        """
+
         print(f"🔍 Drop event triggered")
         print(f"   Event data type: {type(event.data)}")
         print(f"   Event data: {event.data}")
@@ -210,7 +256,12 @@ class MarkdownReader:
             import traceback 
             traceback.print_exc()
 
+
     def new_file(self):
+        """
+        Handles opening a new file and deals with relevant IME files.
+        """
+        
         frame = tk.Frame(self.notebook)
         base_font = (self.current_font_family, self.current_font_size)
         text_area = self.get_current_text_area()
@@ -295,9 +346,14 @@ class MarkdownReader:
         self.file_paths.append(None)
         
         # Add custom tab with close button
-        self.add_close_button_to_tab(tab_index, "Untitled")
+        self.add_label_and_close_button_to_tab(tab_index, "Untitled")
+
 
     def open_file(self):
+        """
+        Handles opening a file and sets up its file handler.
+        """
+
         file_path = filedialog.askopenfilename(filetypes=[
             ("Markdown files", "*.md *.MD"),
             ("HTML files", "*.html *.HTML *.htm *.HTM"),
@@ -319,7 +375,16 @@ class MarkdownReader:
             self.load_file(abs_path)
             self.start_watching(abs_path)
 
+
     def load_file(self, path):
+        """
+        Loads the file from the given path and converts it to Markdown.
+
+        :param string path: The path for the file to load.
+
+        :raises RuntimeError: If the file fails to load.
+        """
+        
         abs_path = os.path.abspath(path)
         idx = self.notebook.index(self.notebook.select())
         text_area = self.get_current_text_area()
@@ -353,14 +418,14 @@ class MarkdownReader:
                 # Update tab name to show it's converted
                 base_name = os.path.splitext(os.path.basename(abs_path))[0]
                 tab_text = f"{base_name}.md (converted)"
-                self.add_close_button_to_tab(idx, tab_text)
+                self.add_label_and_close_button_to_tab(idx, tab_text)
                 # Don't set file_paths to HTML/PDF file - treat as new unsaved file
                 self.file_paths[idx] = None
                 self.current_file_path = None
             else:
                 self.file_paths[idx] = abs_path
                 tab_text = os.path.basename(abs_path)
-                self.add_close_button_to_tab(idx, tab_text)
+                self.add_label_and_close_button_to_tab(idx, tab_text)
                 self.current_file_path = abs_path
         except Exception as e:
             dialogs.Messagebox.show_error("Error", f"Failed to load file: {e}")
@@ -377,7 +442,12 @@ class MarkdownReader:
                 # Mark as saved since we just loaded from file
                 self.root.after(100, lambda: self.mark_tab_saved(idx))
 
+
     def close_current_tab(self):
+        """
+        Closes the current tab and lets the notebook forget it.
+        """
+
         if not self.editors:
             return
         idx = self.notebook.index(self.notebook.select())
@@ -393,7 +463,12 @@ class MarkdownReader:
         del self.editors[idx]
         del self.file_paths[idx]
 
+
     def close_all_tabs(self):
+        """
+        Closes all tabs and empties the notebook.
+        """
+
         while self.editors:
             self.notebook.forget(0)
             del self.editors[0]
@@ -401,8 +476,18 @@ class MarkdownReader:
         # Clear modified tabs set
         self.modified_tabs.clear()
 
+
     def on_tab_click(self, event):
-        """Handle click events on notebook tabs to detect close button clicks"""
+        """
+        Handles click events on notebook tabs to detect close button clicks.
+
+        :param event event: The click event to be handled.
+
+        :return: The string "break" if a tab was closed, else does not return anything.
+
+        :raises RuntimeError: If there is an unspecified error in the function.
+        """
+
         try:
             # Identify which tab was clicked
             element = self.notebook.tk.call(self.notebook._w, "identify", "tab", event.x, event.y)
@@ -442,8 +527,16 @@ class MarkdownReader:
         except Exception as e:
             print(f"Error in on_tab_click: {e}")
 
+
     def show_tab_context_menu(self, event):
-        """Show context menu when right-clicking on a tab"""
+        """
+        Shows the context menu when right-clicking on a tab.
+
+        :param event event: The click event to be handled.
+
+        :raises RuntimeError: If there is an error when attempting to display the context menu.
+        """
+        
         try:
             # Identify which tab was clicked
             clicked_tab = self.notebook.tk.call(self.notebook._w, "identify", "tab", event.x, event.y)
@@ -455,13 +548,24 @@ class MarkdownReader:
         except Exception as e:
             print(f"Error showing context menu: {e}")
     
+
     def close_tab_from_context_menu(self):
-        """Close the tab that was right-clicked"""
+        """
+        Close the tab that was right-clicked.
+        """
+
         if hasattr(self, 'right_clicked_tab_index') and self.right_clicked_tab_index < len(self.editors):
             self.close_tab_by_index(self.right_clicked_tab_index)
 
-    def add_close_button_to_tab(self, tab_index, tab_text):
-        """Add a custom tab label with a close button"""
+
+    def add_label_and_close_button_to_tab(self, tab_index, tab_text):
+        """
+        Add a custom tab label with a close button.
+
+        :param int tab_index: The index of the tab to add the label and close button to.
+        :param string tab_text: The text for the tab label.
+        """
+
         # Create a frame to hold the label and close button
         tab_frame = tk.Frame(self.notebook, bg='#f0f0f0')
         
@@ -509,8 +613,14 @@ class MarkdownReader:
         # Update the tab text directly
         self.notebook.tab(tab_index, text=f"{tab_text}  ×")
     
+    
     def close_tab_by_index(self, idx):
-        """Close a specific tab by index"""
+        """
+        Closes the tab at the specified index.
+
+        :param int idx: The index of the tab to be closed.
+        """
+        
         if idx < len(self.editors):
             # Remove from modified tabs if present
             if idx in self.modified_tabs:
@@ -535,7 +645,14 @@ class MarkdownReader:
                     new_widgets[new_key] = value
                 self.tab_widgets = new_widgets
 
+
     def start_watching(self, path):
+        """
+        Sets up a watchdog.observers Observer instance to monitor the file for modifications.
+
+        :param string path: The file path for the file to be monitored.
+        """
+        
         if self.observer:
             self.observer.stop()
             self.observer.join()
@@ -546,11 +663,21 @@ class MarkdownReader:
         self.observer.schedule(event_handler, path=watch_dir, recursive=False)
         self.observer.start()
 
+
     def on_text_change(self):
+        """
+        When the text is changed, reapply all formatting and update the preview file.
+        """
+        
         self.highlight_markdown()
         self.update_preview()
 
+
     def toggle_dark_mode(self):
+        """
+        Toggles between light and dark mode.
+        """
+
         self.dark_mode = not self.dark_mode
         bg = "#1e1e1e" if self.dark_mode else "white"
         fg = "#dcdcdc" if self.dark_mode else "black"
@@ -558,7 +685,18 @@ class MarkdownReader:
         for text_area in self.editors:
             text_area.config(bg=bg, fg=fg, insertbackground=fg)
 
+
     def highlight_markdown(self):
+        """
+        Removes all existing formatting and inserts new tags based on the updated Markdown syntax.
+        Implementation in place for:
+        - Headings (#, ##, ### ... to 6).
+        - Bold or italic text.
+        - Links, blockquotes, and inline code.
+        - Lists (unordered and ordered).
+        - Tables.
+        """
+        
         # Get the current editor
         text_area = self.get_current_text_area()
         content = text_area.get("1.0", tk.END)
@@ -631,8 +769,14 @@ class MarkdownReader:
                 text_area.tag_add("link", s, e)
             pos += 1
 
+
     def mark_tab_modified(self, tab_index):
-        """Mark a tab as having unsaved modifications"""
+        """
+        Marks a tab as having unsaved modifications.
+
+        :param int tab_index: The index of the tab to be marked as modified.
+        """
+
         if tab_index not in self.modified_tabs:
             self.modified_tabs.add(tab_index)
             # Get current tab title
@@ -644,8 +788,14 @@ class MarkdownReader:
             if not current_title.startswith("* "):
                 self.notebook.tab(tab_index, text=f"* {current_title}  ×")
     
+
     def mark_tab_saved(self, tab_index):
-        """Mark a tab as saved (remove unsaved indicator)"""
+        """
+        Marks a tab as saved and removes the unsaved indicator.
+        
+        :param int tab_index: The index of the tab to be marked as saved.
+        """
+        
         if tab_index in self.modified_tabs:
             self.modified_tabs.remove(tab_index)
         # Get current tab title and remove asterisk if present
@@ -661,13 +811,26 @@ class MarkdownReader:
         except:
             pass
 
+
     def quit(self):
+        """
+        Stops the file observer if it's running, and then quits the application.
+        """
+
         if self.observer:
             self.observer.stop()
             self.observer.join()
         self.root.quit()
 
+
     def save_file(self):
+        """
+        Saves the current file. If the file has been previously saved, it will overwrite the existing file. If not, the user will be prompted to choose a save location and file name.
+        
+        :raises RuntimeError: If there is an error saving the file to current_path.
+        :raises RuntimeError: If there is an error saving the file to the user-selected path.
+        """
+        
         text_area = self.get_current_text_area()
         if not text_area:
             return
@@ -702,14 +865,30 @@ class MarkdownReader:
                 except Exception as e:
                     dialogs.Messagebox.show_error("Error", f"Failed to save file: {e}")
 
+
     # --- Toolbar functions ---
     def get_current_text_area(self):
+        """
+        Returns the current text editor in the active tab.
+
+        :return: The text editor for the active tab, or None if there are no editors.
+        """
+        
         if not self.editors:
             return None
         idx = self.notebook.index(self.notebook.select())
         return self.editors[idx]
 
+
     def apply_style(self, style):
+        """
+        Applies the heading styles to the relevant lines, or removes the heading if it is normal text, then updates the preview.
+
+        :param string style: The style to be applied, which can be "Heading 1", "Heading 2", or "Heading 3". Any other value will be treated as normal text and will remove heading formatting.
+        
+        :raises tk.TclError: If there is an error accessing the text area or its contents.
+        """
+        
         text_area = self.get_current_text_area()
         if not text_area:
             return
@@ -739,7 +918,14 @@ class MarkdownReader:
             text_area.insert(line_start, new_text)
         self.update_preview()
 
+
     def apply_font(self, font_name):
+        """
+        Applies the selected font to the text area and updates the preview.
+
+        :param string font_name: The name of the font to be applied.
+        """
+
         # Change the font for all editors
         import tkinter.font
         # If font_name contains spaces and a style (e.g., 'Arial Light'), use only the first part as the family
@@ -751,14 +937,26 @@ class MarkdownReader:
         self.current_font_family = family
         self.update_preview()
 
+
     def change_font_size(self, delta):
+        """
+        Changes the font size by a given value (limited to a minimum of 6).
+
+        :param int delta: The change in font size. 
+        """
+        
         new_size = max(6, self.font_size_var.get() + delta)
         self.font_size_var.set(new_size)
         self.apply_font(self.font_var.get())
         self.current_font_size = new_size
         self.update_preview()
 
+
     def toggle_bold(self):
+        """
+        Takes the existing text area and adds/removes the bold Markdown syntax to toggle boldness.
+        """
+        
         text_area = self.get_current_text_area()
         if not text_area:
             return
@@ -778,7 +976,12 @@ class MarkdownReader:
             return
         self.update_preview()
 
+
     def toggle_italic(self):
+        """
+        Takes the existing text area and adds/removes the italic Markdown syntax to toggle italicness.
+        """
+
         text_area = self.get_current_text_area()
         if not text_area:
             return
@@ -799,7 +1002,12 @@ class MarkdownReader:
             return
         self.update_preview()
 
+
     def toggle_underline(self):
+        """
+        Takes the existing text area and adds/removes the underline Markdown syntax to toggle underline.
+        """
+
         text_area = self.get_current_text_area()
         if not text_area:
             return
@@ -819,7 +1027,14 @@ class MarkdownReader:
             return
         self.update_preview()
 
+
     def choose_fg_color(self):
+        """
+        Prompts the user to select a foreground colour, then applies it to the preview.
+
+        :raises tk.TclError: If there is no text selection to apply the color to, or if there is an error accessing the text area or its contents.
+        """
+        
         import re
         cd = dialogs.ColorChooserDialog()
         cd.show()
@@ -849,11 +1064,13 @@ class MarkdownReader:
                     self.update_preview()
                 except tk.TclError:
                     dialogs.Messagebox.show_info("No selection", "Please select text to color.")
-
-
             
 
     def choose_bg_color(self):
+        """
+        Prompts the user to select a background colour, then applies it to the preview.
+        """ 
+
         cd = dialogs.ColorChooserDialog()
         cd.show()
         color = cd.result
@@ -867,6 +1084,10 @@ class MarkdownReader:
             
 
     def update_preview(self):
+        """
+        Checks that a file is open, and that there is a loaded text area, then updates the preview file.
+        """
+        
         if not self.current_file_path:
             return
         text_area = self.get_current_text_area()
@@ -874,7 +1095,14 @@ class MarkdownReader:
             return
         update_preview(self)
 
+
     def undo_action(self):
+        """
+        Checks if there is a loaded text area, and that changes have been made, then attempts to undo the most recent change.
+
+        :raises tk.TclError: If there is an error performing the undo operation, such as if there are no actions to undo.
+        """
+        
         text_area = self.get_current_text_area()
         if text_area and text_area.edit_modified():
             try:
@@ -882,7 +1110,14 @@ class MarkdownReader:
             except tk.TclError:
                 pass
 
+
     def redo_action(self):
+        """
+        Checks if there is a loaded text area, then attempts to redo the most recently undone change.
+
+        :raises tk.TclError: If there is an error performing the redo operation, such as if there are no actions to redo.
+        """
+
         text_area = self.get_current_text_area()
         if text_area:
             try:
@@ -891,7 +1126,10 @@ class MarkdownReader:
                 pass
 
     def insert_table(self):
-        """Insert a table with customizable cell content at cursor position"""
+        """
+        Inserts a table with customizable cell content at cursor position.
+        """
+
         text_area = self.get_current_text_area()
         if not text_area:
             return
@@ -941,7 +1179,10 @@ class MarkdownReader:
         cell_entries = []
         
         def create_table_grid():
-            """Create or recreate the table grid based on current dimensions"""
+            """
+            Creates or recreates the table grid based on current dimensions.
+            """
+            
             # Clear existing entries
             for widget in scrollable_frame.winfo_children():
                 widget.destroy()
@@ -980,7 +1221,10 @@ class MarkdownReader:
                 scrollable_frame.columnconfigure(c, weight=1)
         
         def update_table_grid(*args):
-            """Update table grid when dimensions change"""
+            """
+            Updates the table grid when dimensions change.
+            """
+            
             create_table_grid()
         
         # Bind spinbox changes to update grid
@@ -991,7 +1235,10 @@ class MarkdownReader:
         create_table_grid()
         
         def insert_table_content():
-            """Generate table markdown from entry widgets"""
+            """
+            Generates table markdown from entry widgets and updates the preview file.
+            """
+
             rows = rows_var.get()
             cols = cols_var.get()
             table_lines = []
@@ -1039,7 +1286,10 @@ class MarkdownReader:
         dialog.wait_window()
 
     def show_table_help(self):
-        """Show help dialog for table syntax"""
+        """
+        Shows the help dialog for table syntax.
+        """
+        
         help_text = """Markdown Table Syntax:
 
 | Header 1 | Header 2 | Header 3 |
@@ -1063,7 +1313,10 @@ Example with alignment:
         dialogs.Messagebox.show_info("Table Syntax Help", help_text)
 
     def export_to_html_dialog(self):
-        """Show dialog to export current markdown document to HTML"""
+        """
+        Shows dialog to export current the markdown document to HTML.
+        """
+        
         if not self.editors:
             dialogs.Messagebox.show_info("Info", "No document to export.")
             return
@@ -1093,8 +1346,12 @@ Example with alignment:
         if output_path:
             export_to_html(self, output_path)
 
+
     def export_to_docx_dialog(self):
-        """Show dialog to export current markdown document to Word"""
+        """
+        Shows the dialog to export the current markdown document to Word.
+        """
+        
         if not self.editors:
             dialogs.Messagebox.show_info("Info", "No document to export.")
             return
@@ -1124,8 +1381,12 @@ Example with alignment:
         if output_path:
             export_to_docx(self, output_path)
 
+
     def export_to_pdf_dialog(self):
-        """Show dialog to export current markdown document to PDF"""
+        """
+        Shows the dialog to export the current markdown document to PDF.
+        """
+        
         if not self.editors:
             dialogs.Messagebox.show_info("Info", "No document to export.")
             return

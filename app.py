@@ -7,10 +7,16 @@ from ttkbootstrap.constants import *
 
 
 def handle_open_file(event):
-    """Handle file open events from macOS"""
+    """
+    Handles file open events from macOS.
+
+    :param event event: The open file event from macOS. 
+    """
+    
     file_path = event
     if os.path.isfile(file_path) and file_path.lower().endswith(('.md', '.markdown', '.html', '.htm', '.pdf')):
         app.load_file(file_path)
+
 
 if __name__ == "__main__":
     try:
