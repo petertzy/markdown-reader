@@ -11,6 +11,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 import traceback
 
 
+
 def _protect_math(markdown_text):
     """
     Protects math expressions from being escaped by markdown2.
