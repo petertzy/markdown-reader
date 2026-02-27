@@ -20,6 +20,8 @@ import tkinter.font  # moved here from inside methods
 import ttkbootstrap as ttkb
 from ttkbootstrap.constants import *
 from ttkbootstrap import dialogs
+import markdown
+from .plugins.pdf_exporter import export_markdown_to_pdf
 
 class FileChangeHandler(FileSystemEventHandler):
     def __init__(self, app, filepath):
@@ -406,8 +408,7 @@ class MarkdownReader:
             element = self.notebook.tk.call(self.notebook._w, "identify", "tab", event.x, event.y)
             if element == "":
                 return
-                
-            tab_index = int(element)
+                tab_index = int(element)
             tab_text = self.notebook.tab(tab_index, "text")
             
             # Only proceed if × is in the tab text
@@ -1151,5 +1152,14 @@ Example with alignment:
             title="Export to PDF"
         )
         
-        if output_path:
-            export_to_pdf(self, output_path)
+        if not output_path:
+            return
+
+        # Take the content markdown now
+        md_content = self.editors[idx].get("1.0", "end-1c")
+
+        # Convert to HTML 
+        html_content = markdown.markdown(md_content)
+
+        # Export to PDF using WeasyPrint
+        export_markdown_to_pdf(html_content, output_path)
