@@ -919,6 +919,12 @@ class MarkdownReader:
 
 
     def apply_font(self, font_name):
+        """
+        Applies the selected font to the text area and updates the preview.
+
+        :param string font_name: The name of the font to be applied.
+        """
+
         # Change the font for all editors
         import tkinter.font
         # If font_name contains spaces and a style (e.g., 'Arial Light'), use only the first part as the family
@@ -930,14 +936,26 @@ class MarkdownReader:
         self.current_font_family = family
         self.update_preview()
 
+
     def change_font_size(self, delta):
+        """
+        Changes the font size by a given value (limited to a minimum of 6).
+
+        :param int delta: The change in font size. 
+        """
+        
         new_size = max(6, self.font_size_var.get() + delta)
         self.font_size_var.set(new_size)
         self.apply_font(self.font_var.get())
         self.current_font_size = new_size
         self.update_preview()
 
+
     def toggle_bold(self):
+        """
+        Takes the existing text area and adds/removes the bold Markdown syntax to toggle boldness.
+        """
+        
         text_area = self.get_current_text_area()
         if not text_area:
             return
@@ -957,7 +975,12 @@ class MarkdownReader:
             return
         self.update_preview()
 
+
     def toggle_italic(self):
+        """
+        Takes the existing text area and adds/removes the italic Markdown syntax to toggle italicness.
+        """
+
         text_area = self.get_current_text_area()
         if not text_area:
             return
@@ -978,7 +1001,12 @@ class MarkdownReader:
             return
         self.update_preview()
 
+
     def toggle_underline(self):
+        """
+        Takes the existing text area and adds/removes the underline Markdown syntax to toggle underline.
+        """
+
         text_area = self.get_current_text_area()
         if not text_area:
             return
@@ -998,7 +1026,14 @@ class MarkdownReader:
             return
         self.update_preview()
 
+
     def choose_fg_color(self):
+        """
+        Prompts the user to select a foreground colour, then applies it to the preview.
+
+        :raises tk.TclError: If there is no text selection to apply the color to, or if there is an error accessing the text area or its contents.
+        """
+        
         import re
         cd = dialogs.ColorChooserDialog()
         cd.show()
@@ -1028,11 +1063,13 @@ class MarkdownReader:
                     self.update_preview()
                 except tk.TclError:
                     dialogs.Messagebox.show_info("No selection", "Please select text to color.")
-
-
             
 
     def choose_bg_color(self):
+        """
+        Prompts the user to select a background colour, then applies it to the preview.
+        """ 
+
         cd = dialogs.ColorChooserDialog()
         cd.show()
         color = cd.result
@@ -1046,6 +1083,10 @@ class MarkdownReader:
             
 
     def update_preview(self):
+        """
+        Checks that a file is open, and that there is a loaded text area, then updates the preview file.
+        """
+        
         if not self.current_file_path:
             return
         text_area = self.get_current_text_area()
@@ -1053,7 +1094,14 @@ class MarkdownReader:
             return
         update_preview(self)
 
+
     def undo_action(self):
+        """
+        Checks if there is a loaded text area, and that changes have been made, then attempts to undo the most recent change.
+
+        :raises tk.TclError: If there is an error performing the undo operation, such as if there are no actions to undo.
+        """
+        
         text_area = self.get_current_text_area()
         if text_area and text_area.edit_modified():
             try:
@@ -1061,7 +1109,14 @@ class MarkdownReader:
             except tk.TclError:
                 pass
 
+
     def redo_action(self):
+        """
+        Checks if there is a loaded text area, then attempts to redo the most recently undone change.
+
+        :raises tk.TclError: If there is an error performing the redo operation, such as if there are no actions to redo.
+        """
+
         text_area = self.get_current_text_area()
         if text_area:
             try:
@@ -1070,7 +1125,10 @@ class MarkdownReader:
                 pass
 
     def insert_table(self):
-        """Insert a table with customizable cell content at cursor position"""
+        """
+        Inserts a table with customizable cell content at cursor position.
+        """
+
         text_area = self.get_current_text_area()
         if not text_area:
             return
@@ -1120,7 +1178,10 @@ class MarkdownReader:
         cell_entries = []
         
         def create_table_grid():
-            """Create or recreate the table grid based on current dimensions"""
+            """
+            Creates or recreates the table grid based on current dimensions.
+            """
+            
             # Clear existing entries
             for widget in scrollable_frame.winfo_children():
                 widget.destroy()
@@ -1159,7 +1220,10 @@ class MarkdownReader:
                 scrollable_frame.columnconfigure(c, weight=1)
         
         def update_table_grid(*args):
-            """Update table grid when dimensions change"""
+            """
+            Updates the table grid when dimensions change.
+            """
+            
             create_table_grid()
         
         # Bind spinbox changes to update grid
@@ -1170,7 +1234,10 @@ class MarkdownReader:
         create_table_grid()
         
         def insert_table_content():
-            """Generate table markdown from entry widgets"""
+            """
+            Generates table markdown from entry widgets and updates the preview file.
+            """
+
             rows = rows_var.get()
             cols = cols_var.get()
             table_lines = []
@@ -1218,7 +1285,10 @@ class MarkdownReader:
         dialog.wait_window()
 
     def show_table_help(self):
-        """Show help dialog for table syntax"""
+        """
+        Shows the help dialog for table syntax.
+        """
+        
         help_text = """Markdown Table Syntax:
 
 | Header 1 | Header 2 | Header 3 |
@@ -1242,7 +1312,10 @@ Example with alignment:
         dialogs.Messagebox.show_info("Table Syntax Help", help_text)
 
     def export_to_html_dialog(self):
-        """Show dialog to export current markdown document to HTML"""
+        """
+        Shows dialog to export current the markdown document to HTML.
+        """
+        
         if not self.editors:
             dialogs.Messagebox.show_info("Info", "No document to export.")
             return
@@ -1272,8 +1345,12 @@ Example with alignment:
         if output_path:
             export_to_html(self, output_path)
 
+
     def export_to_docx_dialog(self):
-        """Show dialog to export current markdown document to Word"""
+        """
+        Shows the dialog to export the current markdown document to Word.
+        """
+        
         if not self.editors:
             dialogs.Messagebox.show_info("Info", "No document to export.")
             return
@@ -1303,8 +1380,12 @@ Example with alignment:
         if output_path:
             export_to_docx(self, output_path)
 
+
     def export_to_pdf_dialog(self):
-        """Show dialog to export current markdown document to PDF"""
+        """
+        Shows the dialog to export the current markdown document to PDF.
+        """
+        
         if not self.editors:
             dialogs.Messagebox.show_info("Info", "No document to export.")
             return
