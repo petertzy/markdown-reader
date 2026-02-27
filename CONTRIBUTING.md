@@ -31,3 +31,19 @@ git push origin <new-branch>
 ```
 7. Create a pull request
 ![alt text](image-1.png)
+
+## Code Documentation Guidlines
+
+When creating or updating a .py function, please follow the following guidelines for documenting the function:
+
+```python
+"""
+[Description of what the function does.]
+
+:param [dateType] [parameterName]: [Description of the parameter.]
+
+:return: A [dataType] [description of the conditions for return.]
+
+:raises [errorType]: If [description of the conditions to raise the error.]
+"""
+```
