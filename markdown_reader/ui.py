@@ -267,7 +267,16 @@ class MarkdownReader:
         text_area = self.get_current_text_area()
         text_area = ScrolledText(frame, wrap=tk.WORD, font=base_font, undo=True)
         text_area.pack(fill=tk.BOTH, expand=True)
-        
+
+        # Zoom bindings must be widget-level (not bind_all) so "break" can
+        # suppress the Text class's built-in scroll and scan-drag handlers.
+        text_area.bind("<MouseWheel>", self._on_ctrl_scroll)
+        text_area.bind("<Button-4>", self._on_linux_scroll)
+        text_area.bind("<Button-5>", self._on_linux_scroll)
+        text_area.bind("<Button-2>", self._on_middle_press)
+        text_area.bind("<B2-Motion>", self._on_middle_drag)
+        text_area.bind("<ButtonRelease-2>", self._on_middle_release)
+
         # Setup IME interception
         wid = str(text_area)
         self._ime_states[wid] = {'active': False}
@@ -950,6 +959,98 @@ class MarkdownReader:
         self.apply_font(self.font_var.get())
         self.current_font_size = new_size
         self.update_preview()
+
+
+    def _on_ctrl_scroll(self, event):
+        """
+        Zooms font size when Ctrl is held, otherwise scrolls normally.
+        Scrolling is performed explicitly because widget-level bindings
+        suppress the Text class's built-in scroll via "break".
+
+        :param Event event: The MouseWheel event.
+
+        :return: A str "break" to prevent the default Text scroll handler.
+        """
+
+        if event.state & 0x4:
+            if event.delta > 0:
+                self.change_font_size(1)
+            else:
+                self.change_font_size(-1)
+        else:
+            event.widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        return "break"
+
+
+    def _on_linux_scroll(self, event):
+        """
+        Zooms font size on Ctrl+scroll for Linux (Button-4/5 events),
+        otherwise scrolls normally.
+
+        :param Event event: The button event (num 4 = up, 5 = down).
+
+        :return: A str "break" to prevent the default Text scroll handler.
+        """
+
+        if event.state & 0x4:
+            if event.num == 4:
+                self.change_font_size(1)
+            else:
+                self.change_font_size(-1)
+        else:
+            event.widget.yview_scroll(-1 if event.num == 4 else 1, "units")
+        return "break"
+
+
+    def _on_middle_press(self, event):
+        """
+        Records the starting Y position and font size for middle-click drag zoom.
+
+        :param Event event: The middle mouse button press event.
+
+        :return: A str "break" to prevent the default Text scan-drag.
+        """
+
+        self._zoom_drag_y = event.y_root
+        self._zoom_drag_base_size = self.font_size_var.get()
+        return "break"
+
+
+    def _on_middle_drag(self, event):
+        """
+        Zooms font size based on vertical mouse movement while middle button
+        is held. Moving up zooms in, moving down zooms out (10px per step).
+
+        :param Event event: The mouse motion event.
+
+        :return: A str "break" to prevent the default Text scan-drag.
+        """
+
+        if not hasattr(self, '_zoom_drag_y'):
+            return
+        delta_px = self._zoom_drag_y - event.y_root
+        new_size = max(6, self._zoom_drag_base_size + delta_px // 10)
+        if new_size != self.font_size_var.get():
+            self.font_size_var.set(new_size)
+            self.apply_font(self.font_var.get())
+            self.current_font_size = new_size
+        return "break"
+
+
+    def _on_middle_release(self, event):
+        """
+        Cleans up drag state and refreshes the preview after middle-click zoom.
+
+        :param Event event: The middle mouse button release event.
+
+        :return: A str "break" to prevent the default Text scan-drag.
+        """
+
+        if hasattr(self, '_zoom_drag_y'):
+            del self._zoom_drag_y
+            del self._zoom_drag_base_size
+            self.update_preview()
+        return "break"
 
 
     def toggle_bold(self):
