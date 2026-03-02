@@ -502,34 +502,24 @@ class MarkdownReader:
             element = self.notebook.tk.call(self.notebook._w, "identify", "tab", event.x, event.y)
             if element == "":
                 return
-                tab_index = int(element)
+            tab_index = int(element)
             tab_text = self.notebook.tab(tab_index, "text")
             
             # Only proceed if × is in the tab text
             if "×" not in tab_text:
                 return
-            
-            # Calculate approximate tab dimensions
-            import tkinter.font as tkfont
-            font = tkfont.Font(family="TkDefaultFont", size=10)
-            
-            # Estimate where this tab starts by summing previous tab widths
-            tab_start_x = 0
-            for i in range(tab_index):
-                prev_text = self.notebook.tab(i, "text")
-                # Estimate width: text width + padding (approximately 20px)
-                prev_width = font.measure(prev_text) + 20
-                tab_start_x += prev_width
-            
-            # Calculate relative x within the clicked tab
-            relative_x = event.x - tab_start_x
-            
-            # Get the width of the current tab
-            current_width = font.measure(tab_text) + 20
-            
+
+            # Use actual tab bbox instead of estimated font width
+            tab_bbox = self.notebook.bbox(tab_index)
+            if not tab_bbox:
+                return
+
+            tab_x, _, tab_width, _ = tab_bbox
+            relative_x = event.x - tab_x
+
             # If click is in the last 30 pixels of the tab, consider it a close click
             close_button_width = 30
-            if relative_x > (current_width - close_button_width):
+            if relative_x >= (tab_width - close_button_width):
                 self.close_tab_by_index(tab_index)
                 return "break"  # Prevent default tab selection behavior
                 
