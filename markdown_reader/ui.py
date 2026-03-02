@@ -1520,8 +1520,16 @@ Example with alignment:
         # Take the content markdown now
         md_content = self.editors[idx].get("1.0", "end-1c")
 
-        # Convert to HTML 
-        html_content = markdown.markdown(md_content)
+        # Convert to HTML (preserve fenced code blocks and common markdown features)
+        html_content = markdown.markdown(
+            md_content,
+            extensions=["fenced_code", "tables", "nl2br", "sane_lists"]
+        )
+
+        # Determine base URL for resolving relative image paths
+        base_url = None
+        if current_path:
+            base_url = os.path.dirname(os.path.abspath(current_path))
 
         # Export to PDF using WeasyPrint
-        export_markdown_to_pdf(html_content, output_path)
+        export_markdown_to_pdf(html_content, output_path, base_url)
