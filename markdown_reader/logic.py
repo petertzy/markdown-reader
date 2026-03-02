@@ -904,28 +904,34 @@ def export_to_pdf(app, output_path):
         markdown_text = text_area.get("1.0", "end-1c")
         
         # Fix image paths if a file is currently open
+        base_dir = None
         if hasattr(app, 'file_paths') and app.file_paths:
             try:
                 current_path = app.file_paths[idx]
                 if current_path is not None:
                     base_dir = os.path.dirname(current_path)
-                    # Convert file:// paths to relative paths for export
-                    def convert_file_url_to_relative(text, base_dir):
+                    # Convert file:// paths and relative paths to absolute file URLs for PDF export
+                    def convert_file_url_to_absolute(text, base_dir):
                         def repl(m):
                             alt = m.group(1)
                             src = m.group(2)
                             if src.startswith('file://'):
-                                # Convert file:// URL back to relative path
-                                file_path = src.replace('file://', '')
+                                # Already absolute file URL
+                                return f'![{alt}]({src})'
+                            elif src.startswith('/') or (len(src) > 1 and src[1] == ':'):
+                                # Already absolute path
+                                return f'![{alt}](file://{src})'
+                            else:
+                                # Relative path - convert to absolute file URL
                                 try:
-                                    rel_path = os.path.relpath(file_path, base_dir)
-                                    return f'![{alt}]({rel_path})'
+                                    abs_path = os.path.abspath(os.path.join(base_dir, src))
+                                    file_url = 'file://' + abs_path
+                                    return f'![{alt}]({file_url})'
                                 except (ValueError, OSError):
                                     return m.group(0)
-                            return m.group(0)
                         return re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', repl, text)
                     
-                    markdown_text = convert_file_url_to_relative(markdown_text, base_dir)
+                    markdown_text = convert_file_url_to_absolute(markdown_text, base_dir)
             except Exception as e:
                 print(f"Warning: Could not process image paths: {e}")
         
@@ -970,11 +976,17 @@ def export_to_pdf(app, output_path):
         
         # Generate complete HTML document for PDF printing
         # Optimized for print media with @media print styles
+        base_tag = ""
+        if base_dir:
+            # Add base tag to help resolve relative image paths
+            base_tag = f'<base href="file://{base_dir}/">'
+        
         html_document = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <title>Exported Markdown</title>
+    {base_tag}
     <style>
         @media print {{
             body {{
