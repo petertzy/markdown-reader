@@ -755,6 +755,14 @@ def export_to_docx(app, output_path):
                 base_dir = os.path.dirname(current_path)
 
         def resolve_image_source(src):
+            """
+            Takes the image src and returns the absolute path to the file.
+
+            :param string src: The src from the image tag.
+
+            :return: Two strings, one indicating whether the image stored locally or online, and another with the path required to access the image.
+            """
+            
             src = src.strip().strip('<>')
             if (src.startswith('"') and src.endswith('"')) or (src.startswith("'") and src.endswith("'")):
                 src = src[1:-1]
@@ -774,6 +782,15 @@ def export_to_docx(app, output_path):
             return 'local', os.path.abspath(src)
 
         def insert_image(doc_obj, src):
+            """
+            Inserts the given image src into the Word document.
+
+            :param Document doc_obj: The Word document to have the image inserted into.
+            :param src: The unformatted image source for the image to be inserted.
+
+            :return: A boolean containing true if the operation succeeds, and false if not.
+            """
+            
             kind, value = resolve_image_source(src)
             try:
                 if kind == 'remote':
@@ -977,8 +994,16 @@ def export_to_pdf(app, output_path):
                 current_path = app.file_paths[idx]
                 if current_path is not None:
                     base_dir = os.path.dirname(current_path)
-                    # Convert file:// paths and relative paths to absolute file URLs for PDF export
                     def convert_file_url_to_absolute(text, base_dir):
+                        """
+                        Converts file:// paths and relative paths to absolute file URLs for PDF export.
+
+                        :param string text: The file URL to be formatted.
+                        :param string base_dir: The base directory of the file.
+
+                        :return: The formatted URL ready for PDF export.
+                        """
+                        
                         def repl(m):
                             alt = m.group(1)
                             src = m.group(2)
