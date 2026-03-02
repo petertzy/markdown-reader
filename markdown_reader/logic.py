@@ -11,6 +11,287 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 import traceback
 
 
+def _normalize_math_content(content):
+    """
+    Normalizes common Unicode math characters to MathJax-friendly LaTeX.
+    Also converts common informal notation patterns to proper TeX.
+
+    :param string content: Raw math expression content.
+
+    :return: A normalized math expression string.
+    """
+
+    if not isinstance(content, str) or not content:
+        return content
+
+    normalized = content
+    
+    # === UNICODE SUPERSCRIPTS/SUBSCRIPTS CONVERSION ===
+    # Convert Unicode superscripts to TeX: x² -> x^2, x³ -> x^3, xⁿ -> x^n
+    superscript_map = {
+        '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
+        '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+        'ⁿ': 'n'
+    }
+    
+    subscript_map = {
+        '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4',
+        '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
+        'ᵢ': 'i', 'ⱼ': 'j', 'ₖ': 'k'
+    }
+    
+    # Replace Unicode superscripts: x² -> x^{2}
+    for unicode_char, tex_char in superscript_map.items():
+        # Match letter followed by superscript
+        normalized = re.sub(f'([a-zA-Z]){re.escape(unicode_char)}',
+                           lambda m: f"{m.group(1)}^{{{tex_char}}}", normalized)
+    
+    # Replace Unicode subscripts: x₁ -> x_{1}
+    for unicode_char, tex_char in subscript_map.items():
+        # Match letter followed by subscript
+        normalized = re.sub(f'([a-zA-Z]){re.escape(unicode_char)}',
+                           lambda m: f"{m.group(1)}_{{{tex_char}}}", normalized)
+    
+    # === UNICODE REPLACEMENTS ===
+    normalized = normalized.replace('−', '-')
+    normalized = normalized.replace('–', '-')
+    normalized = normalized.replace('—', '-')
+    normalized = normalized.replace('≤', r'\le ')
+    normalized = normalized.replace('≥', r'\ge ')
+    normalized = normalized.replace('∑', r'\sum ')
+    normalized = normalized.replace('×', r'\times ')
+    normalized = normalized.replace('÷', r'\div ')
+    normalized = normalized.replace('·', r'\cdot ')
+    normalized = normalized.replace('…', r'\ldots ')
+
+    normalized = re.sub(r'([A-Za-z0-9Α-Ωα-ωπΠ])\s*¯', r'\\bar{\1}', normalized)
+
+    normalized = normalized.replace('ϕ', r'\phi ')
+    normalized = normalized.replace('φ', r'\phi ')
+    normalized = normalized.replace('β', r'\beta ')
+    normalized = normalized.replace('π', r'\pi ')
+    normalized = normalized.replace('Π', r'\Pi ')
+
+    normalized = re.sub(r'\bPr\(', r'\\Pr(', normalized)
+    
+    # === SUBSCRIPT NOTATION FIXES (CONSERVATIVE) ===
+    # Only fix patterns we're very confident about:
+    
+    # Pattern 1: Letter(s) followed by comma-subscript (B-spline: Bi,1 -> B_{i,1})
+    # This is very safe because commas are rarely used otherwise in math
+    normalized = re.sub(r'([A-Za-z])([a-z]+),(\d+)', r'\1_{\2,\3}', normalized)
+    
+    # Pattern 2: Specific known subscript patterns with operators immediately following
+    # ti+ -> t_{i}+, ti- -> t_{i}-, ti) -> t_{i}), etc.
+    # Only for lowercase single letters followed by single letter then operator
+    normalized = re.sub(r'(?<![\\a-zA-Z])([tTxXaAbBiI])([a-z])([+\-\)<>\]]\b)', 
+                       r'\1_{\2}\3', normalized)
+
+    # === SYNTAX ERROR FIXES ===
+    normalized = normalized.replace('^)', ')')
+    normalized = normalized.replace('^]', ']')
+    normalized = re.sub(r'(\)|\])([0-9]+)', r'\1^\2', normalized)
+
+    normalized = re.sub(r'\s{2,}', ' ', normalized).strip()
+    return normalized
+
+
+def _is_probably_math_line(line):
+    """
+    Heuristic check for lines that are likely intended as math expressions.
+
+    :param string line: A single line of markdown text.
+
+    :return: True if line likely represents math, else False.
+    """
+
+    stripped = line.strip()
+    if not stripped or len(stripped) < 12:
+        return False
+
+    word_count = len(stripped.split())
+    if word_count >= 6 and re.match(r'^(where|let|the|this|that|and|or)\b', stripped, re.IGNORECASE):
+        return False
+
+    if stripped.startswith(('#', '>', '-', '*', '`', '|')):
+        return False
+
+    if 'http://' in stripped or 'https://' in stripped:
+        return False
+
+    if '$' in stripped or '\\[' in stripped or '\\]' in stripped or '\\(' in stripped or '\\)' in stripped:
+        return False
+
+    has_core_math = '=' in stripped and any(sym in stripped for sym in ('^', 'π', 'Π', '¯', '−', '-', '(', ')', '[', ']'))
+    has_tex_command = bool(re.search(r'\\(frac|sqrt|sum|int|bar|alpha|beta|gamma|pi)\b', stripped))
+
+    return has_core_math or has_tex_command
+
+
+def _auto_wrap_bare_math_lines(markdown_text):
+    """
+    Wrap likely bare math lines as display math so they can be rendered.
+
+    :param string markdown_text: Original markdown text.
+
+    :return: Updated markdown text with wrapped bare math lines.
+    """
+
+    wrapped_lines = []
+    for line in markdown_text.splitlines():
+        if _is_probably_math_line(line):
+            wrapped_lines.append(f"$$\n{line.strip()}\n$$")
+        else:
+            wrapped_lines.append(line)
+
+    return '\n'.join(wrapped_lines)
+
+
+def _is_probably_math_token(token):
+    """
+    Heuristic check for bare inline math tokens inside prose.
+
+    :param string token: A token possibly containing inline math.
+
+    :return: True if token likely represents math, else False.
+    """
+
+    if not token:
+        return False
+
+    core = token.strip()
+    core = core.strip("'\".,;:!?")
+    
+    # === EARLY CHECKS FOR OBVIOUS MATH PATTERNS ===
+    
+    # Check for Unicode superscripts/subscripts (x², x³, xⁿ, x₁, etc.)
+    # Includes: superscript numbers (²³⁴⁵⁶⁷⁸⁹), common superscript letters (ⁿ), subscript numbers
+    if any(c in core for c in '⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ₀₁₂₃₄₅₆₇₈₉ᵢⱼₖ'):
+        return True
+    
+    # Check for simple exponents: x^2, y^n, etc. (letter + ^ + something)
+    if re.search(r'^[a-zA-Z]\^[\w\{\}]', core):
+        return True
+    
+    # === SUBSCRIPT/SUPERSCRIPT PATTERNS ===
+    
+    # Pattern checks for math variables:
+    # 1. Double letters: kk, ii, tt
+    # 2. Underscore subscript: t_i, x_n, B_i
+    # 3. Digit subscript: t1, x2, B3
+    # 4. Comma subscript: Bi,1 (B-spline notation), ti,k, etc.
+    
+    is_double_letter = bool(re.fullmatch(r'([a-zA-Z])\1', core))
+    has_underscore_subscript = bool(re.search(r'[a-zA-Z]_[a-zA-Z0-9]', core))
+    has_digit_subscript = bool(re.search(r'[a-zA-Z]\d', core))
+    has_comma_subscript = bool(re.search(r'[a-zA-Z]+,[a-zA-Z0-9+\-]+', core))
+    
+    if core.startswith(('http://', 'https://', 'www.')):
+        return False
+
+    if '$' in core or '\(' in core or '\)' in core or '\[' in core or '\]' in core:
+        return False
+
+    # Reject pure lowercase English words (at least 3 chars), but allow math vars
+    if re.fullmatch(r'[a-z]+', core) and len(core) >= 3:
+        return False
+
+    # Accept short multichar tokens with numbers or uppercase (common math vars like ti, Bi, xi, pi)
+    if re.match(r'^[a-zA-Z]{1,2}\d*[a-zA-Z]?$', core):
+        if len(core) < 3 and (any(c.isupper() for c in core) or has_digit_subscript or has_underscore_subscript or has_comma_subscript):
+            return True
+        if len(core) >= 3:
+            return True
+
+    contains_strong_marker = any(sym in core for sym in (
+        '=', '^', '∑', '≤', '≥', '|', '¯', '−', 'π', 'Π', 'β', 'ϕ', 'φ', '_', '…'
+    ))
+    has_bracket_shape = ('(' in core and ')' in core) or ('[' in core and ']' in core) or ('{' in core and '}' in core)
+    has_greek_symbol = any(sym in core for sym in ('π', 'Π', 'β', 'ϕ', 'φ'))
+
+    return (
+        contains_strong_marker and (has_bracket_shape or len(core) >= 6 or has_greek_symbol)
+    ) or is_double_letter or has_underscore_subscript or has_digit_subscript or has_comma_subscript
+
+
+def _auto_wrap_bare_math_spans(markdown_text):
+    """
+    Wrap likely inline bare math tokens with \(...\) in mixed prose lines.
+    Returns list of (protected_text, replacements_dict) to preserve LaTeX delimiters.
+
+    :param string markdown_text: Original markdown text.
+
+    :return: Tuple of (updated markdown text with placeholders, dict of replacements).
+    """
+
+    replacements = {}
+    counter = [0]
+    
+    def make_placeholder(content):
+        """Create a placeholder for wrapped math formula."""
+        key = f"AUTOBAREMATH{counter[0]}X"
+        counter[0] += 1
+        replacements[key] = f'<span class="math-inline">\\({content}\\)</span>'
+        return key
+
+    def wrap_token(token):
+        # Skip tokens that are already placeholders
+        if 'MATHPLACEHOLDER' in token or 'AUTOBAREMATH' in token:
+            return token
+        
+        # Skip markdown formatting syntax (bold/italic markers)
+        # Complete patterns: _italic_ or __bold__ or *italic* or **bold**
+        if re.match(r'^[_*]{1,2}\w+[_*]{1,2}$', token):
+            return token
+        
+        # Skip incomplete markdown markers (part of multi-token markdown)
+        # _Italic or *bold (starts with marker but no closing on same token)
+        if re.match(r'^[_*]{1,2}[a-zA-Z]', token) and not re.search(r'[_*]$', token):
+            return token
+        # text_ or text) (ends with marker but no opening on same token)
+        if re.search(r'^[a-zA-Z].*[_*]{1,2}$', token) and not re.match(r'^[_*]', token):
+            return token
+            
+        match = re.match(r'^(.*?)([.,;:!?]+)$', token)
+        if match:
+            core = match.group(1)
+            suffix = match.group(2)
+        else:
+            core = token
+            suffix = ''
+
+        if not _is_probably_math_token(core):
+            return token
+
+        normalized_core = _normalize_math_content(core)
+        placeholder = make_placeholder(normalized_core)
+        return f"{placeholder}{suffix}"
+
+    output_lines = []
+    for line in markdown_text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            output_lines.append(line)
+            continue
+
+        is_markdown_table_row = bool(re.match(r'^\s*\|.*\|\s*$', stripped))
+        is_markdown_table_separator = bool(re.match(r'^\s*\|?[\s:-]+\|[\s|:-]*$', stripped))
+
+        if stripped.startswith(('#', '```', '>')) or is_markdown_table_row or is_markdown_table_separator:
+            output_lines.append(line)
+            continue
+
+        if _is_probably_math_line(line):
+            output_lines.append(line)
+            continue
+
+        tokens = line.split(' ')
+        wrapped_tokens = [wrap_token(token) for token in tokens]
+        output_lines.append(' '.join(wrapped_tokens))
+
+    result_text = '\n'.join(output_lines)
+    return result_text, replacements
+
 
 def _protect_math(markdown_text):
     """
@@ -28,20 +309,41 @@ def _protect_math(markdown_text):
     def make_placeholder(content, display=False):
         key = f"MATHPLACEHOLDER{counter[0]}X"
         counter[0] += 1
+        normalized_content = _normalize_math_content(content)
         if display:
-            replacements[key] = f'<div class="math-display">\\[{content}\\]</div>'
+            replacements[key] = f'<div class="math-display">\\[{normalized_content}\\]</div>'
         else:
-            replacements[key] = f'<span class="math-inline">\\({content}\\)</span>'
+            replacements[key] = f'<span class="math-inline">\\({normalized_content}\\)</span>'
         return key
 
     def replace_block(m):
-        return make_placeholder(m.group(1), display=True)
+        content = m.group(1).strip()
+        # Skip empty or whitespace-only blocks
+        if not content:
+            return m.group(0)  # Return original $$...$$
+        return make_placeholder(content, display=True)
 
     def replace_inline(m):
-        return make_placeholder(m.group(1), display=False)
+        content = m.group(1).strip()
+        # Skip empty or whitespace-only inline formulas
+        if not content:
+            return m.group(0)  # Return original $...$
+        return make_placeholder(content, display=False)
 
+    # IMPORTANT ORDER:
+    # 1. Protect explicit math delimiters FIRST ($$...$$, \[...\], $...$, \(...\))
+    # 2. Then apply auto-wrapping for bare math (uses placeholders to avoid markdown2 escaping)
+    
     text = re.sub(r'\$\$([\s\S]+?)\$\$', replace_block, markdown_text)
+    text = re.sub(r'\\\[([\s\S]+?)\\\]', replace_block, text)
     text = re.sub(r'(?<!\$)\$(?!\$)([^\$\n]+?)(?<!\$)\$(?!\$)', replace_inline, text)
+    text = re.sub(r'\\\((.+?)\\\)', replace_inline, text)
+    
+    # Auto-wrap bare math tokens (returns placeholders + dict)
+    text, auto_wrapped = _auto_wrap_bare_math_spans(text)
+    replacements.update(auto_wrapped)  # Merge auto-wrapped formulas
+    
+    text = _auto_wrap_bare_math_lines(text)
 
     return text, replacements
 
@@ -81,17 +383,41 @@ def _get_mathjax_script():
         <script>
             window.MathJax = {
                 tex: {
-                    inlineMath: [['\\\\(', '\\\\)']],
-                    displayMath: [['\\\\[', '\\\\]']],
+                    inlineMath: [['\\\\(', '\\\\)'], ['$', '$']],
+                    displayMath: [['\\\\[', '\\\\]'], ['$$', '$$']],
                     processEscapes: true,
-                    processEnvironments: true
+                    processEnvironments: true,
+                    tagSide: 'right'
+                },
+                svg: {
+                    fontCache: 'global',
+                    scale: 1
                 },
                 options: {
-                    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+                    processHtmlClass: 'math-display|math-inline',
+                    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+                    ignoreHtmlClass: 'no-mathjax'
                 }
             };
         </script>
-        <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+        <script>
+            (function() {
+                function processMath() {
+                    if (window.MathJax && window.MathJax.typesetPromise) {
+                        MathJax.typesetPromise().catch(function(err) {
+                            console.error('MathJax rendering error:', err);
+                        });
+                    }
+                }
+                // Wait for MathJax to be fully loaded
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', processMath);
+                } else {
+                    setTimeout(processMath, 0);
+                }
+            })();
+        </script>
     """
 
 
