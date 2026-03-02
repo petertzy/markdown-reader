@@ -282,6 +282,14 @@ class MarkdownReader:
         self._ime_states[wid] = {'active': False}
         
         def intercept_key(event):
+            """ 
+            Detects when a key has been pressed and updates the document accordingly.
+            
+            :param event event: The keypress event.
+
+            :return: A None value.
+            """
+
             state = self._ime_states[wid]
             
             # Detect IME activation (macOS IME emits empty char with keycode 0)
@@ -328,6 +336,10 @@ class MarkdownReader:
             return None
         
         def delete_ime_char():
+            """
+            Takes the most recently inserted character, and if its a lowercase letter (IME composition character), delete it.
+            """
+            
             try:
                 # Get current cursor position
                 current_index = text_area.index('insert')
