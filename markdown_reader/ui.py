@@ -500,43 +500,17 @@ class MarkdownReader:
 
     def on_tab_click(self, event):
         """
-        Handles click events on notebook tabs to detect close button clicks.
+        Handles click events on notebook tabs.
+        
+        Note: Close button clicks are handled by the button's own command,
+        not by this method. This prevents accidental tab closure when clicking
+        on the tab label.
 
         :param event event: The click event to be handled.
-
-        :return: The string "break" if a tab was closed, else does not return anything.
-
-        :raises RuntimeError: If there is an unspecified error in the function.
         """
-
-        try:
-            # Identify which tab was clicked
-            element = self.notebook.tk.call(self.notebook._w, "identify", "tab", event.x, event.y)
-            if element == "":
-                return
-            tab_index = int(element)
-            tab_text = self.notebook.tab(tab_index, "text")
-            
-            # Only proceed if × is in the tab text
-            if "×" not in tab_text:
-                return
-
-            # Use actual tab bbox instead of estimated font width
-            tab_bbox = self.notebook.bbox(tab_index)
-            if not tab_bbox:
-                return
-
-            tab_x, _, tab_width, _ = tab_bbox
-            relative_x = event.x - tab_x
-
-            # If click is in the last 30 pixels of the tab, consider it a close click
-            close_button_width = 30
-            if relative_x >= (tab_width - close_button_width):
-                self.close_tab_by_index(tab_index)
-                return "break"  # Prevent default tab selection behavior
-                
-        except Exception as e:
-            print(f"Error in on_tab_click: {e}")
+        # Tab selection is handled automatically by ttk.Notebook
+        # Close button has its own command handler
+        pass
 
 
     def show_tab_context_menu(self, event):
