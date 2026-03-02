@@ -740,9 +740,55 @@ def export_to_docx(app, output_path):
         return False
     
     try:
+        import requests
+        from io import BytesIO
+
         idx = app.notebook.index(app.notebook.select())
         text_area = app.editors[idx]
         markdown_text = text_area.get("1.0", "end-1c")
+
+        current_path = None
+        base_dir = None
+        if hasattr(app, 'file_paths') and app.file_paths and idx < len(app.file_paths):
+            current_path = app.file_paths[idx]
+            if current_path:
+                base_dir = os.path.dirname(current_path)
+
+        def resolve_image_source(src):
+            src = src.strip().strip('<>')
+            if (src.startswith('"') and src.endswith('"')) or (src.startswith("'") and src.endswith("'")):
+                src = src[1:-1]
+
+            if src.startswith('file://'):
+                src = src[7:]
+
+            if re.match(r'^https?://', src, re.IGNORECASE):
+                return 'remote', src
+
+            if os.path.isabs(src):
+                return 'local', src
+
+            if base_dir:
+                return 'local', os.path.abspath(os.path.join(base_dir, src))
+
+            return 'local', os.path.abspath(src)
+
+        def insert_image(doc_obj, src):
+            kind, value = resolve_image_source(src)
+            try:
+                if kind == 'remote':
+                    response = requests.get(value, timeout=15, allow_redirects=True)
+                    response.raise_for_status()
+                    doc_obj.add_picture(BytesIO(response.content), width=Inches(6.2))
+                else:
+                    if not os.path.exists(value):
+                        return False
+                    doc_obj.add_picture(value, width=Inches(6.2))
+
+                doc_obj.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                return True
+            except Exception:
+                return False
         
         # Create a new Word document
         doc = Document()
@@ -783,6 +829,27 @@ def export_to_docx(app, output_path):
             
             # Skip empty lines
             if not line.strip():
+                i += 1
+                continue
+
+            # Markdown image: ![alt](src)
+            md_image_match = re.match(r'^\s*!\[([^\]]*)\]\(([^)]+)\)\s*$', line)
+            if md_image_match:
+                alt_text = md_image_match.group(1).strip()
+                src = md_image_match.group(2).strip()
+                if not insert_image(doc, src):
+                    doc.add_paragraph(alt_text if alt_text else src)
+                i += 1
+                continue
+
+            # HTML image: <img ... src="..." ...>
+            html_image_match = re.match(r'^\s*<img\b[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>\s*$', line, re.IGNORECASE)
+            if html_image_match:
+                src = html_image_match.group(1).strip()
+                alt_match = re.search(r'\balt=["\']([^"\']*)["\']', line, re.IGNORECASE)
+                alt_text = alt_match.group(1).strip() if alt_match else ''
+                if not insert_image(doc, src):
+                    doc.add_paragraph(alt_text if alt_text else src)
                 i += 1
                 continue
             
