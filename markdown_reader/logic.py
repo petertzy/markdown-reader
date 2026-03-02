@@ -15,7 +15,13 @@ import traceback
 def _protect_math(markdown_text):
     """
     Protects math expressions from being escaped by markdown2.
+
+    :param string markdown_text: The Markdown text to check for math.
+
+    :return: A string text containing the Markdown text with the maths swapped for placeholders and 
+    a dictionary containing the math divs with placeholder text keys.
     """
+
     replacements = {}
     counter = [0]
 
@@ -43,7 +49,13 @@ def _protect_math(markdown_text):
 def _restore_math(html_content, replacements):
     """
     Restores math placeholders back to MathJax-compatible HTML.
+
+    :param string html_content: The string containing the HTML containing placeholders where math should be.
+    :param Dictionary<string, string> replacements: The math expressions taken from the original Markdown to be reinserted.
+
+    :return: A string containing the updated HTML with the math equations reinserted.
     """
+
     for key, value in replacements.items():
         html_content = html_content.replace(key, value)
         html_content = html_content.replace(f'<p>{key}</p>', value)
