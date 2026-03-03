@@ -515,13 +515,9 @@ class MarkdownReader:
             if element == "":
                 return
             tab_index = int(element)
-            tab_text = self.notebook.tab(tab_index, "text")
-            
-            # Only proceed if × is in the tab text
-            if "×" not in tab_text:
-                return
 
-            # Use actual tab bbox instead of estimated font width
+            # Check if we have a custom tab with close button by checking tab's internal widgets
+            # Use bbox to find the tab area
             tab_bbox = self.notebook.bbox(tab_index)
             if not tab_bbox:
                 return
