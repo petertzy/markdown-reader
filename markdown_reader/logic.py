@@ -2,6 +2,7 @@ import markdown2
 import os
 import webbrowser
 import re
+from pathlib import Path
 import html2text
 from html import escape as html_escape
 from tkinter import messagebox
@@ -138,7 +139,18 @@ def _auto_wrap_bare_math_lines(markdown_text):
     """
 
     wrapped_lines = []
+    in_fenced_code = False
     for line in markdown_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fenced_code = not in_fenced_code
+            wrapped_lines.append(line)
+            continue
+
+        if in_fenced_code or _is_markdown_media_line(stripped):
+            wrapped_lines.append(line)
+            continue
+
         if _is_probably_math_line(line):
             wrapped_lines.append(f"$$\n{line.strip()}\n$$")
         else:
@@ -161,6 +173,9 @@ def _is_probably_math_token(token):
 
     core = token.strip()
     core = core.strip("'\".,;:!?")
+
+    if _looks_like_url_or_path(core):
+        return False
     
     # === EARLY CHECKS FOR OBVIOUS MATH PATTERNS ===
     
@@ -186,7 +201,7 @@ def _is_probably_math_token(token):
     has_digit_subscript = bool(re.search(r'[a-zA-Z]\d', core))
     has_comma_subscript = bool(re.search(r'[a-zA-Z]+,[a-zA-Z0-9+\-]+', core))
     
-    if core.startswith(('http://', 'https://', 'www.')):
+    if core.startswith(('http://', 'https://', 'www.', 'file://')):
         return False
 
     if '$' in core or '\(' in core or '\)' in core or '\[' in core or '\]' in core:
@@ -214,6 +229,47 @@ def _is_probably_math_token(token):
     ) or is_double_letter or has_underscore_subscript or has_digit_subscript or has_comma_subscript
 
 
+def _looks_like_url_or_path(text):
+    """
+    Checks whether a token likely represents a URL/file path rather than math.
+    """
+
+    if not text:
+        return False
+
+    lowered = text.lower()
+    if lowered.startswith(("http://", "https://", "file://", "www.")):
+        return True
+
+    if "/" in text or "\\" in text:
+        return True
+
+    if re.search(r'\.(png|jpg|jpeg|gif|webp|svg|bmp|pdf|md|txt|py|js|ts|json|yml|yaml)$', lowered):
+        return True
+
+    return False
+
+
+def _is_markdown_media_line(stripped_line):
+    """
+    True for markdown image/link lines that should bypass math auto-wrap.
+    """
+
+    if not stripped_line:
+        return False
+
+    if re.match(r'^!\[[^\]]*\]\([^)]+\)$', stripped_line):
+        return True
+
+    if re.match(r'^\[[^\]]+\]\([^)]+\)$', stripped_line):
+        return True
+
+    if "<img" in stripped_line.lower():
+        return True
+
+    return False
+
+
 def _auto_wrap_bare_math_spans(markdown_text):
     """
     Wrap likely inline bare math tokens with \(...\) in mixed prose lines.
@@ -239,6 +295,10 @@ def _auto_wrap_bare_math_spans(markdown_text):
         if 'MATHPLACEHOLDER' in token or 'AUTOBAREMATH' in token:
             return token
         
+        # Skip URLs / file paths / markdown image-link token bodies
+        if _looks_like_url_or_path(token) or token.startswith('![') or '](' in token:
+            return token
+
         # Skip markdown formatting syntax (bold/italic markers)
         # Complete patterns: _italic_ or __bold__ or *italic* or **bold**
         if re.match(r'^[_*]{1,2}\w+[_*]{1,2}$', token):
@@ -268,16 +328,26 @@ def _auto_wrap_bare_math_spans(markdown_text):
         return f"{placeholder}{suffix}"
 
     output_lines = []
+    in_fenced_code = False
     for line in markdown_text.splitlines():
         stripped = line.strip()
         if not stripped:
             output_lines.append(line)
             continue
 
+        if stripped.startswith('```'):
+            in_fenced_code = not in_fenced_code
+            output_lines.append(line)
+            continue
+
         is_markdown_table_row = bool(re.match(r'^\s*\|.*\|\s*$', stripped))
         is_markdown_table_separator = bool(re.match(r'^\s*\|?[\s:-]+\|[\s|:-]*$', stripped))
 
-        if stripped.startswith(('#', '```', '>')) or is_markdown_table_row or is_markdown_table_separator:
+        if in_fenced_code or _is_markdown_media_line(stripped):
+            output_lines.append(line)
+            continue
+
+        if stripped.startswith(('#', '>')) or is_markdown_table_row or is_markdown_table_separator:
             output_lines.append(line)
             continue
 
@@ -1010,43 +1080,370 @@ def convert_html_to_markdown(html_content):
 
 def convert_pdf_to_markdown(pdf_path):
     """
-    Converts a PDF file's content to Markdown format.
+    Converts a PDF file's content to Markdown format with high-fidelity formatting preservation.
+    Uses PyMuPDF (fitz) to extract detailed formatting information including font sizes,
+    bold/italic text, and document structure.
     
     :param string pdf_path: The file path for the PDF file.
     
     :return: A string containing Markdown code representing the converted PDF file.
 
-    :raises ImportError: If the pypdf library is not installed.
+    :raises ImportError: If the required libraries are not installed.
     :raises ConversionError: If the PDF cannot be converted to Markdown.
     """
 
     try:
-        from pypdf import PdfReader
-        
-        # Read the PDF file
-        reader = PdfReader(pdf_path)
-        
-        # Extract text from all pages
-        markdown_text = ""
-        for page_num, page in enumerate(reader.pages, 1):
-            text = page.extract_text()
-            if text.strip():
-                # Add page number as heading
-                if len(reader.pages) > 1:
-                    markdown_text += f"## Page {page_num}\n\n"
-                markdown_text += text + "\n\n"
-        
-        # Clean up excessive blank lines
-        markdown_text = re.sub(r'\n{3,}', '\n\n', markdown_text)
-        
+        import fitz
+
+        pdf_abs_path = os.path.abspath(pdf_path)
+        pdf_base_dir = os.path.dirname(pdf_abs_path)
+        pdf_stem = os.path.splitext(os.path.basename(pdf_abs_path))[0]
+        asset_dir = os.path.join(pdf_base_dir, f"{pdf_stem}_assets")
+        os.makedirs(asset_dir, exist_ok=True)
+
+        doc = fitz.open(pdf_abs_path)
+        output_lines = []
+        image_counter = 0
+
+        for page_num in range(len(doc)):
+            if page_num > 0:
+                output_lines.append("---")
+                output_lines.append("")
+
+            page = doc[page_num]
+            blocks = page.get_text("dict").get("blocks", [])
+
+            font_sizes = []
+            for block in blocks:
+                if block.get("type") == 0:
+                    for line in block.get("lines", []):
+                        for span in line.get("spans", []):
+                            font_sizes.append(span.get("size", 12))
+
+            if font_sizes:
+                avg_size = sum(font_sizes) / len(font_sizes)
+                heading1_threshold = avg_size * 1.5
+                heading2_threshold = avg_size * 1.3
+                heading3_threshold = avg_size * 1.15
+            else:
+                heading1_threshold = 18
+                heading2_threshold = 16
+                heading3_threshold = 14
+
+            in_code_block = False
+            pending_list_marker = False
+
+            for block in blocks:
+                block_type = block.get("type")
+
+                if block_type == 1:
+                    # Check image dimensions to filter out small decorative images/emojis
+                    bbox = block.get("bbox")
+                    if bbox:
+                        width = bbox[2] - bbox[0]
+                        height = bbox[3] - bbox[1]
+                        # Skip images smaller than 50x50 pixels (likely emojis/icons)
+                        if width < 50 or height < 50:
+                            continue
+                    
+                    image_bytes = block.get("image")
+                    image_ext = block.get("ext") or "png"
+                    if image_bytes:
+                        image_counter += 1
+                        image_filename = f"page_{page_num + 1}_img_{image_counter}.{image_ext}"
+                        image_path = os.path.join(asset_dir, image_filename)
+                        with open(image_path, "wb") as image_file:
+                            image_file.write(image_bytes)
+                        image_uri = Path(image_path).as_uri()
+                        if in_code_block:
+                            output_lines.append("```")
+                            output_lines.append("")
+                            in_code_block = False
+                        output_lines.append(f"![page-{page_num + 1}-image-{image_counter}]({image_uri})")
+                        output_lines.append("")
+                    continue
+
+                if block_type != 0:
+                    continue
+
+                for line in block.get("lines", []):
+                    line_parts = []
+                    max_font_size = 0
+                    has_monospace = False
+
+                    for span in line.get("spans", []):
+                        raw_text = span.get("text", "")
+                        if not raw_text:
+                            continue
+
+                        text = raw_text.strip()
+                        if not text:
+                            continue
+
+                        font_size = span.get("size", 12)
+                        font_flags = span.get("flags", 0)
+                        font_name = (span.get("font", "") or "").lower()
+
+                        is_bold = (font_flags & 2**4) != 0 or "bold" in font_name
+                        is_italic = (font_flags & 2**1) != 0 or "italic" in font_name
+                        is_mono = ("mono" in font_name) or ("courier" in font_name) or ("consolas" in font_name)
+
+                        if is_bold and is_italic:
+                            text = f"***{text}***"
+                        elif is_bold:
+                            text = f"**{text}**"
+                        elif is_italic:
+                            text = f"*{text}*"
+
+                        line_parts.append(text)
+                        max_font_size = max(max_font_size, font_size)
+                        has_monospace = has_monospace or is_mono
+
+                    line_text = " ".join(line_parts).strip()
+                    if not line_text:
+                        output_lines.append("")
+                        continue
+
+                    if _is_standalone_list_marker(line_text):
+                        pending_list_marker = True
+                        continue
+
+                    is_code_line = _is_pdf_code_line(line_text, has_monospace)
+                    if is_code_line:
+                        if not in_code_block:
+                            output_lines.append("```bash")
+                            in_code_block = True
+                        output_lines.append(line_text)
+                        continue
+
+                    if in_code_block:
+                        output_lines.append("```")
+                        output_lines.append("")
+                        in_code_block = False
+
+                    if _is_list_item(line_text):
+                        output_lines.append(f"- {_clean_list_item(line_text)}")
+                        pending_list_marker = False
+                        continue
+
+                    if pending_list_marker:
+                        output_lines.append(f"- {line_text}")
+                        pending_list_marker = False
+                        continue
+
+                    if max_font_size >= heading1_threshold:
+                        clean_heading = line_text.replace("**", "").replace("*", "")
+                        output_lines.append(f"# {clean_heading}")
+                        output_lines.append("")
+                    elif max_font_size >= heading2_threshold:
+                        clean_heading = line_text.replace("**", "").replace("*", "")
+                        output_lines.append(f"## {clean_heading}")
+                        output_lines.append("")
+                    elif max_font_size >= heading3_threshold:
+                        clean_heading = line_text.replace("**", "").replace("*", "")
+                        output_lines.append(f"### {clean_heading}")
+                        output_lines.append("")
+                    else:
+                        output_lines.append(line_text)
+
+                output_lines.append("")
+
+            if in_code_block:
+                output_lines.append("```")
+                output_lines.append("")
+
+            pending_list_marker = False
+
+        doc.close()
+
+        markdown_text = "\n".join(output_lines)
+        markdown_text = re.sub(r'\n{4,}', '\n\n\n', markdown_text)
         return markdown_text.strip()
         
-    except ImportError:
-        messagebox.showerror("Import Error", "pypdf library is not installed. Please install it using: pip install pypdf")
-        return ""
+    except ImportError as e:
+        # Fallback to pypdf if PyMuPDF is not available
+        try:
+            return _convert_pdf_to_markdown_fallback(pdf_path)
+        except:
+            messagebox.showerror("Import Error", 
+                "PyMuPDF library is not installed for advanced PDF conversion.\n"
+                "Please install it using: pip install PyMuPDF\n\n"
+                "Falling back to basic conversion, but formatting may be lost.")
+            return _convert_pdf_to_markdown_fallback(pdf_path)
     except Exception as e:
         messagebox.showerror("Conversion Error", f"Failed to convert PDF to Markdown: {e}")
         return ""
+
+
+def _convert_pdf_to_markdown_fallback(pdf_path):
+    """
+    Fallback PDF conversion using pypdf when PyMuPDF is not available.
+    This provides basic conversion without formatting preservation.
+    
+    :param string pdf_path: The file path for the PDF file.
+    :return: A string containing basic Markdown conversion.
+    """
+    
+    from pypdf import PdfReader
+    
+    reader = PdfReader(pdf_path)
+    markdown_text = ""
+    in_code_block = False
+    pending_list_marker = False
+
+    for page_num, page in enumerate(reader.pages, 1):
+        text = page.extract_text()
+        if text.strip():
+            if page_num > 1:
+                if in_code_block:
+                    markdown_text += "```\n\n"
+                    in_code_block = False
+                markdown_text += "---\n\n"
+
+            lines = text.split('\n')
+            for line in lines:
+                line = line.rstrip()
+                if not line.strip():
+                    markdown_text += "\n"
+                    continue
+
+                stripped = line.strip()
+                if _is_standalone_list_marker(stripped):
+                    pending_list_marker = True
+                    continue
+
+                if _is_pdf_code_line(line, False):
+                    if not in_code_block:
+                        markdown_text += "```bash\n"
+                        in_code_block = True
+                    markdown_text += line.strip() + "\n"
+                    continue
+
+                if in_code_block:
+                    markdown_text += "```\n\n"
+                    in_code_block = False
+
+                if _is_list_item(stripped):
+                    cleaned = _clean_list_item(stripped)
+                    markdown_text += f"- {cleaned}\n"
+                    pending_list_marker = False
+                elif pending_list_marker:
+                    markdown_text += f"- {stripped}\n"
+                    pending_list_marker = False
+                else:
+                    markdown_text += stripped + "\n"
+
+            markdown_text += "\n"
+            pending_list_marker = False
+
+    if in_code_block:
+        markdown_text += "```\n"
+
+    return markdown_text.strip()
+
+
+def _is_pdf_code_line(line, has_monospace_font=False):
+    """
+    Heuristic detection for code-like lines in PDF extraction.
+
+    :param string line: A single extracted line.
+    :param bool has_monospace_font: Whether line includes monospace span.
+    :return: True if the line is likely code.
+    """
+
+    stripped = line.strip()
+    if not stripped:
+        return False
+
+    if re.match(r'^\*{0,2}\d+[\.)]\s+.+\*{0,2}$', stripped):
+        return False
+    if re.match(r'^#+\s+', stripped):
+        return False
+    if stripped.startswith(('![', '[', '>')):
+        return False
+
+    if has_monospace_font:
+        return True
+
+    if line.startswith('    ') or line.startswith('\t'):
+        return True
+
+    code_patterns = [
+        r'^\$\s+\S+',
+        r'^(sudo|pip|python|python3|npm|node|git|cd|ls|mkdir|rm|cp|mv)\b',
+        r'^(if|for|while|def|class|return|import|from|try|except|else|elif)\b',
+        r'\b(function|const|let|var|echo|export|chmod|chown|brew|apt|yum|conda)\b',
+        r'`[^`]+`'
+    ]
+
+    for pattern in code_patterns:
+        if re.search(pattern, stripped):
+            return True
+
+    return False
+
+
+def _is_standalone_list_marker(line):
+    """
+    Detect lines that contain only a list marker (common in PDF extraction),
+    so the next text line can be merged into one markdown list item.
+    """
+
+    stripped = line.strip()
+    if not stripped:
+        return False
+
+    bullet_markers = {'•', '●', '○', '▪', '▫', '■', '□', '✓', '✔', '*', '-', '–', '—'}
+    if stripped in bullet_markers:
+        return True
+
+    if re.fullmatch(r'(\d+|[a-zA-Z]|[ivxIVX]+)[\.)]', stripped):
+        return True
+
+    return False
+
+
+def _is_list_item(line):
+    """
+    Determines if a line is a list item.
+    
+    :param string line: The line to check.
+    
+    :return: Boolean indicating if the line is a list item.
+    """
+    
+    # Check for common list patterns
+    patterns = [
+        r'^\s*[•●○▪▫■□✓✔]\s*\S+',  # Bullet points
+        r'^\s*[-–—]\s*\S+',          # Dashes
+        r'^\s*\d+[\.)]\s+',       # Numbered (1. or 1))
+        r'^\s*[a-z][\.)]\s+',     # Lettered (a. or a))
+        r'^\s*[ivxIVX]+[\.)]\s+', # Roman numerals
+    ]
+    
+    for pattern in patterns:
+        if re.match(pattern, line):
+            return True
+    
+    return False
+
+
+def _clean_list_item(line):
+    """
+    Removes list markers from a line.
+    
+    :param string line: The line to clean.
+    
+    :return: Cleaned line text.
+    """
+    
+    # Remove common list markers
+    cleaned = re.sub(r'^\s*[•●○▪▫■□✓✔-–—]\s+', '', line)
+    cleaned = re.sub(r'^\s*\d+[\.)]\s+', '', cleaned)
+    cleaned = re.sub(r'^\s*[a-z][\.)]\s+', '', cleaned)
+    cleaned = re.sub(r'^\s*[ivxIVX]+[\.)]\s+', '', cleaned)
+    
+    return cleaned.strip()
 
 
 def export_to_docx(app, output_path):
