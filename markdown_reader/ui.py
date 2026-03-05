@@ -965,13 +965,13 @@ class MarkdownReader:
 
     def _on_ctrl_scroll(self, event):
         """
-        Zooms font size when Ctrl is held, otherwise scrolls normally.
-        Scrolling is performed explicitly because widget-level bindings
-        suppress the Text class's built-in scroll via "break".
+        Zooms font size when Ctrl is held, otherwise allows normal scrolling.
+        When zooming, returns "break" to prevent default scroll.
+        When scrolling, doesn't return "break" to allow scrollbar updates.
 
         :param Event event: The MouseWheel event.
 
-        :return: A str "break" to prevent the default Text scroll handler.
+        :return: A str "break" only when zooming, None when scrolling normally.
         """
 
         if event.state & 0x4:
@@ -979,19 +979,18 @@ class MarkdownReader:
                 self.change_font_size(1)
             else:
                 self.change_font_size(-1)
-        else:
-            event.widget.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        return "break"
+            return "break"
+        # For normal scrolling, don't return "break" to allow default behavior
 
 
     def _on_linux_scroll(self, event):
         """
         Zooms font size on Ctrl+scroll for Linux (Button-4/5 events),
-        otherwise scrolls normally.
+        otherwise allows normal scrolling.
 
         :param Event event: The button event (num 4 = up, 5 = down).
 
-        :return: A str "break" to prevent the default Text scroll handler.
+        :return: A str "break" only when zooming, None when scrolling normally.
         """
 
         if event.state & 0x4:
@@ -999,9 +998,8 @@ class MarkdownReader:
                 self.change_font_size(1)
             else:
                 self.change_font_size(-1)
-        else:
-            event.widget.yview_scroll(-1 if event.num == 4 else 1, "units")
-        return "break"
+            return "break"
+        # For normal scrolling, don't return "break" to allow default behavior
 
 
     def _on_middle_press(self, event):
@@ -1010,33 +1008,38 @@ class MarkdownReader:
 
         :param Event event: The middle mouse button press event.
 
-        :return: A str "break" to prevent the default Text scan-drag.
+        :return: None to allow default scroll behavior.
         """
 
         self._zoom_drag_y = event.y_root
         self._zoom_drag_base_size = self.font_size_var.get()
-        return "break"
+        self._zoom_activated = False
 
 
     def _on_middle_drag(self, event):
         """
         Zooms font size based on vertical mouse movement while middle button
         is held. Moving up zooms in, moving down zooms out (10px per step).
+        Only activates zoom with significant movement (>15px).
 
         :param Event event: The mouse motion event.
 
-        :return: A str "break" to prevent the default Text scan-drag.
+        :return: A str "break" only when actively zooming.
         """
 
         if not hasattr(self, '_zoom_drag_y'):
             return
         delta_px = self._zoom_drag_y - event.y_root
-        new_size = max(6, self._zoom_drag_base_size + delta_px // 10)
-        if new_size != self.font_size_var.get():
-            self.font_size_var.set(new_size)
-            self.apply_font(self.font_var.get())
-            self.current_font_size = new_size
-        return "break"
+        
+        # Only activate zoom if movement is significant
+        if abs(delta_px) > 15:
+            self._zoom_activated = True
+            new_size = max(6, self._zoom_drag_base_size + delta_px // 10)
+            if new_size != self.font_size_var.get():
+                self.font_size_var.set(new_size)
+                self.apply_font(self.font_var.get())
+                self.current_font_size = new_size
+            return "break"
 
 
     def _on_middle_release(self, event):
@@ -1045,14 +1048,16 @@ class MarkdownReader:
 
         :param Event event: The middle mouse button release event.
 
-        :return: A str "break" to prevent the default Text scan-drag.
+        :return: None to allow default behavior.
         """
 
         if hasattr(self, '_zoom_drag_y'):
+            if hasattr(self, '_zoom_activated') and self._zoom_activated:
+                self.update_preview()
             del self._zoom_drag_y
             del self._zoom_drag_base_size
-            self.update_preview()
-        return "break"
+            if hasattr(self, '_zoom_activated'):
+                del self._zoom_activated
 
 
     def toggle_bold(self):
