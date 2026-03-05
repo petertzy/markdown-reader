@@ -31,6 +31,10 @@ if __name__ == "__main__":
         print(f"   Warning: tkinterdnd2 not installed, drag-and-drop will be disabled")
         print(f"   Error: {e}")
         root = ttkb.Window(themename="darkly")
+    
+    # Ensure window is resizable (set before creating app)
+    root.resizable(width=True, height=True)
+    print(f"🔧 Initial window resizable setting: {root.resizable()}")
 
     app = MarkdownReader(root)
     

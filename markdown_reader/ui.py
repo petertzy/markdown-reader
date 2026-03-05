@@ -64,6 +64,24 @@ class MarkdownReader:
         self.root = root
         self.root.title("Markdown Reader")
         self.root.geometry("1280x795")
+        
+        # Enable window resizing - force both width and height to be resizable
+        self.root.resizable(width=True, height=True)
+        # Set minimum window size to prevent it from being too small
+        self.root.minsize(800, 600)
+        
+        # For macOS: ensure the window manager allows resizing
+        try:
+            # Try to set macOS-specific attributes
+            if self.root.tk.call('tk', 'windowingsystem') == 'aqua':
+                # Ensure full zoom button functionality on macOS
+                self.root.wm_attributes('-zoomed', False)
+        except Exception as e:
+            print(f"Note: Could not set macOS window attributes: {e}")
+        
+        # Print debug info
+        print(f"✅ Window resizable: width={self.root.resizable()[0]}, height={self.root.resizable()[1]}")
+        
         self.dark_mode = False
         self.preview_file = get_preview_file()
         self.current_file_path = None
