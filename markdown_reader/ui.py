@@ -70,18 +70,6 @@ class MarkdownReader:
         # Set minimum window size to prevent it from being too small
         self.root.minsize(800, 600)
         
-        # For macOS: ensure the window manager allows resizing
-        try:
-            # Try to set macOS-specific attributes
-            if self.root.tk.call('tk', 'windowingsystem') == 'aqua':
-                # Ensure full zoom button functionality on macOS
-                self.root.wm_attributes('-zoomed', False)
-        except Exception as e:
-            print(f"Note: Could not set macOS window attributes: {e}")
-        
-        # Print debug info
-        print(f"✅ Window resizable: width={self.root.resizable()[0]}, height={self.root.resizable()[1]}")
-        
         self.dark_mode = False
         self.preview_file = get_preview_file()
         self.current_file_path = None
@@ -519,12 +507,11 @@ class MarkdownReader:
     def on_tab_click(self, event):
         """
         Handles click events on notebook tabs to detect close button clicks.
+        Closes tab when clicking near the × symbol (rightmost area).
 
         :param event event: The click event to be handled.
 
         :return: The string "break" if a tab was closed, else does not return anything.
-
-        :raises RuntimeError: If there is an unspecified error in the function.
         """
 
         try:
@@ -532,6 +519,7 @@ class MarkdownReader:
             element = self.notebook.tk.call(self.notebook._w, "identify", "tab", event.x, event.y)
             if element == "":
                 return
+            
             tab_index = int(element)
             tab_text = self.notebook.tab(tab_index, "text")
             
@@ -539,22 +527,44 @@ class MarkdownReader:
             if "×" not in tab_text:
                 return
 
-            # Use actual tab bbox instead of estimated font width
+            # Get the tab's bounding box for x position
             tab_bbox = self.notebook.bbox(tab_index)
             if not tab_bbox:
                 return
-
-            tab_x, _, tab_width, _ = tab_bbox
+                
+            tab_x = tab_bbox[0]
             relative_x = event.x - tab_x
-
-            # If click is in the last 30 pixels of the tab, consider it a close click
+            
+            # Use font to measure actual text width
+            import tkinter.font as tkfont
+            # Get the default font used by ttk.Notebook tabs
+            try:
+                # Try to get the actual font from the style
+                style = ttk.Style()
+                tab_font = tkfont.Font(font=style.lookup('TNotebook.Tab', 'font'))
+            except:
+                # Fallback to a reasonable default
+                tab_font = tkfont.Font(family='TkDefaultFont', size=10)
+            
+            # Measure the actual width of the tab text
+            text_width = tab_font.measure(tab_text)
+            # Add padding (tabs usually have padding on both sides)
+            tab_padding = 20
+            estimated_tab_width = text_width + tab_padding
+            
+            # The "  ×" part is approximately 20-25 pixels
+            # Only close if clicking in the rightmost 30 pixels
             close_button_width = 30
-            if relative_x >= (tab_width - close_button_width):
+            close_threshold = estimated_tab_width - close_button_width
+            
+            if relative_x >= close_threshold:
                 self.close_tab_by_index(tab_index)
                 return "break"  # Prevent default tab selection behavior
                 
         except Exception as e:
             print(f"Error in on_tab_click: {e}")
+            import traceback
+            traceback.print_exc()
 
 
     def show_tab_context_menu(self, event):
@@ -589,57 +599,15 @@ class MarkdownReader:
 
     def add_label_and_close_button_to_tab(self, tab_index, tab_text):
         """
-        Add a custom tab label with a close button.
+        Add a close button (×) to the tab text.
+        Note: ttk.Notebook doesn't support embedded widgets, so we use text with click detection.
 
         :param int tab_index: The index of the tab to add the label and close button to.
         :param string tab_text: The text for the tab label.
         """
-
-        # Create a frame to hold the label and close button
-        tab_frame = tk.Frame(self.notebook, bg='#f0f0f0')
         
-        # Label for the tab text
-        label = tk.Label(tab_frame, text=tab_text, bg='#f0f0f0', padx=5)
-        label.pack(side=tk.LEFT)
-        
-        # Close button (using × symbol)
-        close_button = tk.Button(
-            tab_frame, 
-            text="×", 
-            command=lambda idx=tab_index: self.close_tab_by_index(idx),
-            relief=tk.FLAT,
-            bg='#f0f0f0',
-            fg='#666666',
-            font=('Arial', 12, 'bold'),
-            padx=3,
-            pady=0,
-            cursor='hand2',
-            borderwidth=0,
-            highlightthickness=0
-        )
-        close_button.pack(side=tk.LEFT, padx=(0, 2))
-        
-        # Hover effects
-        def on_enter(e):
-            close_button.config(fg='#ff0000', bg='#e0e0e0')
-        
-        def on_leave(e):
-            close_button.config(fg='#666666', bg='#f0f0f0')
-        
-        close_button.bind('<Enter>', on_enter)
-        close_button.bind('<Leave>', on_leave)
-        
-        # Set the tab to use this custom frame
-        self.notebook.tab(tab_index, text='')
-        tab_id = self.notebook.tabs()[tab_index]
-        
-        # Use a workaround to add custom widget to tab
-        # Store reference to prevent garbage collection
-        if not hasattr(self, 'tab_widgets'):
-            self.tab_widgets = {}
-        self.tab_widgets[tab_index] = (tab_frame, label)
-        
-        # Update the tab text directly
+        # Simply update the tab text with × symbol
+        # The on_tab_click handler will detect clicks in the rightmost region
         self.notebook.tab(tab_index, text=f"{tab_text}  ×")
     
     

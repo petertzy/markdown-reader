@@ -32,9 +32,8 @@ if __name__ == "__main__":
         print(f"   Error: {e}")
         root = ttkb.Window(themename="darkly")
     
-    # Ensure window is resizable (set before creating app)
+    # Ensure window is resizable
     root.resizable(width=True, height=True)
-    print(f"🔧 Initial window resizable setting: {root.resizable()}")
 
     app = MarkdownReader(root)
     
