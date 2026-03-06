@@ -7,7 +7,7 @@ Markdown Reader is a clean and intuitive Markdown reader with real-time preview 
 - **AI Translation**: Translate Markdown documents to 20+ languages while preserving formatting
 - **Smart Provider Failover**: Automatically switches between OpenRouter, OpenAI, and Anthropic on errors
 - **Interactive Table Builder**: Create and edit tables with visual dialog interface
-- **Dual PDF Conversion**: Choose between fast PyMuPDF or advanced [Docling](https://github.com/docling-project/docling){:target="_blank"} engine
+- **Dual PDF Conversion**: Choose between fast PyMuPDF or advanced <a href="https://github.com/docling-project/docling" target="_blank">Docling</a> engine
 - **Environment Configuration**: Simple `.env` file setup for API keys
 
 ---
