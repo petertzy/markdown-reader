@@ -21,8 +21,8 @@ Date: 2026-03-06
    - References & resources
    Size: ~10KB | Lines: 413 | Priority: ⭐⭐⭐⭐⭐
 
-3. DOCLING_QUICK_START_CN.md
-   📚 Quick Start Guide (Chinese)
+3. DOCLING_QUICK_START.md
+   📚 Quick Start Guide
    - Comparison of three integration approaches
    - Step-by-step integration instructions
    - Testing procedures

@@ -2,6 +2,7 @@ import markdown2
 import os
 import webbrowser
 import re
+import json
 from pathlib import Path
 import html2text
 from html import escape as html_escape
@@ -10,6 +11,336 @@ from docx import Document
 from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import traceback
+import requests
+
+
+ENV_FILE_PATH = Path(__file__).resolve().parent.parent / ".env"
+
+
+def _load_env_file():
+    """
+    Loads .env variables into process environment (without overriding existing variables).
+
+    :return: None
+    """
+
+    if not ENV_FILE_PATH.exists():
+        return
+
+    try:
+        with open(ENV_FILE_PATH, "r", encoding="utf-8") as file_obj:
+            for raw_line in file_obj:
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+
+                if line.startswith("export "):
+                    line = line[len("export "):].strip()
+                    if "=" not in line:
+                        continue
+
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+
+                if not key:
+                    continue
+
+                if value.startswith(("'", '"')) and value.endswith(("'", '"')) and len(value) >= 2:
+                    value = value[1:-1]
+                else:
+                    # Remove inline comments for unquoted values: KEY=value # comment
+                    if " #" in value:
+                        value = value.split(" #", 1)[0].strip()
+
+                if key not in os.environ:
+                    os.environ[key] = value
+    except Exception:
+        return
+
+
+def _request_translation_openai_compatible(base_url, api_key, model, system_prompt, user_prompt):
+    """
+    Sends translation request to OpenAI-compatible chat endpoint.
+    """
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.2,
+    }
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    if "openrouter.ai" in base_url:
+        headers["HTTP-Referer"] = os.getenv("OPENROUTER_REFERER", "https://localhost")
+        headers["X-Title"] = os.getenv("OPENROUTER_APP_NAME", "MarkdownReader")
+
+    response = requests.post(
+        f"{base_url.rstrip('/')}/chat/completions",
+        headers=headers,
+        json=payload,
+        timeout=90,
+    )
+    response.raise_for_status()
+    data = response.json()
+
+    choices = data.get("choices", []) if isinstance(data, dict) else []
+    if not choices:
+        raise RuntimeError(f"No choices in AI response: {data}")
+
+    first_choice = choices[0] if isinstance(choices[0], dict) else {}
+    message = first_choice.get("message", {}) if isinstance(first_choice.get("message", {}), dict) else {}
+    content = message.get("content", "")
+
+    if isinstance(content, list):
+        text_parts = []
+        for item in content:
+            if isinstance(item, dict):
+                if item.get("type") == "text":
+                    text_parts.append(str(item.get("text", "")))
+            elif isinstance(item, str):
+                text_parts.append(item)
+        content = "\n".join([part for part in text_parts if part])
+
+    if not content and isinstance(first_choice.get("text"), str):
+        content = first_choice.get("text", "")
+
+    if not isinstance(content, str) or not content.strip():
+        raise RuntimeError(f"Empty content in AI response: {data}")
+
+    return content
+
+
+def _request_translation_anthropic(base_url, api_key, model, system_prompt, user_prompt):
+    """
+    Sends translation request to Anthropic messages endpoint.
+    """
+
+    payload = {
+        "model": model,
+        "max_tokens": 8192,
+        "temperature": 0.2,
+        "system": system_prompt,
+        "messages": [
+            {"role": "user", "content": user_prompt},
+        ],
+    }
+
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+    }
+
+    response = requests.post(
+        f"{base_url.rstrip('/')}/messages",
+        headers=headers,
+        json=payload,
+        timeout=90,
+    )
+    response.raise_for_status()
+    data = response.json()
+    blocks = data.get("content", [])
+    text_blocks = [block.get("text", "") for block in blocks if isinstance(block, dict) and block.get("type") == "text"]
+    content = "\n".join([part for part in text_blocks if part])
+    if not content.strip():
+        raise RuntimeError(f"Empty content in Anthropic response: {data}")
+    return content
+
+
+def _extract_json_object(raw_text):
+    """
+    Extracts a JSON object string from raw LLM output.
+
+    :param string raw_text: Text returned by the AI model.
+    :return: A JSON object string if found, otherwise None.
+    """
+
+    if not raw_text:
+        return None
+
+    text = raw_text.strip()
+
+    fenced_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', text, re.IGNORECASE)
+    if fenced_match:
+        return fenced_match.group(1).strip()
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return text[start:end + 1]
+
+    return None
+
+
+def translate_markdown_with_ai(markdown_text, source_language, target_language):
+    """
+    Translates Markdown content using an OpenAI-compatible API while preserving Markdown formatting.
+
+    Configuration source:
+    1) .env (if present, loaded automatically)
+    2) Process environment variables
+
+    :param string markdown_text: Markdown content to translate.
+    :param string source_language: Source language name.
+    :param string target_language: Target language name.
+
+    :return: Tuple (translated_markdown, ambiguity_notes_list).
+    :raises RuntimeError: If translation fails or configuration is missing.
+    """
+
+    if not isinstance(markdown_text, str) or not markdown_text.strip():
+        return "", []
+
+    source_language = (source_language or "").strip()
+    target_language = (target_language or "").strip()
+
+    if not source_language or not target_language:
+        raise RuntimeError("Source and target language are required.")
+
+    if source_language.lower() == target_language.lower():
+        return markdown_text, ["Source and target language are identical; no translation applied."]
+
+    _load_env_file()
+    provider_name = os.getenv("AI_PROVIDER", "openrouter").strip().lower()
+
+    if provider_name == "athropic":
+        provider_name = "anthropic"
+
+    if provider_name not in ("openrouter", "openai", "anthropic"):
+        raise RuntimeError(
+            f"Unsupported AI provider '{provider_name}'. Use openrouter, openai, or anthropic in AI_PROVIDER"
+        )
+
+    def _provider_cfg(name):
+        if name == "openrouter":
+            return {
+                "name": "openrouter",
+                "api_key": os.getenv("OPENROUTER_API_KEY", "").strip() or os.getenv("OPENAI_API_KEY", "").strip(),
+                "base_url": os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").strip(),
+                "model": os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini").strip(),
+                "type": "openai-compatible",
+            }
+        if name == "openai":
+            return {
+                "name": "openai",
+                "api_key": os.getenv("OPENAI_API_KEY", "").strip(),
+                "base_url": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip(),
+                "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip(),
+                "type": "openai-compatible",
+            }
+        return {
+            "name": "anthropic",
+            "api_key": os.getenv("ANTHROPIC_API_KEY", "").strip(),
+            "base_url": os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1").strip(),
+            "model": os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest").strip(),
+            "type": "anthropic",
+        }
+
+    provider_order = [provider_name] + [name for name in ("openrouter", "openai", "anthropic") if name != provider_name]
+    provider_candidates = []
+    for name in provider_order:
+        cfg = _provider_cfg(name)
+        if cfg["api_key"] and cfg["base_url"] and cfg["model"]:
+            provider_candidates.append(cfg)
+
+    if not provider_candidates:
+        raise RuntimeError(
+            "No valid AI provider config found. Please set keys in .env (OPENROUTER_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY)."
+        )
+
+    system_prompt = (
+        "You are a professional technical translator for Markdown documents. "
+        "Preserve Markdown structure exactly: headings, lists, code fences, links, image syntax, tables, HTML tags, "
+        "inline code, and front matter must remain valid Markdown. "
+        "Do not add explanations outside JSON."
+    )
+
+    user_prompt = (
+        f"Translate the following Markdown from {source_language} to {target_language}.\n"
+        "Return STRICT JSON with this schema:\n"
+        "{\n"
+        "  \"translated_markdown\": \"<string>\",\n"
+        "  \"ambiguity_notes\": [\"<note1>\", \"<note2>\"]\n"
+        "}\n"
+        "Rules:\n"
+        "1) Keep all Markdown syntax and structure intact.\n"
+        "2) Do not translate code, URLs, file paths, or command-line statements unless they are natural-language prose.\n"
+        "3) If wording is ambiguous, list concise notes in ambiguity_notes.\n"
+        "4) If no ambiguity, return an empty array for ambiguity_notes.\n\n"
+        "Markdown to translate:\n"
+        f"{markdown_text}"
+    )
+
+    content = ""
+    used_provider = None
+    errors = []
+    for cfg in provider_candidates:
+        try:
+            if cfg["type"] == "openai-compatible":
+                content = _request_translation_openai_compatible(
+                    cfg["base_url"],
+                    cfg["api_key"],
+                    cfg["model"],
+                    system_prompt,
+                    user_prompt,
+                )
+            else:
+                content = _request_translation_anthropic(
+                    cfg["base_url"],
+                    cfg["api_key"],
+                    cfg["model"],
+                    system_prompt,
+                    user_prompt,
+                )
+            used_provider = cfg["name"]
+            break
+        except requests.RequestException as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            errors.append(f"{cfg['name']}: HTTP {status} {exc}")
+            # Try next configured provider on rate limit/auth/server issues.
+            if status in (401, 402, 403, 404, 408, 409, 429, 500, 502, 503, 504):
+                continue
+            continue
+        except Exception as exc:
+            errors.append(f"{cfg['name']}: {exc}")
+            continue
+
+    if not content:
+        error_text = " | ".join(errors[:3]) if errors else "Unknown translation error"
+        raise RuntimeError(f"AI translation failed. Tried providers: {', '.join([c['name'] for c in provider_candidates])}. {error_text}")
+
+    json_text = _extract_json_object(content)
+    if not json_text:
+        return content.strip(), ["AI response was not strict JSON; fallback text was used."]
+
+    try:
+        parsed = json.loads(json_text)
+    except json.JSONDecodeError:
+        return content.strip(), ["AI response JSON parsing failed; fallback text was used."]
+
+    translated_markdown = parsed.get("translated_markdown", "")
+    ambiguity_notes = parsed.get("ambiguity_notes", [])
+
+    if not isinstance(translated_markdown, str):
+        translated_markdown = str(translated_markdown)
+
+    if not isinstance(ambiguity_notes, list):
+        ambiguity_notes = [str(ambiguity_notes)] if ambiguity_notes else []
+
+    ambiguity_notes = [str(note).strip() for note in ambiguity_notes if str(note).strip()]
+    if used_provider and used_provider != provider_name:
+        ambiguity_notes.insert(0, f"Primary provider '{provider_name}' failed; fallback provider '{used_provider}' was used.")
+    return translated_markdown.strip(), ambiguity_notes
 
 
 def _normalize_math_content(content):

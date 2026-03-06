@@ -8,8 +8,11 @@ dist/
 
 # Python virtual environments
 venv/
-.env/
 .venv/
+
+# Local environment secrets
+.env
+.env.local
 
 # Bytecode and cache
 *.py[cod]
@@ -24,3 +27,4 @@ document.html
 
 LICENCE.pdf
 .gitignore
+

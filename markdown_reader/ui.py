@@ -3,7 +3,7 @@ import re
 import threading
 import tkinter as tk
 from tkinter import ttk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog
 from tkinter.scrolledtext import ScrolledText
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -15,6 +15,7 @@ from markdown_reader.logic import export_to_pdf
 from markdown_reader.logic import convert_html_to_markdown
 from markdown_reader.logic import convert_pdf_to_markdown
 from markdown_reader.logic import convert_pdf_to_markdown_docling
+from markdown_reader.logic import translate_markdown_with_ai
 from markdown_reader.file_handler import load_file, drop_file
 from markdown_reader.utils import get_preview_file
 import tkinter.font  # moved here from inside methods
@@ -94,6 +95,33 @@ class MarkdownReader:
         # IME state tracking per widget
         self._ime_states = {}
 
+        # Translation defaults
+        self.translation_source_language = "English"
+        self.translation_target_language = "German"
+        self.translation_languages = [
+            "English",
+            "Japanese",
+            "Korean",
+            "German",
+            "French",
+            "Spanish",
+            "Italian",
+            "Portuguese",
+            "Russian",
+            "Arabic",
+            "Hindi",
+            "Dutch",
+            "Swedish",
+            "Polish",
+            "Turkish",
+            "Vietnamese",
+            "Thai",
+            "Indonesian",
+            "Chinese (Simplified)",
+            "Chinese (Traditional)",
+        ]
+        self.ai_provider_var = tk.StringVar(value=os.getenv("AI_PROVIDER", "openrouter").strip().lower() or "openrouter")
+
         self.create_widgets()
         self.bind_events()
 
@@ -129,7 +157,41 @@ class MarkdownReader:
         editmenu = ttkb.Menu(menubar, tearoff=0)
         editmenu.add_command(label="Undo", command=self.undo_action)
         editmenu.add_command(label="Redo", command=self.redo_action)
+        editmenu.add_separator()
+        translatemenu = tk.Menu(editmenu, tearoff=0)
+        translatemenu.add_command(
+            label="Translate Selected Text with AI",
+            command=lambda: self.translate_with_ai(selected_only=True)
+        )
+        translatemenu.add_command(
+            label="Translate Full Document with AI",
+            command=lambda: self.translate_with_ai(selected_only=False)
+        )
+        editmenu.add_cascade(label="Translate with AI", menu=translatemenu)
         menubar.add_cascade(label="Edit", menu=editmenu)
+
+        settingsmenu = tk.Menu(menubar, tearoff=0)
+        provider_menu = tk.Menu(settingsmenu, tearoff=0)
+        provider_menu.add_radiobutton(
+            label="OpenRouter",
+            variable=self.ai_provider_var,
+            value="openrouter",
+            command=lambda: self.set_ai_provider("openrouter"),
+        )
+        provider_menu.add_radiobutton(
+            label="OpenAI",
+            variable=self.ai_provider_var,
+            value="openai",
+            command=lambda: self.set_ai_provider("openai"),
+        )
+        provider_menu.add_radiobutton(
+            label="Anthropic",
+            variable=self.ai_provider_var,
+            value="anthropic",
+            command=lambda: self.set_ai_provider("anthropic"),
+        )
+        settingsmenu.add_cascade(label="AI Provider", menu=provider_menu)
+        menubar.add_cascade(label="Settings", menu=settingsmenu)
 
         # Tools menu with PDF conversion options
         toolsmenu = tk.Menu(menubar, tearoff=0)
@@ -253,9 +315,11 @@ class MarkdownReader:
         self.root.bind_all("<Command-s>", lambda event: self.save_file())
         self.root.bind_all("<Control-z>", lambda event: self.undo_action())
         self.root.bind_all("<Control-y>", lambda event: self.redo_action())
+        self.root.bind_all("<Control-Shift-T>", lambda event: self.translate_with_ai(selected_only=False))
         self.root.bind_all("<Control-n>", lambda event: self.new_file())
         self.root.bind_all("<Command-z>", lambda event: self.undo_action())
         self.root.bind_all("<Command-Shift-Z>", lambda event: self.redo_action())
+        self.root.bind_all("<Command-Shift-T>", lambda event: self.translate_with_ai(selected_only=False))
 
 
     def _on_drop_files(self, event):
@@ -332,7 +396,7 @@ class MarkdownReader:
             # Detect IME deactivation (non-ASCII = committed text)
             if event.char and ord(event.char) > 127:
                 state['active'] = False
-                # Mark tab as modified when committed Chinese text arrives
+                # Mark tab as modified when committed Japanese text arrives
                 if not self._loading_file:
                     try:
                         idx = self.notebook.index(self.notebook.select())
@@ -1238,6 +1302,211 @@ class MarkdownReader:
             except tk.TclError:
                 pass
 
+    def _prompt_translation_languages(self):
+        """
+        Prompts user for source and target languages for AI translation.
+
+        :return: Tuple (source_language, target_language) or (None, None) when cancelled.
+        """
+
+        # Create custom dialog with comboboxes
+        dialog = tk.Toplevel(self.root)
+        dialog.title("AI Translation - Select Languages")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Center dialog on parent
+        dialog.geometry("400x280")
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 200
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 140
+        dialog.geometry(f"+{x}+{y}")
+        
+        result = {"source": None, "target": None, "confirmed": False}
+        
+        # Source language
+        ttk.Label(dialog, text="Source Language:").pack(pady=(20, 5))
+        source_combo = ttk.Combobox(dialog, values=self.translation_languages, state="readonly", width=30)
+        if self.translation_source_language in self.translation_languages:
+            source_combo.set(self.translation_source_language)
+        else:
+            source_combo.current(0)
+        source_combo.pack(pady=5)
+        
+        # Target language
+        ttk.Label(dialog, text="Target Language:").pack(pady=(10, 5))
+        target_combo = ttk.Combobox(dialog, values=self.translation_languages, state="readonly", width=30)
+        if self.translation_target_language in self.translation_languages:
+            target_combo.set(self.translation_target_language)
+        else:
+            target_combo.current(1)
+        target_combo.pack(pady=5)
+        
+        def on_ok():
+            result["source"] = source_combo.get()
+            result["target"] = target_combo.get()
+            result["confirmed"] = True
+            dialog.destroy()
+        
+        def on_cancel():
+            dialog.destroy()
+        
+        # Buttons
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=20)
+        ttk.Button(button_frame, text="OK", command=on_ok, width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(side=tk.LEFT, padx=5)
+        
+        # Bind Enter and Escape keys
+        dialog.bind("<Return>", lambda e: on_ok())
+        dialog.bind("<Escape>", lambda e: on_cancel())
+        
+        # Wait for dialog to close
+        dialog.wait_window()
+        
+        if not result["confirmed"]:
+            return None, None
+
+        self.translation_source_language = result["source"].strip()
+        self.translation_target_language = result["target"].strip()
+        return self.translation_source_language, self.translation_target_language
+
+    def _get_translation_scope(self, text_area, selected_only):
+        """
+        Determines translation range and text based on selected scope.
+
+        :param ScrolledText text_area: Active text editor.
+        :param bool selected_only: True for selected text, False for full document.
+
+        :return: Tuple (start_idx, end_idx, source_text).
+        """
+
+        if selected_only:
+            try:
+                start_idx = text_area.index("sel.first")
+                end_idx = text_area.index("sel.last")
+            except tk.TclError:
+                dialogs.Messagebox.show_info("No selection", "Please select text before translating.")
+                return None, None, None
+        else:
+            start_idx = "1.0"
+            end_idx = "end-1c"
+
+        source_text = text_area.get(start_idx, end_idx)
+        if not source_text.strip():
+            dialogs.Messagebox.show_info("Empty content", "Nothing to translate in the chosen scope.")
+            return None, None, None
+
+        return start_idx, end_idx, source_text
+
+    def _apply_translation_result(self, tab_index, text_area, start_idx, end_idx, translated_text, ambiguity_notes):
+        """
+        Applies translated content back to the editor and keeps undo/redo usable.
+        """
+
+        try:
+            text_area.edit_separator()
+            text_area.delete(start_idx, end_idx)
+            text_area.insert(start_idx, translated_text)
+            text_area.edit_separator()
+
+            self.mark_tab_modified(tab_index)
+            self.update_preview()
+
+            if ambiguity_notes:
+                note_text = "\n".join([f"- {note}" for note in ambiguity_notes])
+                dialogs.Messagebox.show_info(
+                    "Translation Notes",
+                    "Translation completed with ambiguity notes:\n\n" + note_text,
+                )
+        except Exception as exc:
+            dialogs.Messagebox.show_error("Translation Error", f"Failed to apply translation: {exc}")
+        finally:
+            self.root.config(cursor="")
+
+    def translate_with_ai(self, selected_only=False):
+        """
+        Translates selected text or full document using AI while preserving Markdown formatting.
+
+        :param bool selected_only: True to translate selection only, False for full document.
+        """
+
+        text_area = self.get_current_text_area()
+        if not text_area:
+            dialogs.Messagebox.show_info("No document", "Please open or create a document first.")
+            return
+
+        source_lang, target_lang = self._prompt_translation_languages()
+        if not source_lang or not target_lang:
+            return
+
+        if source_lang.strip().lower() == target_lang.strip().lower():
+            dialogs.Messagebox.show_info("Language Selection", "Source and target language are the same.")
+            return
+
+        start_idx, end_idx, source_text = self._get_translation_scope(text_area, selected_only)
+        if source_text is None:
+            return
+
+        tab_index = self.notebook.index(self.notebook.select())
+        self.root.config(cursor="watch")
+
+        def worker():
+            try:
+                translated_text, ambiguity_notes = translate_markdown_with_ai(
+                    source_text,
+                    source_lang,
+                    target_lang,
+                )
+                if not translated_text.strip():
+                    raise RuntimeError("AI returned empty translation.")
+
+                self.root.after(
+                    0,
+                    lambda: self._apply_translation_result(
+                        tab_index,
+                        text_area,
+                        start_idx,
+                        end_idx,
+                        translated_text,
+                        ambiguity_notes,
+                    ),
+                )
+            except Exception as exc:
+                current_provider = (self.ai_provider_var.get() or os.getenv("AI_PROVIDER", "openrouter")).strip().lower()
+                self.root.after(
+                    0,
+                    lambda: (
+                        self.root.config(cursor=""),
+                        dialogs.Messagebox.show_error(
+                            "AI Translation Failed",
+                            f"Provider: {current_provider}\n"
+                            f"{exc}\n\n"
+                            "Tip: Configure .env using .env.example (AI_PROVIDER and provider API keys).",
+                        ),
+                    ),
+                )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def set_ai_provider(self, provider_name):
+        """
+        Sets current AI provider for translation at runtime.
+
+        :param string provider_name: one of openrouter/openai/anthropic
+        """
+
+        normalized = (provider_name or "").strip().lower()
+        if normalized == "athropic":
+            normalized = "anthropic"
+
+        if normalized not in ("openrouter", "openai", "anthropic"):
+            dialogs.Messagebox.show_error("Invalid Provider", f"Unsupported provider: {provider_name}")
+            return
+
+        self.ai_provider_var.set(normalized)
+        os.environ["AI_PROVIDER"] = normalized
+        dialogs.Messagebox.show_info("AI Provider", f"AI provider switched to: {normalized}")
+
     def toggle_pdf_mode(self):
         """
         Toggles between PyMuPDF and Docling PDF conversion modes.
@@ -1433,27 +1702,45 @@ class MarkdownReader:
         Shows the help dialog for table syntax.
         """
         
-        help_text = """Markdown Table Syntax:
+        help_text = """📋 Markdown Table Syntax Guide
 
+Basic Table Structure:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 | Header 1 | Header 2 | Header 3 |
-| -------- | -------- | -------- |
+|----------|----------|----------|
 | Cell 1   | Cell 2   | Cell 3   |
 | Cell 4   | Cell 5   | Cell 6   |
 
-Tips:
-• Use | to separate columns
-• Use --- in the separator row
-• Alignment:
-  - Left:   | :--- |
-  - Center: | :---: |
-  - Right:  | ---: |
+Column Alignment:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+| Left Align | Center Align | Right Align |
+|:-----------|:------------:|------------:|
+| Left       | Center       | Right       |
+| Text       | Text         | Text        |
 
-Example with alignment:
-| Left | Center | Right |
-| :--- | :----: | ----: |
-| A    | B      | C     |
+Alignment Syntax:
+  • Left:    |:---|     (colon on left)
+  • Center:  |:--:|     (colon on both sides)
+  • Right:   |---:|     (colon on right)
+
+Quick Tips:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✓ Use | to separate columns
+✓ Second row must be separator (- - -)
+✓ Separators need at least 3 dashes
+✓ Outer pipes | are optional but recommended
+✓ Cell content width doesn't need to match
+✓ Use Table menu → Insert Table for quick creation
+
+Example - Data Table:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+| Name    | Age | Country |
+|:--------|:---:|--------:|
+| Alice   | 25  | USA     |
+| Bob     | 30  | Canada  |
+| Charlie | 28  | UK      |
 """
-        dialogs.Messagebox.show_info("Table Syntax Help", help_text)
+        messagebox.showinfo("Markdown Table Syntax Help", help_text)
 
     def export_to_html_dialog(self):
         """
