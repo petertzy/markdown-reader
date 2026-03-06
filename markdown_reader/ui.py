@@ -1551,19 +1551,49 @@ class MarkdownReader:
         dialog.title("Insert Table")
         dialog.transient(self.root)
         dialog.grab_set()
+
+        text_color = "#E8E8E8"
+        secondary_text_color = "#BDBDBD"
+        input_bg_color = "#2A2A2A"
+        input_fg_color = "#F5F5F5"
         
         # Configuration frame at top
         config_frame = tk.Frame(dialog, relief=tk.RAISED, borderwidth=1)
         config_frame.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
         
-        tk.Label(config_frame, text="Rows (including header):", anchor="w").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        tk.Label(
+            config_frame,
+            text="Rows (including header):",
+            anchor="w",
+            fg=text_color,
+        ).grid(row=0, column=0, padx=5, pady=5, sticky="w")
         rows_var = tk.IntVar(value=3)
-        rows_spinbox = tk.Spinbox(config_frame, from_=2, to=20, textvariable=rows_var, width=10)
+        rows_spinbox = tk.Spinbox(
+            config_frame,
+            from_=2,
+            to=20,
+            textvariable=rows_var,
+            width=10,
+            bg=input_bg_color,
+            fg=input_fg_color,
+            insertbackground=input_fg_color,
+            buttonbackground=input_bg_color,
+        )
         rows_spinbox.grid(row=0, column=1, padx=5, pady=5)
     
-        tk.Label(config_frame, text="Columns:", anchor="w").grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        tk.Label(config_frame, text="Columns:", anchor="w", fg=text_color).grid(row=0, column=2, padx=5, pady=5, sticky="w")
         cols_var = tk.IntVar(value=3)
-        cols_spinbox = tk.Spinbox(config_frame, from_=2, to=10, textvariable=cols_var, width=10)
+        cols_spinbox = tk.Spinbox(
+            config_frame,
+            from_=2,
+            to=10,
+            textvariable=cols_var,
+            width=10,
+            bg=input_bg_color,
+            fg=input_fg_color,
+            insertbackground=input_fg_color,
+            buttonbackground=input_bg_color,
+        )
         cols_spinbox.grid(row=0, column=3, padx=5, pady=5)
         
         # Canvas frame for table grid
@@ -1617,10 +1647,16 @@ class MarkdownReader:
                     cell_frame = tk.Frame(scrollable_frame, relief=tk.RIDGE, borderwidth=1)
                     cell_frame.grid(row=r, column=c, padx=2, pady=2, sticky="nsew")
                     
-                    label = tk.Label(cell_frame, text=f"[{r},{c}]", font=("Arial", 8), fg="gray")
+                    label = tk.Label(cell_frame, text=f"[{r},{c}]", font=("Arial", 8), fg=secondary_text_color)
                     label.pack(anchor="nw", padx=2, pady=2)
                     
-                    entry = tk.Entry(cell_frame, width=15)
+                    entry = tk.Entry(
+                        cell_frame,
+                        width=15,
+                        bg=input_bg_color,
+                        fg=input_fg_color,
+                        insertbackground=input_fg_color,
+                    )
                     entry.insert(0, default_text)
                     entry.pack(padx=5, pady=5, fill=tk.BOTH, expand=True)
                     
@@ -1681,8 +1717,20 @@ class MarkdownReader:
         button_frame = tk.Frame(dialog)
         button_frame.pack(side=tk.BOTTOM, pady=10)
         
-        tk.Button(button_frame, text="Insert Table", command=insert_table_content, width=15, height=1, bg="#4CAF50", fg="black").pack(side=tk.LEFT, padx=5)
-        tk.Button(button_frame, text="Cancel", command=dialog.destroy, width=15, height=1).pack(side=tk.LEFT, padx=5)
+        ttkb.Button(
+            button_frame,
+            text="Insert Table",
+            command=insert_table_content,
+            width=15,
+            bootstyle=(SUCCESS, OUTLINE),
+        ).pack(side=tk.LEFT, padx=5)
+        ttkb.Button(
+            button_frame,
+            text="Cancel",
+            command=dialog.destroy,
+            width=15,
+            bootstyle=(SECONDARY, OUTLINE),
+        ).pack(side=tk.LEFT, padx=5)
         
         # Set dialog size based on initial table dimensions
         width = min(800, 180 * cols_var.get() + 120)
