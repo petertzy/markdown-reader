@@ -109,6 +109,11 @@ git push
 
 ---
 
+## System Requirements:
+Python >= 3.10
+
+---
+
 ## License
 
 This project is licensed under the **MIT License**.  
@@ -126,3 +131,4 @@ All contributions are welcome, including:
 - Documentation improvements
 
 Please see our [CONTRIBUTING](CONTRIBUTING.md) guide for more details on how to get started, submit changes, or report issues.
+

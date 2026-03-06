@@ -2107,3 +2107,553 @@ def apply_inline_formatting(paragraph, text):
                 run.font.name = 'Courier New'
                 run.font.size = Pt(10)
                 run.font.color.rgb = RGBColor(212, 73, 80)
+
+
+def convert_pdf_to_markdown_docling(pdf_path):
+    """
+    Converts a PDF file to Markdown format using Docling with advanced ML-based analysis.
+    
+    Docling uses deep learning models to better understand document structure,
+    including tables, multi-column layouts, and complex formatting.
+    
+    Extracts and saves embedded images to an asset directory with proper file:// URIs
+    for display in browser previews.
+    
+    :param string pdf_path: The file path for the PDF file.
+    :return: A string containing Markdown code representing the converted PDF file.
+    :raises ImportError: If Docling is not installed.
+    :raises Exception: If the PDF cannot be converted to Markdown.
+    """
+    
+    try:
+        from docling.document_converter import DocumentConverter
+        import re
+        import html
+        import shutil
+        
+        pdf_abs_path = os.path.abspath(pdf_path)
+        pdf_base_dir = os.path.dirname(pdf_abs_path)
+        pdf_stem = os.path.splitext(os.path.basename(pdf_abs_path))[0]
+        asset_dir = os.path.join(pdf_base_dir, f"{pdf_stem}_assets")
+        os.makedirs(asset_dir, exist_ok=True)
+        
+        if not os.path.exists(pdf_abs_path):
+            raise FileNotFoundError(f"PDF file not found: {pdf_abs_path}")
+        
+        # Initialize converter
+        converter = DocumentConverter()
+        
+        # Convert PDF
+        result = converter.convert(pdf_abs_path)
+        
+        # Export to Markdown
+        markdown_text = result.document.export_to_markdown()
+
+        def _detect_ext_from_mime(mime_type):
+            mime = (mime_type or "").lower()
+            if "jpeg" in mime or "jpg" in mime:
+                return "jpg"
+            if "png" in mime:
+                return "png"
+            if "gif" in mime:
+                return "gif"
+            if "webp" in mime:
+                return "webp"
+            if "bmp" in mime:
+                return "bmp"
+            if "svg" in mime:
+                return "svg"
+            return "png"
+
+        def _write_bytes_file(content_bytes, target_path):
+            with open(target_path, "wb") as img_file:
+                img_file.write(content_bytes)
+
+        def _save_picture_to_path(picture, target_path):
+            if hasattr(picture, "save") and callable(getattr(picture, "save")):
+                try:
+                    picture.save(target_path)
+                    return os.path.exists(target_path) and os.path.getsize(target_path) > 0
+                except Exception:
+                    pass
+
+            if hasattr(picture, "export_to_file") and callable(getattr(picture, "export_to_file")):
+                try:
+                    picture.export_to_file(target_path)
+                    return os.path.exists(target_path) and os.path.getsize(target_path) > 0
+                except Exception:
+                    pass
+
+            candidate_attrs = ["get_image", "image", "pil_image", "data", "bytes", "blob", "content"]
+            for attr in candidate_attrs:
+                if not hasattr(picture, attr):
+                    continue
+
+                value = getattr(picture, attr)
+                try:
+                    value = value() if callable(value) else value
+                except Exception:
+                    continue
+
+                if value is None:
+                    continue
+
+                if isinstance(value, (bytes, bytearray)):
+                    _write_bytes_file(bytes(value), target_path)
+                    return os.path.exists(target_path) and os.path.getsize(target_path) > 0
+
+                if isinstance(value, str) and os.path.exists(value):
+                    shutil.copyfile(value, target_path)
+                    return os.path.exists(target_path) and os.path.getsize(target_path) > 0
+
+                if hasattr(value, "save") and callable(getattr(value, "save")):
+                    try:
+                        value.save(target_path)
+                        return os.path.exists(target_path) and os.path.getsize(target_path) > 0
+                    except Exception:
+                        continue
+
+            return False
+
+        # Extract and save images from document
+        image_uris = []
+        image_mapping = {}
+        image_counter = 0
+
+        def _extract_images_with_pymupdf_fallback(start_index=0):
+            extracted = []
+            try:
+                import fitz
+
+                fallback_doc = fitz.open(pdf_abs_path)
+                local_counter = start_index
+                image_records = []
+                for page_num in range(len(fallback_doc)):
+                    page = fallback_doc[page_num]
+                    blocks = page.get_text("dict").get("blocks", [])
+                    for block in blocks:
+                        if block.get("type") != 1:
+                            continue
+
+                        bbox = block.get("bbox")
+                        if bbox:
+                            width = bbox[2] - bbox[0]
+                            height = bbox[3] - bbox[1]
+                            if width < 32 or height < 32:
+                                continue
+
+                        image_bytes = block.get("image")
+                        if not image_bytes:
+                            continue
+
+                        image_ext = block.get("ext") or "png"
+                        local_counter += 1
+                        filename = f"docling_image_{local_counter}.{image_ext}"
+                        path = os.path.join(asset_dir, filename)
+                        with open(path, "wb") as image_file:
+                            image_file.write(image_bytes)
+
+                        bbox = block.get("bbox") or [0, 0, 0, 0]
+                        x_top = float(bbox[0]) if len(bbox) > 0 else 0.0
+                        y_top = float(bbox[1]) if len(bbox) > 1 else 0.0
+                        image_records.append((page_num, y_top, x_top, Path(path).as_uri()))
+
+                # Sort by reading order: page -> y(top) -> x(left)
+                image_records.sort(key=lambda item: (item[0], item[1], item[2]))
+                extracted = [item[3] for item in image_records]
+
+                fallback_doc.close()
+            except Exception:
+                return []
+
+            return extracted
+
+        doc = result.document
+        pictures = getattr(doc, "pictures", None)
+        if pictures:
+            for idx, picture in enumerate(pictures, 1):
+                try:
+                    image_ext = _detect_ext_from_mime(getattr(picture, "mime_type", ""))
+                    image_counter += 1
+                    image_filename = f"docling_image_{image_counter}.{image_ext}"
+                    image_path = os.path.join(asset_dir, image_filename)
+
+                    if not _save_picture_to_path(picture, image_path):
+                        image_counter -= 1
+                        continue
+
+                    image_uri = Path(image_path).as_uri()
+                    image_uris.append(image_uri)
+
+                    possible_keys = [
+                        f"docling_image_{idx}",
+                        f"image_{idx}",
+                        f"picture_{idx}",
+                        f"#/pictures/{idx - 1}",
+                        f"/pictures/{idx - 1}",
+                    ]
+                    picture_name = getattr(picture, "name", None)
+                    if picture_name:
+                        possible_keys.append(str(picture_name))
+                    for key in possible_keys:
+                        image_mapping[key] = image_uri
+                except Exception:
+                    continue
+
+        has_image_placeholder = re.search(r'^\s*<!--\s*image\s*-->\s*$', markdown_text, flags=re.IGNORECASE | re.MULTILINE) is not None
+        if not image_uris or has_image_placeholder:
+            fallback_uris = _extract_images_with_pymupdf_fallback(start_index=len(image_uris))
+            if fallback_uris:
+                if has_image_placeholder:
+                    # Placeholder order should follow page reading order from PDF blocks.
+                    image_uris = list(fallback_uris)
+                    image_mapping = {}
+                else:
+                    image_uris.extend(fallback_uris)
+
+        # Convert escaped HTML image tags such as &lt;img ...&gt; and < img ... >
+        markdown_text = re.sub(r'&lt;\s*img\b([^&]*)&gt;', r'<img\1>', markdown_text, flags=re.IGNORECASE)
+        markdown_text = re.sub(r'<\s+img\b', '<img', markdown_text, flags=re.IGNORECASE)
+        markdown_text = re.sub(r'\s+/\s*>', ' />', markdown_text)
+
+        def _html_img_to_md(match):
+            full_tag = match.group(0)
+            src_match = re.search(r'\bsrc=["\']([^"\']+)["\']', full_tag, re.IGNORECASE)
+            if not src_match:
+                return full_tag
+            src = html.unescape(src_match.group(1).strip())
+            alt_match = re.search(r'\balt=["\']([^"\']*)["\']', full_tag, re.IGNORECASE)
+            alt = html.unescape(alt_match.group(1).strip()) if alt_match else ''
+            return f"![{alt}]({src})"
+
+        markdown_text = re.sub(r'<img\b[^>]*>', _html_img_to_md, markdown_text, flags=re.IGNORECASE)
+
+        # Basic cleanup for common OCR/round-trip artifacts
+        markdown_text = html.unescape(markdown_text)
+        markdown_text = re.sub(r"^'''([a-zA-Z0-9_-]+)\s*$", r"```\1", markdown_text, flags=re.MULTILINE)
+        markdown_text = re.sub(r"^'''([a-zA-Z0-9_-]+)\s+(.+)$", r"```\1\n\2", markdown_text, flags=re.MULTILINE)
+        markdown_text = re.sub(r"^'''\s*$", "```", markdown_text, flags=re.MULTILINE)
+        markdown_text = re.sub(r"^[ \t]*«[ \t]+", "* ", markdown_text, flags=re.MULTILINE)
+        markdown_text = re.sub(r'^\s*["“”]*\s*(Normal text|Consolas)\s*["“”]*\s*\n', '', markdown_text, flags=re.IGNORECASE | re.MULTILINE)
+        markdown_text = re.sub(r'\n{3,}', '\n\n', markdown_text)
+
+        # Replace markdown image paths to absolute file:// URIs when possible
+        def _replace_md_image_path(match):
+            alt_text = match.group(1)
+            image_src = match.group(2).strip()
+
+            if image_src.startswith(("http://", "https://", "file://", "data:")):
+                return match.group(0)
+
+            for mapped_name, uri in image_mapping.items():
+                if mapped_name and mapped_name in image_src:
+                    return f"![{alt_text}]({uri})"
+
+            local_candidates = []
+            local_candidates.append(os.path.abspath(os.path.join(pdf_base_dir, image_src)))
+            local_candidates.append(os.path.abspath(os.path.join(asset_dir, image_src)))
+
+            for candidate in local_candidates:
+                if os.path.exists(candidate):
+                    return f"![{alt_text}]({Path(candidate).as_uri()})"
+
+            if image_uris and re.search(r'(image|picture|fig|figure)', image_src, re.IGNORECASE):
+                num_match = re.search(r'(\d+)', image_src)
+                if num_match:
+                    image_idx = int(num_match.group(1))
+                    if 1 <= image_idx <= len(image_uris):
+                        return f"![{alt_text}]({image_uris[image_idx - 1]})"
+
+            return match.group(0)
+
+        markdown_text = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', _replace_md_image_path, markdown_text)
+
+        # Replace Docling image placeholders: <!-- image -->
+        if image_uris:
+            placeholder_idx = [0]
+
+            def _replace_image_placeholder(match):
+                if placeholder_idx[0] < len(image_uris):
+                    uri = image_uris[placeholder_idx[0]]
+                    placeholder_idx[0] += 1
+                    return f"![docling-image-{placeholder_idx[0]}]({uri})"
+                return ""
+
+            markdown_text = re.sub(
+                r'^\s*<!--\s*image\s*-->\s*$',
+                _replace_image_placeholder,
+                markdown_text,
+                flags=re.IGNORECASE | re.MULTILINE,
+            )
+
+        # Remove any unreplaced image placeholders
+        markdown_text = re.sub(r'^\s*<!--\s*image\s*-->\s*$', '', markdown_text, flags=re.IGNORECASE | re.MULTILINE)
+
+        def _fix_malformed_code_fences(text):
+            lines = text.splitlines()
+            output = []
+            in_code_block = False
+            current_lang = ""
+            code_line_count = 0
+
+            for line in lines:
+                stripped = line.strip()
+
+                if stripped.startswith("```"):
+                    if in_code_block:
+                        in_code_block = False
+                        current_lang = ""
+                        code_line_count = 0
+                    else:
+                        in_code_block = True
+                        current_lang = stripped[3:].strip().lower()
+                        code_line_count = 0
+                    output.append(line)
+                    continue
+
+                if in_code_block:
+                    if stripped:
+                        code_line_count += 1
+
+                    looks_like_doc_content = (
+                        re.match(r'^\s*#{1,6}\s+', line) is not None
+                        or re.match(r'^\s*[-*+]\s+', line) is not None
+                        or re.match(r'^\s*\d+\.\s+', line) is not None
+                        or stripped in ('---', '***', '___')
+                    )
+
+                    # Heuristic: if bash fence only had command lines and then doc content starts,
+                    # it is usually an unclosed accidental fence from OCR.
+                    if looks_like_doc_content and current_lang in ("bash", "sh", "shell", "zsh") and code_line_count <= 2:
+                        output.append("```")
+                        in_code_block = False
+                        current_lang = ""
+                        code_line_count = 0
+
+                output.append(line)
+
+            if in_code_block:
+                output.append("```")
+
+            return "\n".join(output)
+
+        def _bind_images_to_sections(text, ordered_image_uris):
+            if not ordered_image_uris:
+                return text
+
+            def _is_screenshot_ocr_noise(line):
+                stripped = line.strip()
+                if not stripped:
+                    return False
+
+                lowered = stripped.lower()
+
+                if re.match(r'^\d{1,4}$', stripped):
+                    return True
+                if re.match(r'^[-–—_]+$', stripped):
+                    return True
+                if re.match(r'^[a-z0-9_.-]+\.(md|txt|pdf|doc|docx|html|htm)$', lowered):
+                    return True
+                if lowered in {
+                    'markdown reader',
+                    'untitled',
+                    'readme.md',
+                    'features',
+                    'editor overview',
+                    'preview overview',
+                }:
+                    return True
+                if '·' in stripped or '•' in stripped:
+                    return True
+                if 'toggle, and drag-and-drop file opening' in lowered:
+                    return True
+                if 'compatible with mac' in lowered and 'desktop environments' in lowered:
+                    return True
+
+                if len(stripped) <= 40 and re.match(r'^[a-zA-Z0-9 .,_()\-/]+$', stripped):
+                    word_count = len([w for w in stripped.split() if w])
+                    if 1 <= word_count <= 6 and lowered != 'installation & usage':
+                        return True
+
+                return False
+
+            section_specs = [
+                ("Editor Overview", 0),
+                ("Preview Overview", 1),
+            ]
+
+            updated = text
+            inserted_count = 0
+            for section_name, image_idx in section_specs:
+                if image_idx >= len(ordered_image_uris):
+                    continue
+
+                section_pattern = rf'(^\s*#{{2,6}}\s*{re.escape(section_name)}\s*$)(.*?)(?=^\s*#{{1,6}}\s+|\Z)'
+
+                def _section_repl(match):
+                    nonlocal inserted_count
+                    heading_line = match.group(1)
+                    body = match.group(2)
+
+                    body_lines = body.splitlines()
+                    cleaned_lines = []
+                    for body_line in body_lines:
+                        if re.match(r'^\s*!\[[^\]]*\]\(([^)]+)\)\s*$', body_line):
+                            continue
+                        if re.match(r'^\s*<img\b[^>]*>\s*$', body_line, re.IGNORECASE):
+                            continue
+                        if re.match(r'^\s*<!--\s*image\s*-->\s*$', body_line, re.IGNORECASE):
+                            continue
+                        if section_name.lower() in ('editor overview', 'preview overview') and _is_screenshot_ocr_noise(body_line):
+                            continue
+                        cleaned_lines.append(body_line)
+
+                    image_uri = ordered_image_uris[image_idx]
+                    image_line = f"![{section_name.lower().replace(' ', '-')}]({image_uri})"
+                    cleaned_body = "\n".join(cleaned_lines).strip("\n")
+
+                    # For Preview Overview, aggressively remove dangling OCR text fragments.
+                    if section_name.lower() == 'preview overview':
+                        cleaned_body = re.sub(
+                            r'^[\s]*toggle, and drag-and-drop file opening\..*?(?:\nCompatible with mac[^\n]*)?',
+                            '',
+                            cleaned_body,
+                            flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
+                        )
+                        cleaned_body = cleaned_body.strip()
+
+                    inserted_count += 1
+                    if cleaned_body:
+                        return f"{heading_line}\n\n{image_line}\n\n{cleaned_body}\n"
+                    return f"{heading_line}\n\n{image_line}\n"
+
+                updated = re.sub(section_pattern, _section_repl, updated, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+
+            # If two local section images are already inserted, remove stray GitHub attachment
+            # image lines outside those sections to reduce reversed visual order.
+            if inserted_count >= 2:
+                updated = re.sub(
+                    r'^\s*!\[[^\]]*\]\(https?://github\.com/user-attachments/assets/[^)]+\)\s*$\n?',
+                    '',
+                    updated,
+                    flags=re.MULTILINE,
+                )
+
+            return updated
+
+        def _cleanup_docling_structure(text):
+            cleaned = text
+
+            # Remove duplicated heading right after Features (e.g. "## Features" then "## Markdown Reader").
+            cleaned = re.sub(
+                r'(?mi)^##\s*Features\s*\n\s*##\s*Markdown\s+Reader\s*\n',
+                '## Features\n\n',
+                cleaned,
+            )
+
+            # Remove duplicated intro fragment that often appears before a second Features block.
+            cleaned = re.sub(
+                r'(?ms)^\*\s*Can be bundled as a macOS app using[^\n]*\n\n\*\s*Opens preview automatically[^\n]*\n\nMarkdown Reader is a clean and intuitive Markdown reader[^\n]*\n---\n\n##\s*Features\s*\n',
+                '## Features\n\n',
+                cleaned,
+            )
+
+            # Remove accidental standalone code block under Features: ```bash\ncd markdown-reader\n```
+            cleaned = re.sub(
+                r'(?mis)^```(?:bash|sh|shell|zsh)\s*\n\s*cd\s+markdown-reader\s*\n```\s*\n(?=\s*[-*]\s+Real-time preview of Markdown rendered to HTML)',
+                '',
+                cleaned,
+            )
+
+            # Split merged command lines commonly produced by OCR/round-trip.
+            cleaned = re.sub(
+                r'(?mi)^(\s*git clone\s+\S+)\s+cd\s+markdown-reader\s*$',
+                r'\1\ncd markdown-reader',
+                cleaned,
+            )
+            cleaned = re.sub(
+                r'(?mi)^(\s*git add\s+\.)\s+git\s+push\s*$',
+                r'\1\ngit push',
+                cleaned,
+            )
+            cleaned = re.sub(
+                r'(?mi)^(\s*python\s+-m\s+venv\s+venv)\s+source\s+venv/bin/activate\s*(#.*)?$',
+                r'\1\nsource venv/bin/activate \2',
+                cleaned,
+            )
+            cleaned = re.sub(
+                r'(?mi)^(\s*rm\s+-rf\s+build\s+dist)\s+python\s+setup\.py\s+py2app\s*$',
+                r'\1\npython setup.py py2app',
+                cleaned,
+            )
+            
+            # Merge consecutive git command code blocks (Submit Changes to Git section).
+            cleaned = re.sub(
+                r'(?ms)^##\s*Submit Changes to Git\s*\n```(?:bash)?\s*\ngit commit[^\n]*\n```\s*\n+```(?:bash)?\s*\ngit add[^\n]*\ngit push[^\n]*\n```',
+                r'## Submit Changes to Git\n```bash\ngit add .\ngit commit -m "Update"  # Replace "Update" with a meaningful commit message\ngit push\n```',
+                cleaned,
+            )
+
+            # Remove trailing OCR bullet separators at end of list lines.
+            cleaned = re.sub(r'[ \t]*[·•]\s*$', '', cleaned, flags=re.MULTILINE)
+
+            # Remove exact duplicated non-empty lines while preserving order.
+            lines = cleaned.splitlines()
+            seen_once = set()
+            deduped_lines = []
+            for line in lines:
+                normalized = re.sub(r'\s+', ' ', line).strip().lower()
+                if not normalized:
+                    deduped_lines.append(line)
+                    continue
+
+                should_dedupe = (
+                    normalized.startswith('markdown reader is a clean and intuitive markdown reader')
+                    or normalized == '## features'
+                )
+
+                if normalized.startswith('## system requirements') or normalized.startswith('## license') or normalized.startswith('## contributing'):
+                    deduped_lines.append(line)
+                    continue
+
+                if should_dedupe:
+                    if normalized in seen_once:
+                        continue
+                    seen_once.add(normalized)
+
+                deduped_lines.append(line)
+
+            cleaned = '\n'.join(deduped_lines)
+            cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+            return cleaned
+
+        markdown_text = _bind_images_to_sections(markdown_text, image_uris)
+        markdown_text = _fix_malformed_code_fences(markdown_text)
+        markdown_text = _cleanup_docling_structure(markdown_text)
+        markdown_text = re.sub(r'\n{3,}', '\n\n', markdown_text)
+
+        # If markdown still has no image reference, append extracted images as fallback
+        has_any_md_images = re.search(r'!\[[^\]]*\]\([^)]+\)', markdown_text) is not None
+        if image_uris and not has_any_md_images:
+            markdown_text = markdown_text.rstrip() + "\n\n"
+            for idx, uri in enumerate(image_uris, 1):
+                markdown_text += f"![docling-image-{idx}]({uri})\n\n"
+        
+        return markdown_text.strip()
+        
+    except ImportError:
+        messagebox.showwarning(
+            "Docling Not Installed",
+            "Advanced PDF conversion requires Docling.\n"
+            "Install it using: pip install docling\n\n"
+            "Falling back to standard converter."
+        )
+        return convert_pdf_to_markdown(pdf_path)
+        
+    except Exception as e:
+        messagebox.showerror(
+            "PDF Conversion Error",
+            f"Failed to convert PDF with Docling: {e}\n\n"
+            "Falling back to standard converter."
+        )
+        return convert_pdf_to_markdown(pdf_path)

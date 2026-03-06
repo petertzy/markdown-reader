@@ -14,6 +14,7 @@ from markdown_reader.logic import export_to_docx
 from markdown_reader.logic import export_to_pdf
 from markdown_reader.logic import convert_html_to_markdown
 from markdown_reader.logic import convert_pdf_to_markdown
+from markdown_reader.logic import convert_pdf_to_markdown_docling
 from markdown_reader.file_handler import load_file, drop_file
 from markdown_reader.utils import get_preview_file
 import tkinter.font  # moved here from inside methods
@@ -87,6 +88,9 @@ class MarkdownReader:
         # Track which tabs have unsaved modifications
         self.modified_tabs = set()
         
+        # PDF conversion mode: False = PyMuPDF (fast), True = Docling (advanced)
+        self.use_docling_pdf = False
+        
         # IME state tracking per widget
         self._ime_states = {}
 
@@ -126,6 +130,18 @@ class MarkdownReader:
         editmenu.add_command(label="Undo", command=self.undo_action)
         editmenu.add_command(label="Redo", command=self.redo_action)
         menubar.add_cascade(label="Edit", menu=editmenu)
+
+        # Tools menu with PDF conversion options
+        toolsmenu = tk.Menu(menubar, tearoff=0)
+        self.pdf_mode_var = tk.BooleanVar(value=self.use_docling_pdf)
+        toolsmenu.add_checkbutton(
+            label="Use Advanced PDF Conversion (Docling)",
+            variable=self.pdf_mode_var,
+            command=self.toggle_pdf_mode
+        )
+        toolsmenu.add_separator()
+        toolsmenu.add_command(label="PDF Converter Info", command=self.show_pdf_converter_info)
+        menubar.add_cascade(label="Tools", menu=toolsmenu)
 
         # ADD THIS NEW BLOCK:
         tablemenu = tk.Menu(menubar, tearoff=0)
@@ -424,7 +440,10 @@ class MarkdownReader:
             
             # Check if file is PDF and convert to Markdown
             if is_pdf:
-                content = convert_pdf_to_markdown(abs_path)
+                if self.use_docling_pdf:
+                    content = convert_pdf_to_markdown_docling(abs_path)
+                else:
+                    content = convert_pdf_to_markdown(abs_path)
             else:
                 with open(abs_path, "r", encoding="utf-8") as f:
                     content = f.read()
@@ -1218,6 +1237,36 @@ class MarkdownReader:
                 text_area.edit_redo()
             except tk.TclError:
                 pass
+
+    def toggle_pdf_mode(self):
+        """
+        Toggles between PyMuPDF and Docling PDF conversion modes.
+        """
+        self.use_docling_pdf = self.pdf_mode_var.get()
+
+    def show_pdf_converter_info(self):
+        """
+        Shows information about available PDF converters.
+        """
+        info_text = (
+            "PDF Converter Information:\n\n"
+            "1. PyMuPDF (Default)\n"
+            "   - Speed: Very Fast\n"
+            "   - Memory: Low\n"
+            "   - Quality: Good for simple documents\n"
+            "   - Best for: Text extraction, simple PDFs\n\n"
+            "2. Docling (Advanced)\n"
+            "   - Speed: Moderate (requires ML models)\n"
+            "   - Memory: Higher\n"
+            "   - Quality: Excellent for complex documents\n"
+            "   - Best for: Academic papers, reports with tables\n"
+            "   - Note: First use may take 2-5 seconds\n"
+            "   - Install: pip install docling\n\n"
+            "Current Mode: {}\n\n"
+            "You can switch in Tools > Use Advanced PDF Conversion (Docling)"
+        ).format("Docling (Advanced)" if self.use_docling_pdf else "PyMuPDF (Fast)")
+        
+        messagebox.showinfo("PDF Converter Information", info_text)
 
     def insert_table(self):
         """
