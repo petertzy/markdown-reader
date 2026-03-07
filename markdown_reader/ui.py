@@ -133,7 +133,6 @@ class MarkdownReader:
         
         style = ttkb.Style()
         menubar = tk.Menu(self.root)
-        
         filemenu = tk.Menu(menubar, tearoff=0)
         filemenu.add_command(label="New", command=self.new_file)
         filemenu.add_command(label="Open File", command=self.open_file)
