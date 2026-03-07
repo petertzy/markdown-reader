@@ -535,7 +535,7 @@ def _is_probably_math_token(token):
     if core.startswith(('http://', 'https://', 'www.', 'file://')):
         return False
 
-    if '$' in core or '\(' in core or '\)' in core or '\[' in core or '\]' in core:
+    if '$' in core or '(' in core or ')' in core or '[' in core or ']' in core:
         return False
 
     # Reject pure lowercase English words (at least 3 chars), but allow math vars
@@ -602,7 +602,7 @@ def _is_markdown_media_line(stripped_line):
 
 
 def _auto_wrap_bare_math_spans(markdown_text):
-    """
+    r"""
     Wrap likely inline bare math tokens with \(...\) in mixed prose lines.
     Returns list of (protected_text, replacements_dict) to preserve LaTeX delimiters.
 
