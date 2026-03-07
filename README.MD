@@ -35,7 +35,7 @@ Markdown Reader is a clean and intuitive Markdown reader with real-time preview 
 
 ## Preview Overview
 
-<img width="1417" alt="Image" src="https://github.com/user-attachments/assets/a0e1ef35-0216-4d48-8dca-2dfde8244bad" />
+<img width="1430" height="605" alt="Image" src="https://github.com/user-attachments/assets/328395d1-94a4-4bba-89a5-9e432e4cff39" />
 
 ---
 
