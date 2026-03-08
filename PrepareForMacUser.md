@@ -8,7 +8,7 @@ Then reactivate your virtual environment:
 deactivate
 source venv/bin/activate
 ```
-#### If you are using Apple Silicon (M1/M2/M3)
+#### If you are using Apple Silicon (M1/M2/M3/M4)
 
 Run:
 ```bash
