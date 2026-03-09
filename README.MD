@@ -58,22 +58,7 @@ For Windows users, WeasyPrint requires additional system libraries. Complete the
 pip install -r requirements.txt
 ```
 
-#### macOS Drag-and-Drop Known Issues
-
-⚠️ **Apple Silicon (M1/M2/M3/M4) Users**: tkinterdnd2 library currently has architecture compatibility issues on Apple Silicon Macs. All available versions of the dynamic link library are compiled for Intel (x86_64) architecture and cannot run on ARM64 architecture.
-
-**Symptoms**: When starting the application, you will see the following errors:
-```
-Warning: tkinterdnd2 not installed, drag-and-drop will be disabled
-Error: Unable to load tkdnd library
-```
-
-**Solutions**:
-- **Recommended**: Use the "File → Open File" menu option to open files (fully supported)
-- **Workaround**: Run Python in Rosetta 2 mode (performance will be reduced)
-- **Wait**: Wait for tkinterdnd2 to release an ARM64-compatible version
-
-**Intel Mac Users**: If drag-and-drop still doesn't work, try the [tkinterDnD2 fork](https://github.com/pmgagne/tkinterDnD2)
+If drag-and-drop still doesn't work, try the [tkinterDnD2 fork](https://github.com/pmgagne/tkinterDnD2)
 
 ---
 

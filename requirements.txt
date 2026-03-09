@@ -1,8 +1,5 @@
 markdown>=3.5.0
 markdown2>=2.4.0
-# Note: tkinterdnd2 has known issues on Apple Silicon Macs (M1/M2/M3/M4)
-# Drag-and-drop will not work, but all other features remain functional
-# Use "File → Open File" menu instead
 tkinterdnd2>=0.3.0
 py2app>=0.28
 watchdog
