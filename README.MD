@@ -2,14 +2,6 @@
 
 Markdown Reader is a clean and intuitive Markdown reader with real-time preview support, dark mode toggle, and drag-and-drop file opening. It is compatible with macOS and Windows desktop environments and built with pure Python and Tkinter.
 
-## What's New
-
-- **AI Translation**: Translate Markdown documents to 20+ languages while preserving formatting
-- **Smart Provider Failover**: Automatically switches between OpenRouter, OpenAI, and Anthropic on errors
-- **Interactive Table Builder**: Create and edit tables with visual dialog interface
-- **Dual PDF Conversion**: Choose between fast PyMuPDF or advanced [Docling](https://github.com/docling-project/docling) engine
-- **Environment Configuration**: Simple `.env` file setup for API keys
-
 ---
 
 ## Features
@@ -18,7 +10,7 @@ Markdown Reader is a clean and intuitive Markdown reader with real-time preview 
 * **AI-Powered Translation**: Translate Markdown documents while preserving formatting (supports OpenRouter, OpenAI, and Anthropic).
 * Dark mode toggle.
 * **Advanced Table Editor**: Interactive table insertion with customizable rows and columns.
-* **Dual PDF Conversion**: Fast PyMuPDF mode or advanced Docling mode for complex documents.
+* **Dual PDF Conversion**: Fast PyMuPDF mode or advanced [Docling](https://github.com/docling-project/docling) mode for complex documents.
 * Drag-and-drop support for `.md`, `.html`, and `.pdf` files with automatic conversion to Markdown (requires `tkinterdnd2`).
 * Built with pure Python and Tkinter — cross-platform.
 * Can be bundled as a macOS app using `py2app`.
@@ -66,45 +58,22 @@ For Windows users, WeasyPrint requires additional system libraries. Complete the
 pip install -r requirements.txt
 ```
 
-💡 If drag-and-drop doesn't work on macOS, consider using the [tkinterDnD2 fork](https://github.com/pmgagne/tkinterDnD2).
+#### macOS Drag-and-Drop Known Issues
 
-#### 4. Configure AI Translation (Optional)
+⚠️ **Apple Silicon (M1/M2/M3/M4) Users**: tkinterdnd2 library currently has architecture compatibility issues on Apple Silicon Macs. All available versions of the dynamic link library are compiled for Intel (x86_64) architecture and cannot run on ARM64 architecture.
 
-To enable AI-powered translation features, you need to set up API keys:
-
-```bash
-# Copy the example configuration file
-cp .env.example .env
+**Symptoms**: When starting the application, you will see the following errors:
+```
+Warning: tkinterdnd2 not installed, drag-and-drop will be disabled
+Error: Unable to load tkdnd library
 ```
 
-Then edit `.env` and add your API keys:
+**Solutions**:
+- **Recommended**: Use the "File → Open File" menu option to open files (fully supported)
+- **Workaround**: Run Python in Rosetta 2 mode (performance will be reduced)
+- **Wait**: Wait for tkinterdnd2 to release an ARM64-compatible version
 
-```bash
-# Choose your preferred AI provider (openrouter, openai, or anthropic)
-AI_PROVIDER=openrouter
-
-# OpenRouter configuration (free tier available)
-OPENROUTER_API_KEY=your_openrouter_api_key_here
-OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free
-
-# OpenAI configuration
-OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
-
-# Anthropic configuration
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-ANTHROPIC_BASE_URL=https://api.anthropic.com
-ANTHROPIC_MODEL=claude-3-5-haiku-20241022
-```
-
-**How to get API keys:**
-- **OpenRouter** (recommended for free tier): [openrouter.ai](https://openrouter.ai/)
-- **OpenAI**: [platform.openai.com](https://platform.openai.com/)
-- **Anthropic**: [console.anthropic.com](https://console.anthropic.com/)
-
-💡 The app will automatically switch to a fallback provider if the primary provider hits rate limits.
+**Intel Mac Users**: If drag-and-drop still doesn't work, try the [tkinterDnD2 fork](https://github.com/pmgagne/tkinterDnD2)
 
 ---
 
