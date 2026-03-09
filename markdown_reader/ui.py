@@ -226,7 +226,7 @@ class MarkdownReader:
         # --- Toolbar ---
         style.configure("primary.TFrame")
         toolbar = ttkb.Frame(
-            self.root, relief=tk.RAISED, style="primary.TFrame", padding=(5, 5, 0, 5)
+            self.root, relief=tk.FLAT, style="primary.TFrame", padding=(5, 5, 0, 5)
         )
         # Style dropdown
         self.style_var = tk.StringVar(value="Normal text")
@@ -262,6 +262,9 @@ class MarkdownReader:
                 label=f, variable=self.font_var, command=lambda f=f: self.apply_font(f)
             )
         font_menu["menu"] = menu
+
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=4)
+
         # Font size
         self.font_size_var = tk.IntVar(value=14)
         button_width = 3
@@ -291,6 +294,8 @@ class MarkdownReader:
             padding=uniform_padding,
             command=lambda: self.change_font_size(1),
         ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=4)
 
         # font configuration
 
@@ -338,6 +343,9 @@ class MarkdownReader:
             width=button_width,
             command=self.toggle_underline,
         ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Separator(toolbar, orient=tk.VERTICAL).pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=4)
+
         ttkb.Button(
             toolbar,
             text="⊞",
@@ -362,9 +370,20 @@ class MarkdownReader:
             command=self.choose_bg_color,
         ).pack(side=tk.LEFT, padx=5)
         toolbar.pack(fill=tk.X)
+        ttk.Separator(self.root, orient=tk.HORIZONTAL).pack(fill=tk.X)
 
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True)
+
+        # --- Status bar ---
+        self.status_bar = ttkb.Label(
+            self.root,
+            text="Ln 1, Col 1  |  0 words",
+            anchor=tk.W,
+            padding=(8, 2),
+            bootstyle="secondary",
+        )
+        self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
         self.editors = []
         self.file_paths = []
@@ -420,6 +439,27 @@ class MarkdownReader:
             lambda event: self.translate_with_ai(selected_only=False),
         )
 
+        self.notebook.bind("<<NotebookTabChanged>>", lambda e: self._rebind_status_bar())
+
+    def _rebind_status_bar(self):
+        """Re-bind status bar updates when the active tab changes."""
+        text_area = self.get_current_text_area()
+        if text_area:
+            text_area.bind("<KeyRelease>", lambda e: self.update_status_bar(), add=True)
+            text_area.bind("<ButtonRelease>", lambda e: self.update_status_bar(), add=True)
+            self.update_status_bar()
+
+    def update_status_bar(self):
+        """Update the status bar with current line, column, and word count."""
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+        cursor = text_area.index(tk.INSERT)
+        line, col = cursor.split(".")
+        content = text_area.get("1.0", tk.END)
+        word_count = len(content.split())
+        self.status_bar.config(text=f"Ln {line}, Col {int(col) + 1}  |  {word_count} words")
+
     def _on_drop_files(self, event):
         """
         Handles file drop events.
@@ -449,7 +489,7 @@ class MarkdownReader:
         frame = tk.Frame(self.notebook)
         base_font = (self.current_font_family, self.current_font_size)
         text_area = self.get_current_text_area()
-        text_area = ScrolledText(frame, wrap=tk.WORD, font=base_font, undo=True)
+        text_area = ScrolledText(frame, wrap=tk.WORD, font=base_font, undo=True, padx=12, pady=8, spacing1=4, spacing3=4, insertwidth=2)
         text_area.pack(fill=tk.BOTH, expand=True)
 
         # Zoom bindings must be widget-level (not bind_all) so "break" can
@@ -542,6 +582,10 @@ class MarkdownReader:
 
         # Bind KeyPress DIRECTLY with priority
         text_area.bind("<KeyPress>", intercept_key, add=False)
+
+        # Status bar bindings
+        text_area.bind("<KeyRelease>", lambda e: self.update_status_bar(), add=True)
+        text_area.bind("<ButtonRelease>", lambda e: self.update_status_bar(), add=True)
 
         # Other bindings come after
         self.notebook.add(frame, text="")
@@ -710,39 +754,40 @@ class MarkdownReader:
             if "×" not in tab_text:
                 return
 
-            # Use font to measure actual text width
             import tkinter.font as tkfont
 
-            # Get the default font used by ttk.Notebook tabs
+            # Get the font used by ttk.Notebook tabs
             try:
-                # Try to get the actual font from the style
                 style = ttk.Style()
                 tab_font = tkfont.Font(font=style.lookup("TNotebook.Tab", "font"))
             except:
-                # Fallback to a reasonable default
                 tab_font = tkfont.Font(family="TkDefaultFont", size=10)
 
-            # Add padding (tabs usually have padding on both sides)
-            tab_padding = 20
+            # Binary search for the actual left edge of the clicked tab
+            lo, hi = 0, event.x
+            while lo < hi - 1:
+                mid = (lo + hi) // 2
+                check = self.notebook.tk.call(self.notebook._w, "identify", "tab", mid, event.y)
+                if check != "" and int(check) == tab_index:
+                    hi = mid
+                else:
+                    lo = mid
+            left_edge = hi
 
-            # Compute the left x of the clicked tab by summing widths of all preceding tabs
-            tab_x = 0
-            for i in range(tab_index):
-                prev_text = self.notebook.tab(i, "text")
-                tab_x += tab_font.measure(prev_text) + tab_padding
+            # Binary search for the actual right edge of the clicked tab
+            lo, hi = event.x, self.notebook.winfo_width()
+            while lo < hi - 1:
+                mid = (lo + hi) // 2
+                check = self.notebook.tk.call(self.notebook._w, "identify", "tab", mid, event.y)
+                if check != "" and int(check) == tab_index:
+                    lo = mid
+                else:
+                    hi = mid
+            right_edge = lo
 
-            relative_x = event.x - tab_x
-
-            # Measure the actual width of the tab text
-            text_width = tab_font.measure(tab_text)
-            estimated_tab_width = text_width + tab_padding
-
-            # The "  ×" part is approximately 20-25 pixels
-            # Only close if clicking in the rightmost 30 pixels
-            close_button_width = 30
-            close_threshold = estimated_tab_width - close_button_width
-
-            if relative_x >= close_threshold:
+            # Only close if clicking within the last few pixels where × is rendered
+            close_zone = tab_font.measure("  ×") + 5
+            if event.x >= right_edge - close_zone:
                 self.close_tab_by_index(tab_index)
                 return "break"  # Prevent default tab selection behavior
 
