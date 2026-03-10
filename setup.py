@@ -11,7 +11,8 @@ OPTIONS = {
     'plist': {
         'CFBundleName': 'MarkdownReader',
         'CFBundleDisplayName': 'MarkdownReader',
-        'CFBundleIdentifier': 'com.example.markdownreader',
+        'CFBundleIdentifier': 'com.petertzy.markdownreader',
+        'CFBundleIconFile': 'icon.icns',
         'CFBundleVersion': '1.0.0',
         'CFBundleShortVersionString': '1.0.0',
         'LSMinimumSystemVersion': '10.14.0',

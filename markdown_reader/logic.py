@@ -1,5 +1,7 @@
 import markdown2
 import os
+import subprocess
+import sys
 import webbrowser
 import re
 import json
@@ -15,6 +17,26 @@ import requests
 
 
 ENV_FILE_PATH = Path(__file__).resolve().parent.parent / ".env"
+
+
+def _file_uri(path):
+    """Build a browser-safe file URI with proper escaping."""
+
+    return Path(path).resolve().as_uri()
+
+
+def _open_file_in_browser(path):
+    """Open a local file in the default browser with platform-safe handling."""
+
+    resolved_path = str(Path(path).resolve())
+
+    if sys.platform == "darwin":
+        # macOS bundled apps can hit ascii encoding issues through webbrowser's
+        # AppleScript backend. Using `open` avoids that code path.
+        subprocess.Popen(["open", resolved_path])
+        return True
+
+    return webbrowser.open(_file_uri(resolved_path), new=0)
 
 
 def _load_env_file():
@@ -1137,7 +1159,7 @@ def open_preview_in_browser(preview_file, app):
 
     if update_preview(app):
         try:
-            webbrowser.open(f"file://{os.path.abspath(preview_file)}", new=0)
+            _open_file_in_browser(preview_file)
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open preview: {e}")
     else:
@@ -2325,7 +2347,7 @@ def export_to_pdf(app, output_path):
             tmp_html_path = tmp_file.name
 
         # Open the HTML file in the default browser
-        webbrowser.open('file://' + tmp_html_path)
+        _open_file_in_browser(tmp_html_path)
 
         # Show instructions to the user
         result = messagebox.showinfo(
