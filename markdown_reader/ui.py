@@ -375,9 +375,6 @@ class MarkdownReader:
             label="Close", command=self.close_tab_from_context_menu
         )
 
-        # Bind click event to detect close button clicks
-        self.notebook.bind("<Button-1>", self.on_tab_click)
-
         # Bind right-click for context menu
         self.notebook.bind(
             "<Button-2>"
@@ -390,18 +387,8 @@ class MarkdownReader:
 
     def bind_events(self):
         """
-        Sets up drag-and-drop support alongside key binds for shortcuts.
-
-        :raises RuntimeError: If the drag-and-drop binding fails.
+        Sets up key binds for shortcuts.
         """
-
-        try:
-            # Register drag-and-drop support
-            self.root.drop_target_register("DND_Files")
-            self.root.dnd_bind("<<Drop>>", self._on_drop_files)
-            print("✅ Drag-and-drop support enabled")
-        except Exception as e:
-            print(f"⚠️  Drag-and-drop binding failed: {e}")
 
         # Keyboard shortcuts
         self.root.bind_all("<Control-s>", lambda event: self.save_file())
@@ -550,8 +537,7 @@ class MarkdownReader:
         self.editors.append(text_area)
         self.file_paths.append(None)
 
-        # Add custom tab with close button
-        self.add_label_and_close_button_to_tab(tab_index, "Untitled")
+        self.notebook.tab(tab_index, text="Untitled")
 
     def open_file(self):
         """
@@ -629,14 +615,14 @@ class MarkdownReader:
                 # Update tab name to show it's converted
                 base_name = os.path.splitext(os.path.basename(abs_path))[0]
                 tab_text = f"{base_name}.md (converted)"
-                self.add_label_and_close_button_to_tab(idx, tab_text)
+                self.notebook.tab(idx, text=tab_text)
                 # Don't set file_paths to HTML/PDF file - treat as new unsaved file
                 self.file_paths[idx] = None
                 self.current_file_path = None
             else:
                 self.file_paths[idx] = abs_path
                 tab_text = os.path.basename(abs_path)
-                self.add_label_and_close_button_to_tab(idx, tab_text)
+                self.notebook.tab(idx, text=tab_text)
                 self.current_file_path = abs_path
         except Exception as e:
             dialogs.Messagebox.show_error("Error", f"Failed to load file: {e}")
@@ -685,73 +671,6 @@ class MarkdownReader:
         # Clear modified tabs set
         self.modified_tabs.clear()
 
-    def on_tab_click(self, event):
-        """
-        Handles click events on notebook tabs to detect close button clicks.
-        Closes tab when clicking near the × symbol (rightmost area).
-
-        :param event event: The click event to be handled.
-
-        :return: The string "break" if a tab was closed, else does not return anything.
-        """
-
-        try:
-            # Identify which tab was clicked
-            element = self.notebook.tk.call(
-                self.notebook._w, "identify", "tab", event.x, event.y
-            )
-            if element == "":
-                return
-
-            tab_index = int(element)
-            tab_text = self.notebook.tab(tab_index, "text")
-
-            # Only proceed if × is in the tab text
-            if "×" not in tab_text:
-                return
-
-            # Use font to measure actual text width
-            import tkinter.font as tkfont
-
-            # Get the default font used by ttk.Notebook tabs
-            try:
-                # Try to get the actual font from the style
-                style = ttk.Style()
-                tab_font = tkfont.Font(font=style.lookup("TNotebook.Tab", "font"))
-            except:
-                # Fallback to a reasonable default
-                tab_font = tkfont.Font(family="TkDefaultFont", size=10)
-
-            # Add padding (tabs usually have padding on both sides)
-            tab_padding = 20
-
-            # Compute the left x of the clicked tab by summing widths of all preceding tabs
-            tab_x = 0
-            for i in range(tab_index):
-                prev_text = self.notebook.tab(i, "text")
-                tab_x += tab_font.measure(prev_text) + tab_padding
-
-            relative_x = event.x - tab_x
-
-            # Measure the actual width of the tab text
-            text_width = tab_font.measure(tab_text)
-            estimated_tab_width = text_width + tab_padding
-
-            # The "  ×" part is approximately 20-25 pixels
-            # Only close if clicking in the rightmost 30 pixels
-            close_button_width = 30
-            close_threshold = estimated_tab_width - close_button_width
-
-            if relative_x >= close_threshold:
-                self.close_tab_by_index(tab_index)
-                return "break"  # Prevent default tab selection behavior
-
-        except Exception as e:
-            print(f"Error in on_tab_click: {e}")
-            import traceback
-
-            traceback.print_exc()
-
     def show_tab_context_menu(self, event):
         """
         Shows the context menu when right-clicking on a tab.
@@ -783,19 +702,6 @@ class MarkdownReader:
             self, "right_clicked_tab_index"
         ) and self.right_clicked_tab_index < len(self.editors):
             self.close_tab_by_index(self.right_clicked_tab_index)
-
-    def add_label_and_close_button_to_tab(self, tab_index, tab_text):
-        """
-        Add a close button (×) to the tab text.
-        Note: ttk.Notebook doesn't support embedded widgets, so we use text with click detection.
-
-        :param int tab_index: The index of the tab to add the label and close button to.
-        :param string tab_text: The text for the tab label.
-        """
-
-        # Simply update the tab text with × symbol
-        # The on_tab_click handler will detect clicks in the rightmost region
-        self.notebook.tab(tab_index, text=f"{tab_text}  ×")
 
     def close_tab_by_index(self, idx):
         """
@@ -977,12 +883,9 @@ class MarkdownReader:
             self.modified_tabs.add(tab_index)
             # Get current tab title
             current_title = self.notebook.tab(tab_index, "text")
-            # Remove the close button symbol if present
-            if current_title.endswith("  ×"):
-                current_title = current_title[:-3]
             # Add asterisk if not already present
             if not current_title.startswith("* "):
-                self.notebook.tab(tab_index, text=f"* {current_title}  ×")
+                self.notebook.tab(tab_index, text=f"* {current_title}")
 
     def mark_tab_saved(self, tab_index):
         """
@@ -996,13 +899,9 @@ class MarkdownReader:
         # Get current tab title and remove asterisk if present
         try:
             current_title = self.notebook.tab(tab_index, "text")
-            # Remove the close button symbol if present
-            if current_title.endswith("  ×"):
-                current_title = current_title[:-3]
             if current_title.startswith("* "):
                 current_title = current_title[2:]
-            # Re-add close button
-            self.notebook.tab(tab_index, text=f"{current_title}  ×")
+            self.notebook.tab(tab_index, text=current_title)
         except:
             pass
 
@@ -1052,7 +951,7 @@ class MarkdownReader:
                         f.write(content)
                     self.file_paths[idx] = file_path
                     tab_text = os.path.basename(file_path)
-                    self.notebook.tab(idx, text=f"{tab_text}  ×")
+                    self.notebook.tab(idx, text=tab_text)
                     # Mark tab as saved (will ensure no asterisk)
                     self.mark_tab_saved(idx)
                 except Exception as e:

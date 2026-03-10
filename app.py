@@ -23,19 +23,8 @@ def handle_open_file(event):
 
 
 if __name__ == "__main__":
-    try:
-        from tkinterdnd2 import TkinterDnD
-
-        root = TkinterDnD.Tk()
-
-        # Apply ttkbootstrap theme to TkinterDnD window
-        app_style = ttkb.Style(theme="darkly")
-
-        print("TkinterDnD enabled - Drag and drop support available")
-    except (ImportError, RuntimeError) as e:
-        print(f"   Warning: tkinterdnd2 not installed, drag-and-drop will be disabled")
-        print(f"   Error: {e}")
-        root = ttkb.Window(themename="darkly")
+    # Use ttkbootstrap window directly for stable styling across Python/Tk versions.
+    root = ttkb.Window(themename="darkly")
 
     # Ensure window is resizable
     root.resizable(width=True, height=True)
