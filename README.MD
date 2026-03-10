@@ -11,7 +11,7 @@ Markdown Reader is a clean and intuitive Markdown reader with real-time preview 
 * Dark mode toggle.
 * **Advanced Table Editor**: Interactive table insertion with customizable rows and columns.
 * **Dual PDF Conversion**: Fast PyMuPDF mode or advanced [Docling](https://github.com/docling-project/docling) mode for complex documents.
-* Drag-and-drop support for `.md`, `.html`, and `.pdf` files with automatic conversion to Markdown (requires `tkinterdnd2`).
+* Drag-and-drop support for `.md`, `.html`, and `.pdf` files with automatic conversion to Markdown.
 * Built with pure Python and Tkinter — cross-platform.
 * Can be bundled as a macOS app using `py2app`.
 * Opens preview automatically and avoids multiple browser tabs for a smoother experience.
@@ -57,8 +57,6 @@ For Windows users, WeasyPrint requires additional system libraries. Complete the
 ```bash
 pip install -r requirements.txt
 ```
-
-If drag-and-drop still doesn't work, try the [tkinterDnD2 fork](https://github.com/pmgagne/tkinterDnD2)
 
 ---
 
@@ -116,7 +114,7 @@ git push
 
 ## Technical Details
 
-* GUI: `tkinter`, `tkinterdnd2`, `ttkbootstrap`
+* GUI: `tkinter`, `ttkbootstrap`
 * Markdown Engine: `markdown2`
 * HTML Preview: Dynamically generated HTML opened in the default browser
 * File Conversion: `html2text` for HTML, `pypdf` and `docling` for PDF import
