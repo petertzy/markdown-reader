@@ -557,7 +557,7 @@ def _is_probably_math_token(token):
     if core.startswith(('http://', 'https://', 'www.', 'file://')):
         return False
 
-    if '$' in core or '\(' in core or '\)' in core or '\[' in core or '\]' in core:
+    if '$' in core or '\\(' in core or '\\)' in core or '\\[' in core or '\\]' in core:
         return False
 
     # Reject pure lowercase English words (at least 3 chars), but allow math vars
@@ -625,7 +625,7 @@ def _is_markdown_media_line(stripped_line):
 
 def _auto_wrap_bare_math_spans(markdown_text):
     """
-    Wrap likely inline bare math tokens with \(...\) in mixed prose lines.
+    Wrap likely inline bare math tokens with \\(...\\) in mixed prose lines.
     Returns list of (protected_text, replacements_dict) to preserve LaTeX delimiters.
 
     :param string markdown_text: Original markdown text.
@@ -1466,8 +1466,20 @@ def convert_pdf_to_markdown(pdf_path):
             page = doc[page_num]
             blocks = page.get_text("dict").get("blocks", [])
 
+            # Normalize block order by page coordinates so images/text keep visual reading order.
+            # Some PDFs return mixed block sequences where later sections can appear before figures.
+            indexed_blocks = list(enumerate(blocks))
+            indexed_blocks.sort(
+                key=lambda item: (
+                    ((item[1].get("bbox") or [0, 0, 0, 0])[1]),
+                    ((item[1].get("bbox") or [0, 0, 0, 0])[0]),
+                    item[0],
+                )
+            )
+            ordered_blocks = [block for _, block in indexed_blocks]
+
             font_sizes = []
-            for block in blocks:
+            for block in ordered_blocks:
                 if block.get("type") == 0:
                     for line in block.get("lines", []):
                         for span in line.get("spans", []):
@@ -1486,7 +1498,7 @@ def convert_pdf_to_markdown(pdf_path):
             in_code_block = False
             pending_list_marker = False
 
-            for block in blocks:
+            for block in ordered_blocks:
                 block_type = block.get("type")
 
                 if block_type == 1:
@@ -1562,6 +1574,8 @@ def convert_pdf_to_markdown(pdf_path):
                         continue
 
                     is_code_line = _is_pdf_code_line(line_text, has_monospace)
+                    if not is_code_line and in_code_block and _is_pdf_code_continuation_line(line_text):
+                        is_code_line = True
                     if is_code_line:
                         if not in_code_block:
                             output_lines.append("```bash")
@@ -1582,6 +1596,14 @@ def convert_pdf_to_markdown(pdf_path):
                     if pending_list_marker:
                         output_lines.append(f"- {line_text}")
                         pending_list_marker = False
+                        continue
+
+                    clean_line = line_text.replace("**", "").replace("*", "").strip()
+                    # Recover common PDF-rendered markdown subheadings like "2. Create ..."
+                    # that may otherwise degrade into bold paragraph text.
+                    if re.match(r'^\d+\.\s+\S+', clean_line) and (line_text.startswith("**") and line_text.endswith("**")):
+                        output_lines.append(f"#### {clean_line}")
+                        output_lines.append("")
                         continue
 
                     if max_font_size >= heading1_threshold:
@@ -1672,6 +1694,10 @@ def _convert_pdf_to_markdown_fallback(pdf_path):
                     markdown_text += line.strip() + "\n"
                     continue
 
+                if in_code_block and _is_pdf_code_continuation_line(line):
+                    markdown_text += line.strip() + "\n"
+                    continue
+
                 if in_code_block:
                     markdown_text += "```\n\n"
                     in_code_block = False
@@ -1723,7 +1749,7 @@ def _is_pdf_code_line(line, has_monospace_font=False):
 
     code_patterns = [
         r'^\$\s+\S+',
-        r'^(sudo|pip|python|python3|npm|node|git|cd|ls|mkdir|rm|cp|mv)\b',
+        r'^(sudo|pip|python|python3|npm|node|git|cd|ls|mkdir|rm|cp|mv|source)\b',
         r'^(if|for|while|def|class|return|import|from|try|except|else|elif)\b',
         r'\b(function|const|let|var|echo|export|chmod|chown|brew|apt|yum|conda)\b',
         r'`[^`]+`'
@@ -1734,6 +1760,31 @@ def _is_pdf_code_line(line, has_monospace_font=False):
             return True
 
     return False
+
+
+def _is_pdf_code_continuation_line(line):
+    """
+    Detect lines that should remain inside an already-open PDF-derived code block.
+
+    :param string line: A single extracted line.
+    :return: True if the line likely continues code/command content.
+    """
+
+    stripped = line.strip()
+    if not stripped:
+        return False
+
+    if stripped.startswith("#"):
+        return True
+
+    continuation_patterns = [
+        r'^(source|export|set|unset|alias|PATH=)\b',
+        r'^(\./|\.\\|\.\./|\.\.\\)',
+        r'(^|\s)(venv|scripts|bin|powershell|cmd|activate)(\s|$)',
+        r'[/\\].*(activate|python|pip)',
+    ]
+
+    return any(re.search(pattern, stripped, re.IGNORECASE) for pattern in continuation_patterns)
 
 
 def _is_standalone_list_marker(line):
@@ -1791,7 +1842,7 @@ def _clean_list_item(line):
     """
     
     # Remove common list markers
-    cleaned = re.sub(r'^\s*[•●○▪▫■□✓✔-–—]\s+', '', line)
+    cleaned = re.sub(r'^\s*[•●○▪▫■□✓✔\-–—]\s+', '', line)
     cleaned = re.sub(r'^\s*\d+[\.)]\s+', '', cleaned)
     cleaned = re.sub(r'^\s*[a-z][\.)]\s+', '', cleaned)
     cleaned = re.sub(r'^\s*[ivxIVX]+[\.)]\s+', '', cleaned)
