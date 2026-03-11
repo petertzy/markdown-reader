@@ -8,6 +8,8 @@ Markdown Reader is a clean and intuitive Markdown reader with real-time preview 
 
 * Real-time preview of Markdown rendered to HTML.
 * **AI-Powered Translation**: Translate Markdown documents while preserving formatting (supports OpenRouter, OpenAI, and Anthropic).
+* **Secure API Key Management**: Missing or rejected provider keys trigger an in-app dialog, and keys can be saved in the OS-provided secure credential store instead of depending on `.env`.
+* **Progressive Translation Rendering**: Long translations are split into smaller chunks, inserted into the editor as they complete, auto-scrolled into view, and tracked with a progress bar.
 * Dark mode toggle.
 * **Advanced Table Editor**: Interactive table insertion with customizable rows and columns.
 * **Dual PDF Conversion**: Fast PyMuPDF mode or advanced [Docling](https://github.com/docling-project/docling) mode for complex documents.
@@ -75,6 +77,9 @@ python app.py
   - Translate full document: "Edit → Translate with AI → Translate Full Document with AI"
   - Select source and target languages from dropdown menus
   - Switch AI provider: "Settings → AI Provider"
+  - Update or remove provider keys: "Settings → Manage AI API Keys..."
+  - If `.env` is missing or a key is rejected, the app prompts for the correct provider key and can save it securely in the OS-provided credential store
+  - Large translations appear progressively in the editor with automatic scrolling and a visible progress bar
 * **Table Insertion**: Use "Table → Insert Table" to create custom tables with interactive cell editing.
 * **PDF Conversion Modes**: 
   - Fast mode (default): Uses PyMuPDF for quick extraction
@@ -118,7 +123,7 @@ git push
 * File Conversion: `html2text` for HTML, `PyMuPDF` and `docling` for PDF import
 * PDF Export: `pypdf`
 * AI Translation: `requests` for API communication with OpenRouter, OpenAI, and Anthropic
-* Configuration: Environment variables via `.env` file
+* Configuration: Environment variables via `.env` file or secure OS credential storage via `keyring`
 * Auto-failover: Automatically switches AI providers on rate limits or errors
 
 ---
@@ -140,6 +145,8 @@ cp .env.example .env
 - **OpenRouter** (recommended for free tier): [openrouter.ai](https://openrouter.ai/)
 - **OpenAI**: [platform.openai.com](https://platform.openai.com/)
 - **Anthropic**: [console.anthropic.com](https://console.anthropic.com/)
+
+If the app is packaged and `.env` is unavailable, translation will prompt for the needed key at runtime and can store it securely through "Settings → Manage AI API Keys...".
 **Solutions**:
 
 The app will automatically switch to a fallback provider if the primary provider hits rate limits.
