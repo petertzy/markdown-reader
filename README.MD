@@ -49,9 +49,9 @@ source venv/bin/activate  # macOS/Linux
 
 #### 3. Install dependencies
 
-For Mac users, you should first complete the preparation steps described in the [PrepareForMacUser](PrepareForMacUser.md) file.
+For Mac users, you should first complete the preparation steps described in the [PrepareForMacUser](./doc/PrepareForMacUser.md) file.
 
-For Windows users, WeasyPrint requires additional system libraries. Complete the preparation steps described in the [PrepareForWindowsUser](PrepareForWindowsUser.md) file before running `pip install`.
+For Windows users, WeasyPrint requires additional system libraries. Complete the preparation steps described in the [PrepareForWindowsUser](./doc/PrepareForWindowsUser.md) file before running `pip install`.
 
 ```bash
 pip install -r requirements.txt
