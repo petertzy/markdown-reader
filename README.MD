@@ -117,8 +117,8 @@ git push
 * GUI: `tkinter`, `ttkbootstrap`
 * Markdown Engine: `markdown2`
 * HTML Preview: Dynamically generated HTML opened in the default browser
-* File Conversion: `html2text` for HTML, `pypdf` and `docling` for PDF import
-* PDF Export: Browser-based print-to-PDF (no system dependencies required)
+* File Conversion: `html2text` for HTML, `PyMuPDF` and `docling` for PDF import
+* PDF Export: `pypdf`
 * AI Translation: `requests` for API communication with OpenRouter, OpenAI, and Anthropic
 * Configuration: Environment variables via `.env` file
 * Supports drag-and-drop and live preview updates while avoiding multiple browser tabs
