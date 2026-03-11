@@ -1,3 +1,10 @@
+import sys
+# modulegraph (used internally by py2app) scans every imported package's AST.
+# Python 3.14's richer AST node structure causes it to recurse much deeper than
+# older versions, exceeding the default limit of 1000 and crashing the build.
+# 5000 is enough for fontTools, weasyprint and other deep packages.
+sys.setrecursionlimit(5000)
+
 from setuptools import setup
 
 APP = ['app.py']
@@ -5,9 +12,54 @@ DATA_FILES = []
 OPTIONS = {
     'argv_emulation': False,
     'iconfile': 'icon.icns',
-    'packages': ['markdown_reader', 'pygments', 'ttkbootstrap', 'PIL', 'keyring'],
-    'includes': ['tkinter', 'markdown2', 'docx', 'html2text', 'watchdog', 'pygments.lexers', 'pygments.lexers.shell', 'PIL', 'PIL.Image', 'PIL.ImageTk', 'keyring.backends', 'keyring.backends.macOS'],
-    'excludes': ['numpy', 'scipy', 'matplotlib'],
+    'packages': [
+        'markdown_reader',
+        'pygments',
+        'ttkbootstrap',
+        'PIL',
+        'keyring',
+        # WeasyPrint and its direct pure-Python dependencies.
+        # requests/certifi/charset_normalizer/idna/urllib3 are auto-discovered
+        # from the source; only list packages modulegraph tends to miss.
+        'weasyprint',
+        'pydyf',
+        'cssselect2',
+        'tinycss2',
+        'pyphen',
+        'fontTools',
+    ],
+    'includes': [
+        'tkinter',
+        'markdown2',
+        'docx',
+        'html2text',
+        'watchdog',
+        'pygments.lexers',
+        'pygments.lexers.shell',
+        'PIL',
+        'PIL.Image',
+        'PIL.ImageTk',
+        'keyring.backends',
+        'keyring.backends.macOS',
+        # WeasyPrint sub-modules that use dynamic/late imports
+        'weasyprint.css',
+        'weasyprint.document',
+        'weasyprint.formatting_structure',
+        'weasyprint.layout',
+        'weasyprint.pdf',
+        'weasyprint.svg',
+        'weasyprint.text',
+        'weasyprint.text.ffi',
+        'weasyprint.text.fonts',
+        'fontTools.ttLib',
+        'fontTools.subset',
+    ],
+    # Exclude heavy optional deps that are not needed at runtime.
+    'excludes': [
+        'numpy', 'scipy', 'matplotlib',
+        'docling',
+        'html5lib',     # not installed; excluding prevents modulegraph chasing it
+    ],
     'plist': {
         'CFBundleName': 'MarkdownReader',
         'CFBundleDisplayName': 'MarkdownReader',
