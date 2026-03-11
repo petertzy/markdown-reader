@@ -128,6 +128,8 @@ class MarkdownReader:
             value=os.getenv("AI_PROVIDER", "openrouter").strip().lower() or "openrouter"
         )
 
+        self.root.protocol("WM_DELETE_WINDOW", self.quit)
+
         self.create_widgets()
         self.bind_events()
 
@@ -913,7 +915,15 @@ class MarkdownReader:
         if self.observer:
             self.observer.stop()
             self.observer.join()
-        self.root.quit()
+            self.observer = None
+
+        try:
+            self.root.quit()
+        finally:
+            try:
+                self.root.destroy()
+            except tk.TclError:
+                pass
 
     def save_file(self):
         """

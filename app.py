@@ -1,4 +1,5 @@
 import os
+import signal
 import sys
 import tkinter as tk
 
@@ -169,6 +170,21 @@ def handle_open_file(event):
         app.load_file(file_path)
 
 
+def _install_sigint_handler(root, app):
+    """Route Ctrl-C through the same shutdown path as a normal window close."""
+
+    previous_handler = signal.getsignal(signal.SIGINT)
+
+    def _handle_sigint(signum, frame):
+        try:
+            root.after(0, app.quit)
+        except Exception:
+            app.quit()
+
+    signal.signal(signal.SIGINT, _handle_sigint)
+    return previous_handler
+
+
 if __name__ == "__main__":
     # Use ttkbootstrap window directly for stable styling across Python/Tk versions.
     root = ttkb.Window(themename="darkly")
@@ -198,4 +214,19 @@ if __name__ == "__main__":
                 app.load_file(file_path)
                 break  # Only open the first file
 
-    root.mainloop()
+    previous_sigint_handler = _install_sigint_handler(root, app)
+
+    try:
+        root.mainloop()
+    except KeyboardInterrupt:
+        app.quit()
+    finally:
+        try:
+            app.quit()
+        except Exception:
+            pass
+
+        try:
+            signal.signal(signal.SIGINT, previous_sigint_handler)
+        except Exception:
+            pass

@@ -893,13 +893,6 @@ def update_preview(app):
                         markdown_text = disk_text
         except Exception:
             pass
-        else:
-        # Helpful debug output when running in development
-
-            try:
-                print("No file_paths attribute or it's empty; skipping fix_image_paths")
-            except Exception:
-                pass
 
         try:
             # Protect math BEFORE markdown2 processes it
@@ -2529,11 +2522,63 @@ def convert_pdf_to_markdown_docling(pdf_path):
     :raises Exception: If the PDF cannot be converted to Markdown.
     """
     
+    converter = None
+
     try:
         from docling.document_converter import DocumentConverter
         import re
         import html
         import shutil
+
+        def _cleanup_docling_object(obj, seen=None):
+            if obj is None:
+                return
+
+            if seen is None:
+                seen = set()
+
+            obj_id = id(obj)
+            if obj_id in seen:
+                return
+            seen.add(obj_id)
+
+            for method_name in ("cleanup", "close", "shutdown", "terminate", "stop", "unload"):
+                method = getattr(obj, method_name, None)
+                if callable(method):
+                    try:
+                        method()
+                    except TypeError:
+                        pass
+                    except Exception:
+                        pass
+
+            if isinstance(obj, dict):
+                for value in obj.values():
+                    _cleanup_docling_object(value, seen)
+                return
+
+            if isinstance(obj, (list, tuple, set)):
+                for value in obj:
+                    _cleanup_docling_object(value, seen)
+                return
+
+            obj_dict = getattr(obj, "__dict__", None)
+            if not obj_dict:
+                return
+
+            for attr_name, value in obj_dict.items():
+                if attr_name.startswith("__"):
+                    continue
+                value_module = getattr(getattr(value, "__class__", None), "__module__", "")
+                if isinstance(value, (dict, list, tuple, set)) or value_module.startswith(("docling", "docling_core")):
+                    _cleanup_docling_object(value, seen)
+
+        def _cleanup_docling_converter(doc_converter):
+            initialized = getattr(doc_converter, "initialized_pipelines", None)
+            if isinstance(initialized, dict):
+                for pipeline in list(initialized.values()):
+                    _cleanup_docling_object(pipeline)
+                initialized.clear()
         
         pdf_abs_path = os.path.abspath(pdf_path)
         pdf_base_dir = os.path.dirname(pdf_abs_path)
@@ -2948,6 +2993,57 @@ def convert_pdf_to_markdown_docling(pdf_path):
         def _cleanup_docling_structure(text):
             cleaned = text
 
+            def _strip_overview_body_noise(src_text, section_title):
+                section_re = rf'(?ms)^##\s*{re.escape(section_title)}\s*\n(.*?)(?=^##\s+|\Z)'
+
+                def _section_clean(match):
+                    body = match.group(1)
+                    kept_lines = []
+                    for ln in body.splitlines():
+                        s = ln.strip()
+                        if not s:
+                            continue
+                        if re.match(r'^!\[[^\]]*\]\([^)]+\)$', s):
+                            kept_lines.append(s)
+                    if kept_lines:
+                        return f"## {section_title}\n\n" + "\n\n".join(kept_lines) + "\n\n"
+                    return f"## {section_title}\n\n"
+
+                return re.sub(section_re, _section_clean, src_text, count=1, flags=re.IGNORECASE)
+
+            def _remove_duplicate_section(src_text, section_title):
+                # Keep only the first section occurrence for titles that should be unique.
+                pat = rf'(?ms)^##\s*{re.escape(section_title)}\s*\n.*?(?=^##\s+|\Z)'
+                matches = list(re.finditer(pat, src_text, flags=re.IGNORECASE))
+                if len(matches) <= 1:
+                    return src_text
+
+                first_end = matches[0].end()
+                pieces = [src_text[:first_end]]
+                last = first_end
+                for m in matches[1:]:
+                    pieces.append(src_text[last:m.start()])
+                    last = m.end()
+                pieces.append(src_text[last:])
+                return ''.join(pieces)
+
+            # Promote the document title when Docling downgrades first heading level.
+            cleaned = re.sub(r'\A\s*##\s*Markdown\s+Reader\s*\n', '# Markdown Reader\n\n', cleaned, flags=re.IGNORECASE)
+
+            # Drop noisy app-window OCR chunks often injected between real sections.
+            cleaned = re.sub(
+                r'(?mis)^Installation\s*&\s*Usage\s*\n\s*README\.MD\s*x\s*\n\s*#\s*Markdown\s+Reader\s*\n\s*1\.\s*Clone the repository\s*\n\s*##\s*What\'s New\s*\n',
+                '',
+                cleaned,
+            )
+
+            # Remove malformed duplicated feature chunk produced by OCR.
+            cleaned = re.sub(
+                r'(?mis)^##\s*Features\s+python\s+-m\s+venv\s+venv\s*\n.*?(?=^##\s+Editor Overview\b|^##\s+Preview Overview\b|^##\s+Installation\s*&\s*Usage\b)',
+                '',
+                cleaned,
+            )
+
             # Remove duplicated heading right after Features (e.g. "## Features" then "## Markdown Reader").
             cleaned = re.sub(
                 r'(?mi)^##\s*Features\s*\n\s*##\s*Markdown\s+Reader\s*\n',
@@ -2986,6 +3082,11 @@ def convert_pdf_to_markdown_docling(pdf_path):
                 cleaned,
             )
             cleaned = re.sub(
+                r'(?mi)^\s*source\s+venv/bin/activate\s*#\s*macos/linux\s*#\s*(\.\\venv\\scripts\\activate\s*#\s*windows\s*\(cmd/powershell\))\s*$',
+                r'source venv/bin/activate  # macOS/Linux\n# \1',
+                cleaned,
+            )
+            cleaned = re.sub(
                 r'(?mi)^(\s*rm\s+-rf\s+build\s+dist)\s+python\s+setup\.py\s+py2app\s*$',
                 r'\1\npython setup.py py2app',
                 cleaned,
@@ -3000,6 +3101,64 @@ def convert_pdf_to_markdown_docling(pdf_path):
 
             # Remove trailing OCR bullet separators at end of list lines.
             cleaned = re.sub(r'[ \t]*[·•]\s*$', '', cleaned, flags=re.MULTILINE)
+
+            # Remove isolated OCR/UI artifact lines.
+            cleaned = re.sub(r'(?mi)^\s*(README\.MD\s*x|Copy|Markdown Reader|What\'s New)\s*$', '', cleaned)
+            cleaned = re.sub(r'(?m)^\s*\d{1,3}\s*$', '', cleaned)
+
+            # Repair bare command lines that lost fenced code blocks.
+            cleaned = re.sub(
+                r'(?mis)^##\s*Running the Application\s*\n\s*python\s+app\.py\s*$',
+                '## Running the Application\n\n```bash\npython app.py\n```',
+                cleaned,
+            )
+            cleaned = re.sub(
+                r'(?mis)^##\s*Exit the Virtual Environment\s*\n\s*deactivate\s*$',
+                '## Exit the Virtual Environment\n\n```bash\ndeactivate\n```',
+                cleaned,
+            )
+            cleaned = re.sub(
+                r'(?mis)^##\s*AI-powered translation:\s*\n\s*To enable AI-powered translation features, you need to set up API keys:\s*\n\s*```\s*\n\s*#\s*Copy the example configuration file\s*cp\s+\.env\.example\s+\.env\s*\n\s*```',
+                '## AI-powered translation:\n\nTo enable AI-powered translation features, you need to set up API keys:\n\n```bash\n# Copy the example configuration file\ncp .env.example .env\n```',
+                cleaned,
+            )
+            cleaned = re.sub(
+                r'(?mis)^##\s*3\.\s*Install dependencies\s*\n\s*For Mac users[\s\S]*?before running\s+`?pip install`?\s*\.\s*\n\s*pip install -r requirements\.txt\s*$',
+                lambda m: m.group(0).replace('\npip install -r requirements.txt', '\n\n```bash\npip install -r requirements.txt\n```'),
+                cleaned,
+            )
+            cleaned = re.sub(
+                r'(?mi)^\s*git add\s+\.\s+git commit\s+-m\s+"Update"\s+#\s*Replace\s+"Update"\s+with\s+a\s+meaningful\s+commit\s+message\s+git push\s*$',
+                'git add .\ngit commit -m "Update"  # Replace "Update" with a meaningful commit message\ngit push',
+                cleaned,
+            )
+
+            # Normalize section heading levels for numbered installation sub-steps.
+            cleaned = re.sub(r'(?mi)^##\s*(\d+\.\s+.+)$', r'#### \1', cleaned)
+
+            # Restore common README links when OCR drops markdown link syntax.
+            cleaned = re.sub(
+                r'(?mi)(PrepareForMacUser)\s+file',
+                r'[PrepareForMacUser](./doc/PrepareForMacUser.md) file',
+                cleaned,
+            )
+            cleaned = re.sub(
+                r'(?mi)(PrepareForWindowsUser)\s+file',
+                r'[PrepareForWindowsUser](./doc/PrepareForWindowsUser.md) file',
+                cleaned,
+            )
+
+            # Remove immediate duplicate headings/images that often appear back-to-back.
+            cleaned = re.sub(
+                r'(?ms)(^##\s*Preview Overview\s*\n\s*!\[[^\]]*\]\([^)]+\)\s*\n)\s*\1+',
+                r'\1',
+                cleaned,
+            )
+
+            cleaned = _strip_overview_body_noise(cleaned, 'Editor Overview')
+            cleaned = _strip_overview_body_noise(cleaned, 'Preview Overview')
+            cleaned = _remove_duplicate_section(cleaned, 'Editor Overview')
+            cleaned = _remove_duplicate_section(cleaned, 'Preview Overview')
 
             # Remove exact duplicated non-empty lines while preserving order.
             lines = cleaned.splitlines()
@@ -3029,6 +3188,20 @@ def convert_pdf_to_markdown_docling(pdf_path):
 
             cleaned = '\n'.join(deduped_lines)
             cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+            
+            # Restore missing horizontal separator before System Requirements section
+            # Match any text followed by one or more newlines, then the heading
+            cleaned = re.sub(
+                r'([^\n])\n+(##\s+System\s+Requirements)',
+                r'\1\n\n---\n\n\2',
+                cleaned,
+                flags=re.IGNORECASE
+            )
+            
+            # Format polish: remove spaces before colons and commas
+            cleaned = re.sub(r'\s+:', ':', cleaned)  # "Translation :" → "Translation:"
+            cleaned = re.sub(r'\s+,', ',', cleaned)  # ".md , .html" → ".md, .html"
+            
             return cleaned
 
         markdown_text = _bind_images_to_sections(markdown_text, image_uris)
@@ -3061,3 +3234,10 @@ def convert_pdf_to_markdown_docling(pdf_path):
             "Falling back to standard converter."
         )
         return convert_pdf_to_markdown(pdf_path)
+
+    finally:
+        if converter is not None:
+            try:
+                _cleanup_docling_converter(converter)
+            except Exception:
+                pass
