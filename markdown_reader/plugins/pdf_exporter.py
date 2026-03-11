@@ -1,3 +1,6 @@
+import base64
+import mimetypes
+import os
 from pathlib import Path
 from urllib.parse import urlparse
 import re
@@ -65,6 +68,61 @@ def custom_url_fetcher(url):
                 'mime_type': 'application/octet-stream',
                 'encoding': None,
             }
+
+
+def _inline_local_images(html_content: str, base_dir: str = None) -> str:
+    """
+    Replace every local <img src="..."> reference with an inline base64 data URI.
+
+    This makes the HTML fully self-contained so WeasyPrint never needs to read
+    from the filesystem at render time — critical inside a sandboxed .app bundle
+    where relative paths and file:// URLs are often unresolvable.
+
+    Remote (http/https) and already-inlined (data:) sources are left untouched.
+    """
+
+    def _try_inline(src: str):
+        """Return a data-URI string for *src*, or None if it cannot be inlined."""
+        if src.startswith(("http://", "https://", "data:")):
+            return None
+        try:
+            if src.startswith("file://"):
+                file_path = src[7:]
+                # Windows: file:///C:/... -> C:/...
+                if file_path.startswith("/") and len(file_path) > 2 and file_path[2] == ":":
+                    file_path = file_path[1:]
+            elif os.path.isabs(src):
+                file_path = src
+            elif base_dir:
+                file_path = os.path.join(base_dir, src)
+            else:
+                return None
+
+            file_path = os.path.abspath(file_path)
+            if not os.path.isfile(file_path):
+                return None
+
+            mime_type, _ = mimetypes.guess_type(file_path)
+            if not mime_type or not mime_type.startswith("image/"):
+                mime_type = "image/png"
+
+            with open(file_path, "rb") as fh:
+                data = base64.b64encode(fh.read()).decode("ascii")
+
+            return f"data:{mime_type};base64,{data}"
+        except Exception:
+            return None
+
+    def _replace_attr(m):
+        quote = m.group(1)
+        src = m.group(2)
+        inlined = _try_inline(src)
+        if inlined:
+            return f"src={quote}{inlined}{quote}"
+        return m.group(0)
+
+    # Match src="..." and src='...'
+    return re.sub(r'src=(["\'])([^"\']+)\1', _replace_attr, html_content, flags=re.IGNORECASE)
 
 
 def _wrap_html_for_pdf(html_content: str) -> str:
@@ -145,27 +203,36 @@ def export_markdown_to_pdf(html_content: str, output_path: str, base_url: str = 
     Args:
         html_content (str): HTML string already rendered from Markdown 
         output_path (str): Target PDF file path  
-        base_url (str): Base URL for resolving relative image paths (e.g., '/path/to/dir' or 'file:///path/to/dir/')
+        base_url (str): Base directory (filesystem path or file:// URL) where the
+                        source Markdown file lives, used to resolve relative image paths
+                        before they are inlined as base64 data URIs.
     """
     try:
-        # Prepare the base_url for HTML
+        # Resolve base_dir from whatever form base_url arrives in
+        base_dir = None
         if base_url:
-            # Convert Windows paths to proper file URLs
-            if not base_url.startswith('file://'):
-                base_url = Path(base_url).as_uri()
+            if base_url.startswith("file://"):
+                base_dir = base_url[7:]
+                # Windows: file:///C:/... -> C:/...
+                if base_dir.startswith("/") and len(base_dir) > 2 and base_dir[2] == ":":
+                    base_dir = base_dir[1:]
+            else:
+                base_dir = base_url
 
         normalized_html = _normalize_image_tags(html_content)
+        # Inline all local images as base64 data URIs so WeasyPrint never has
+        # to touch the filesystem for images — essential in a bundled .app.
+        normalized_html = _inline_local_images(normalized_html, base_dir)
         full_html = _wrap_html_for_pdf(normalized_html)
 
-        # Create HTML object with custom URL fetcher in the constructor
-        html = HTML(string=full_html, base_url=base_url, url_fetcher=custom_url_fetcher)
-
-        # Write PDF
+        # No base_url / url_fetcher needed: all local resources are now inlined.
+        html = HTML(string=full_html)
         html.write_pdf(output_path)
     except Exception:
         import traceback
         traceback.print_exc()
         raise
+
 
 
 

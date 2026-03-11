@@ -2416,15 +2416,33 @@ Example - Data Table:
         # Take the content markdown now
         md_content = self.editors[idx].get("1.0", "end-1c")
 
-        # Convert to HTML (preserve fenced code blocks and common markdown features)
-        html_content = markdown.markdown(
-            md_content, extensions=["fenced_code", "tables", "nl2br", "sane_lists"]
+        # Resolve the base directory so the exporter can inline local images.
+        # We pass the raw filesystem path; pdf_exporter._inline_local_images()
+        # handles the conversion to absolute paths and base64 data URIs, making
+        # the resulting HTML fully self-contained for WeasyPrint.
+        base_dir = None
+        if current_path:
+            base_dir = os.path.dirname(os.path.abspath(current_path))
+
+        # Use markdown2 (same as the rest of the app) for consistent rendering.
+        import markdown2 as _md2
+        html_content = _md2.markdown(
+            md_content,
+            extras=["fenced-code-blocks", "code-friendly", "tables", "break-on-newline"],
         )
 
-        # Determine base URL for resolving relative image paths
-        base_url = None
-        if current_path:
-            base_url = os.path.dirname(os.path.abspath(current_path))
+        # Export to PDF using WeasyPrint (images inlined as base64 inside the exporter)
+        try:
+            export_markdown_to_pdf(html_content, output_path, base_dir)
+            dialogs.Messagebox.show_info(
+                "Export Successful",
+                f"PDF saved to:\n{output_path}",
+            )
+        except Exception as exc:
+            import traceback
+            dialogs.Messagebox.show_error(
+                "PDF Export Failed",
+                f"Could not export PDF:\n{exc}\n\nSee console for full traceback.",
+            )
+            traceback.print_exc()
 
-        # Export to PDF using WeasyPrint
-        export_markdown_to_pdf(html_content, output_path, base_url)
