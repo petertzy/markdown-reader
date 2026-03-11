@@ -15,13 +15,21 @@ from watchdog.observers import Observer
 
 from markdown_reader.file_handler import drop_file, load_file
 from markdown_reader.logic import (
+    TranslationConfigError,
     convert_html_to_markdown,
     convert_pdf_to_markdown,
     convert_pdf_to_markdown_docling,
+    delete_secure_ai_api_key,
     export_to_docx,
     export_to_html,
     export_to_pdf,
+    get_ai_provider_display_name,
+    get_ai_provider_env_var,
+    get_secure_ai_api_key,
+    is_secure_key_storage_available,
     open_preview_in_browser,
+    set_secure_ai_api_key,
+    split_markdown_for_translation,
     translate_markdown_with_ai,
     update_preview,
 )
@@ -127,6 +135,10 @@ class MarkdownReader:
         self.ai_provider_var = tk.StringVar(
             value=os.getenv("AI_PROVIDER", "openrouter").strip().lower() or "openrouter"
         )
+        self.translation_progress_var = tk.DoubleVar(value=0)
+        self.translation_status_var = tk.StringVar(value="")
+        self.translation_job_active = False
+        self._translation_session_counter = 0
 
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
 
@@ -200,6 +212,11 @@ class MarkdownReader:
             command=lambda: self.set_ai_provider("anthropic"),
         )
         settingsmenu.add_cascade(label="AI Provider", menu=provider_menu)
+        settingsmenu.add_separator()
+        settingsmenu.add_command(
+            label="Manage AI API Keys...",
+            command=self.open_ai_key_manager,
+        )
         menubar.add_cascade(label="Settings", menu=settingsmenu)
 
         # Tools menu with PDF conversion options
@@ -364,6 +381,20 @@ class MarkdownReader:
             command=self.choose_bg_color,
         ).pack(side=tk.LEFT, padx=5)
         toolbar.pack(fill=tk.X)
+
+        self.translation_progress_frame = ttkb.Frame(self.root, padding=(10, 6))
+        self.translation_progress_label = ttk.Label(
+            self.translation_progress_frame,
+            textvariable=self.translation_status_var,
+        )
+        self.translation_progress_label.pack(side=tk.TOP, anchor="w")
+        self.translation_progress = ttk.Progressbar(
+            self.translation_progress_frame,
+            orient=tk.HORIZONTAL,
+            mode="determinate",
+            variable=self.translation_progress_var,
+        )
+        self.translation_progress.pack(fill=tk.X, pady=(4, 0))
 
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True)
@@ -1338,6 +1369,392 @@ class MarkdownReader:
             except tk.TclError:
                 pass
 
+    def _get_current_ai_provider(self):
+        """Return the current runtime AI provider."""
+
+        return (
+            (self.ai_provider_var.get() or os.getenv("AI_PROVIDER", "openrouter"))
+            .strip()
+            .lower()
+            or "openrouter"
+        )
+
+    def _show_translation_progress(self, total_steps, message):
+        """Display the translation progress bar."""
+
+        safe_total = max(1, int(total_steps or 1))
+        self.translation_progress.configure(maximum=safe_total)
+        self.translation_progress_var.set(0)
+        self.translation_status_var.set(message)
+        if not self.translation_progress_frame.winfo_manager():
+            self.translation_progress_frame.pack(fill=tk.X, before=self.notebook)
+
+    def _update_translation_progress(self, current_step, total_steps, message):
+        """Update the translation progress UI."""
+
+        safe_total = max(1, int(total_steps or 1))
+        self.translation_progress.configure(maximum=safe_total)
+        self.translation_progress_var.set(min(current_step, safe_total))
+        self.translation_status_var.set(message)
+
+    def _hide_translation_progress(self):
+        """Hide translation progress UI."""
+
+        self.translation_progress_var.set(0)
+        self.translation_status_var.set("")
+        if self.translation_progress_frame.winfo_manager():
+            self.translation_progress_frame.pack_forget()
+
+    def _show_ai_key_dialog(
+        self,
+        provider_name,
+        prompt_message,
+        allow_provider_change=False,
+        allow_delete=True,
+    ):
+        """Prompt the user for an API key and optional secure persistence."""
+
+        provider_options = ["openrouter", "openai", "anthropic"]
+        initial_provider = (provider_name or self._get_current_ai_provider()).strip().lower()
+        if initial_provider not in provider_options:
+            initial_provider = "openrouter"
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("AI API Key")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        dialog.geometry("560x420")
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 280
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 210
+        dialog.geometry(f"+{x}+{y}")
+
+        container = ttk.Frame(dialog, padding=16)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(
+            container,
+            text=prompt_message,
+            wraplength=520,
+            justify=tk.LEFT,
+        ).pack(anchor="w", pady=(0, 12))
+
+        provider_var = tk.StringVar(value=initial_provider)
+        secure_available = is_secure_key_storage_available()
+        save_securely_var = tk.BooleanVar(value=secure_available)
+        stored_key_status_var = tk.StringVar(value="")
+        secure_hint_var = tk.StringVar(value="")
+        result = {"confirmed": False}
+
+        if allow_provider_change:
+            ttk.Label(container, text="Provider:").pack(anchor="w")
+            provider_combo = ttk.Combobox(
+                container,
+                values=[get_ai_provider_display_name(name) for name in provider_options],
+                state="readonly",
+                width=40,
+            )
+            provider_combo.current(provider_options.index(initial_provider))
+            provider_combo.pack(anchor="w", pady=(4, 12))
+
+            def sync_provider(*_args):
+                provider_var.set(provider_options[provider_combo.current()])
+                refresh_storage_status()
+
+            provider_combo.bind("<<ComboboxSelected>>", sync_provider)
+        else:
+            ttk.Label(
+                container,
+                text=f"Provider: {get_ai_provider_display_name(initial_provider)}",
+            ).pack(anchor="w", pady=(0, 12))
+
+        ttk.Label(container, text="API Key:").pack(anchor="w")
+        api_key_entry = ttk.Entry(container, width=62, show="*")
+        api_key_entry.pack(anchor="w", pady=(4, 8))
+        api_key_entry.focus_set()
+
+        ttk.Label(
+            container,
+            textvariable=stored_key_status_var,
+            wraplength=520,
+            justify=tk.LEFT,
+        ).pack(anchor="w", pady=(0, 10))
+
+        save_checkbox = ttk.Checkbutton(
+            container,
+            text="Save securely in the system credential store",
+            variable=save_securely_var,
+        )
+        save_checkbox.pack(anchor="w")
+
+        ttk.Label(
+            container,
+            textvariable=secure_hint_var,
+            wraplength=520,
+            justify=tk.LEFT,
+        ).pack(anchor="w", pady=(6, 0))
+
+        button_frame = ttk.Frame(container)
+        button_frame.pack(fill=tk.X, pady=(18, 0))
+
+        def refresh_storage_status():
+            current_provider = provider_var.get().strip().lower()
+            if secure_available:
+                try:
+                    has_stored_key = bool(get_secure_ai_api_key(current_provider))
+                except Exception as exc:
+                    has_stored_key = False
+                    secure_hint_var.set(f"Secure storage is available, but the stored key could not be read: {exc}")
+                else:
+                    secure_hint_var.set(
+                        "The permanent option uses the OS-provided secure credential store so packaged apps do not depend on .env files."
+                    )
+
+                if has_stored_key:
+                    stored_key_status_var.set("A secure key is already stored for this provider. Enter a new key to replace it.")
+                else:
+                    stored_key_status_var.set("No secure key is currently stored for this provider.")
+                save_checkbox.state(["!disabled"])
+            else:
+                stored_key_status_var.set("Secure storage is not available. The key can only be used for this session.")
+                secure_hint_var.set("Install and configure a supported keyring backend to enable permanent key storage.")
+                save_securely_var.set(False)
+                save_checkbox.state(["disabled"])
+
+        def on_confirm():
+            api_key = api_key_entry.get().strip()
+            if not api_key:
+                dialogs.Messagebox.show_error("Missing API Key", "Please enter an API key.")
+                return
+
+            result.update(
+                {
+                    "confirmed": True,
+                    "provider_name": provider_var.get().strip().lower(),
+                    "api_key": api_key,
+                    "save_securely": secure_available and bool(save_securely_var.get()),
+                    "delete_stored": False,
+                }
+            )
+            dialog.destroy()
+
+        def on_delete():
+            result.update(
+                {
+                    "confirmed": True,
+                    "provider_name": provider_var.get().strip().lower(),
+                    "api_key": "",
+                    "save_securely": False,
+                    "delete_stored": True,
+                }
+            )
+            dialog.destroy()
+
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=1)
+        button_frame.columnconfigure(2, weight=1)
+
+        if allow_delete:
+            ttk.Button(button_frame, text="Remove", command=on_delete, width=12).grid(
+                row=0, column=0, padx=4
+            )
+        ttk.Button(button_frame, text="Cancel", command=dialog.destroy, width=12).grid(
+            row=0, column=1, padx=4
+        )
+        ttk.Button(button_frame, text="Save", command=on_confirm, width=12).grid(
+            row=0, column=2, padx=4
+        )
+
+        refresh_storage_status()
+        dialog.bind("<Return>", lambda _event: on_confirm())
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        dialog.wait_window()
+
+        if not result.get("confirmed"):
+            return None
+
+        return result
+
+    def _apply_ai_key_dialog_result(self, result, show_feedback=False):
+        """Apply API key changes selected in the dialog."""
+
+        if not result:
+            return False
+
+        provider_name = (result.get("provider_name") or self._get_current_ai_provider()).strip().lower()
+        env_var = get_ai_provider_env_var(provider_name)
+
+        if result.get("delete_stored"):
+            delete_secure_ai_api_key(provider_name)
+            if env_var and env_var in os.environ:
+                os.environ.pop(env_var, None)
+            if show_feedback:
+                dialogs.Messagebox.show_info(
+                    "AI API Key",
+                    f"Removed the stored key for {get_ai_provider_display_name(provider_name)}.",
+                )
+            return True
+
+        api_key = (result.get("api_key") or "").strip()
+        if not api_key:
+            return False
+
+        if env_var:
+            os.environ[env_var] = api_key
+
+        if result.get("save_securely"):
+            set_secure_ai_api_key(provider_name, api_key)
+
+        if show_feedback:
+            storage_text = "saved securely" if result.get("save_securely") else "stored for this session only"
+            dialogs.Messagebox.show_info(
+                "AI API Key",
+                f"The {get_ai_provider_display_name(provider_name)} key is now {storage_text}.",
+            )
+
+        return True
+
+    def open_ai_key_manager(self):
+        """Open the menu-driven AI key management dialog."""
+
+        result = self._show_ai_key_dialog(
+            self._get_current_ai_provider(),
+            "Update the API key for the selected provider. Leave .env unused if you prefer the OS-provided secure credential store.",
+            allow_provider_change=True,
+            allow_delete=True,
+        )
+        if not result:
+            return
+
+        try:
+            self._apply_ai_key_dialog_result(result, show_feedback=True)
+        except Exception as exc:
+            dialogs.Messagebox.show_error("AI API Key", f"Failed to update the key: {exc}")
+
+    def _request_translation_api_key(self, config_error):
+        """Prompt for an API key from a worker thread and wait for the response."""
+
+        dialog_done = threading.Event()
+        dialog_result = {"value": None}
+        provider_name = (getattr(config_error, "provider_name", None) or self._get_current_ai_provider()).strip().lower()
+
+        if getattr(config_error, "invalid_key", False):
+            prompt_message = (
+                f"The current {get_ai_provider_display_name(provider_name)} API key was rejected. "
+                "Enter a new key to continue the translation."
+            )
+        else:
+            prompt_message = (
+                f"No usable API key is configured for {get_ai_provider_display_name(provider_name)}. "
+                "Enter one now to continue the translation."
+            )
+
+        def show_dialog():
+            dialog_result["value"] = self._show_ai_key_dialog(
+                provider_name,
+                prompt_message,
+                allow_provider_change=False,
+                allow_delete=False,
+            )
+            dialog_done.set()
+
+        self.root.after(0, show_dialog)
+        dialog_done.wait()
+        return dialog_result["value"]
+
+    def _prepare_translation_session(
+        self, tab_index, text_area, start_idx, end_idx, source_text, total_chunks
+    ):
+        """Prepare the editor for progressive translation output."""
+
+        self._translation_session_counter += 1
+        mark_name = f"translation_insert_{self._translation_session_counter}"
+        text_area.edit_separator()
+        text_area.delete(start_idx, end_idx)
+        text_area.mark_set(mark_name, start_idx)
+        text_area.mark_gravity(mark_name, tk.RIGHT)
+        text_area.see(start_idx)
+        text_area.focus_set()
+        self._show_translation_progress(total_chunks, f"Preparing translation... 0/{total_chunks}")
+        return {
+            "tab_index": tab_index,
+            "text_area": text_area,
+            "start_idx": start_idx,
+            "mark_name": mark_name,
+            "source_text": source_text,
+            "inserted_chunks": 0,
+            "total_chunks": total_chunks,
+        }
+
+    def _append_translation_chunk(self, session, translated_chunk, chunk_index):
+        """Insert one translated chunk and keep the editor focused on that region."""
+
+        text_area = session["text_area"]
+        text_area.insert(session["mark_name"], translated_chunk)
+        session["inserted_chunks"] = chunk_index
+        self.mark_tab_modified(session["tab_index"])
+        text_area.see(session["mark_name"])
+        self.update_preview()
+        self._update_translation_progress(
+            chunk_index,
+            session["total_chunks"],
+            f"Translated chunk {chunk_index}/{session['total_chunks']}",
+        )
+
+    def _finish_translation_session(self, session, ambiguity_notes):
+        """Finalize the progressive translation session."""
+
+        text_area = session["text_area"]
+        try:
+            text_area.mark_unset(session["mark_name"])
+        except tk.TclError:
+            pass
+        text_area.edit_separator()
+        self.update_preview()
+        self.root.config(cursor="")
+        self.translation_job_active = False
+        self._hide_translation_progress()
+
+        unique_notes = []
+        seen_notes = set()
+        for note in ambiguity_notes:
+            cleaned = str(note).strip()
+            if cleaned and cleaned not in seen_notes:
+                unique_notes.append(cleaned)
+                seen_notes.add(cleaned)
+
+        if unique_notes:
+            dialogs.Messagebox.show_info(
+                "Translation Notes",
+                "Translation completed with notes:\n\n" + "\n".join(f"- {note}" for note in unique_notes),
+            )
+
+    def _fail_translation_session(self, session, error_message):
+        """Restore or keep partial editor content after a translation failure."""
+
+        text_area = session["text_area"]
+        if session["inserted_chunks"] == 0:
+            text_area.insert(session["start_idx"], session["source_text"])
+            followup = "The original text was restored."
+        else:
+            followup = "Partial translated output has been kept in the editor."
+
+        try:
+            text_area.mark_unset(session["mark_name"])
+        except tk.TclError:
+            pass
+
+        text_area.edit_separator()
+        self.update_preview()
+        self.root.config(cursor="")
+        self.translation_job_active = False
+        self._hide_translation_progress()
+        dialogs.Messagebox.show_error(
+            "AI Translation Failed",
+            f"{error_message}\n\n{followup}",
+        )
+
     def _prompt_translation_languages(self):
         """
         Prompts user for source and target languages for AI translation.
@@ -1489,6 +1906,13 @@ class MarkdownReader:
             )
             return
 
+        if self.translation_job_active:
+            dialogs.Messagebox.show_info(
+                "Translation In Progress",
+                "Please wait for the current translation to finish before starting another one.",
+            )
+            return
+
         source_lang, target_lang = self._prompt_translation_languages()
         if not source_lang or not target_lang:
             return
@@ -1506,48 +1930,58 @@ class MarkdownReader:
             return
 
         tab_index = self.notebook.index(self.notebook.select())
+        translation_chunks = split_markdown_for_translation(source_text, chunk_lines=20)
+        total_chunks = max(1, len(translation_chunks))
+        session = self._prepare_translation_session(
+            tab_index,
+            text_area,
+            start_idx,
+            end_idx,
+            source_text,
+            total_chunks,
+        )
+        self.translation_job_active = True
         self.root.config(cursor="watch")
 
         def worker():
             try:
-                translated_text, ambiguity_notes = translate_markdown_with_ai(
-                    source_text,
-                    source_lang,
-                    target_lang,
-                )
-                if not translated_text.strip():
-                    raise RuntimeError("AI returned empty translation.")
+                ambiguity_notes = []
+                for chunk_index, chunk_text in enumerate(translation_chunks, start=1):
+                    while True:
+                        try:
+                            translated_chunk, chunk_notes = translate_markdown_with_ai(
+                                chunk_text,
+                                source_lang,
+                                target_lang,
+                            )
+                            if not translated_chunk.strip():
+                                raise RuntimeError("AI returned empty translation.")
+                            ambiguity_notes.extend(chunk_notes)
+                            self.root.after(
+                                0,
+                                lambda chunk=translated_chunk, index=chunk_index: self._append_translation_chunk(
+                                    session,
+                                    chunk,
+                                    index,
+                                ),
+                            )
+                            break
+                        except TranslationConfigError as exc:
+                            dialog_result = self._request_translation_api_key(exc)
+                            if not dialog_result:
+                                raise RuntimeError("Translation cancelled because no API key was provided.") from exc
+                            self._apply_ai_key_dialog_result(dialog_result, show_feedback=False)
 
                 self.root.after(
                     0,
-                    lambda: self._apply_translation_result(
-                        tab_index,
-                        text_area,
-                        start_idx,
-                        end_idx,
-                        translated_text,
-                        ambiguity_notes,
-                    ),
+                    lambda: self._finish_translation_session(session, ambiguity_notes),
                 )
             except Exception as exc:
-                current_provider = (
-                    (
-                        self.ai_provider_var.get()
-                        or os.getenv("AI_PROVIDER", "openrouter")
-                    )
-                    .strip()
-                    .lower()
-                )
                 self.root.after(
                     0,
-                    lambda: (
-                        self.root.config(cursor=""),
-                        dialogs.Messagebox.show_error(
-                            "AI Translation Failed",
-                            f"Provider: {current_provider}\n"
-                            f"{exc}\n\n"
-                            "Tip: Configure .env using .env.example (AI_PROVIDER and provider API keys).",
-                        ),
+                    lambda error_text=str(exc): self._fail_translation_session(
+                        session,
+                        error_text,
                     ),
                 )
 

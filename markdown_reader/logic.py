@@ -15,8 +15,28 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 import traceback
 import requests
 
+try:
+    import keyring
+    from keyring.errors import KeyringError
+except Exception:
+    keyring = None
+
+    class KeyringError(Exception):
+        pass
+
 
 ENV_FILE_PATH = Path(__file__).resolve().parent.parent / ".env"
+AI_CREDENTIAL_SERVICE = "MarkdownReader.AI"
+
+
+class TranslationConfigError(RuntimeError):
+    """Raised when the configured AI provider cannot be used without user action."""
+
+    def __init__(self, message, provider_name=None, env_var=None, invalid_key=False):
+        super().__init__(message)
+        self.provider_name = provider_name
+        self.env_var = env_var
+        self.invalid_key = invalid_key
 
 
 def _file_uri(path):
@@ -83,6 +103,156 @@ def _load_env_file():
         return
 
 
+def get_ai_provider_env_var(provider_name):
+    """Return the API key environment variable used by a provider."""
+
+    normalized = (provider_name or "").strip().lower()
+    if normalized == "athropic":
+        normalized = "anthropic"
+
+    return {
+        "openrouter": "OPENROUTER_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+    }.get(normalized)
+
+
+def get_ai_provider_display_name(provider_name):
+    """Return a human-friendly provider name."""
+
+    normalized = (provider_name or "").strip().lower()
+    if normalized == "openrouter":
+        return "OpenRouter"
+    if normalized == "openai":
+        return "OpenAI"
+    if normalized == "anthropic":
+        return "Anthropic"
+    return provider_name or "AI"
+
+
+def _get_keyring_username(provider_name):
+    return f"provider:{(provider_name or '').strip().lower()}"
+
+
+def is_secure_key_storage_available():
+    """Return True when a system-backed key store is available."""
+
+    return keyring is not None
+
+
+def get_secure_ai_api_key(provider_name):
+    """Read a provider API key from the system key store."""
+
+    if keyring is None:
+        return ""
+
+    env_var = get_ai_provider_env_var(provider_name)
+    if not env_var:
+        return ""
+
+    try:
+        value = keyring.get_password(AI_CREDENTIAL_SERVICE, _get_keyring_username(provider_name))
+    except KeyringError as exc:
+        raise RuntimeError(f"Unable to read stored API key: {exc}") from exc
+
+    return (value or "").strip()
+
+
+def set_secure_ai_api_key(provider_name, api_key):
+    """Persist a provider API key to the system key store."""
+
+    if keyring is None:
+        raise RuntimeError("Secure key storage is not available on this system.")
+
+    cleaned_key = (api_key or "").strip()
+    if not cleaned_key:
+        raise RuntimeError("API key cannot be empty.")
+
+    try:
+        keyring.set_password(
+            AI_CREDENTIAL_SERVICE,
+            _get_keyring_username(provider_name),
+            cleaned_key,
+        )
+    except KeyringError as exc:
+        raise RuntimeError(f"Unable to store API key securely: {exc}") from exc
+
+
+def delete_secure_ai_api_key(provider_name):
+    """Delete a provider API key from the system key store."""
+
+    if keyring is None:
+        raise RuntimeError("Secure key storage is not available on this system.")
+
+    try:
+        keyring.delete_password(AI_CREDENTIAL_SERVICE, _get_keyring_username(provider_name))
+    except Exception:
+        return
+
+
+def _chunk_markdown_for_translation(markdown_text, max_lines=20):
+    """Split markdown into translation-friendly chunks while keeping code fences intact."""
+
+    if not isinstance(markdown_text, str) or not markdown_text:
+        return []
+
+    normalized_text = markdown_text.replace("\r\n", "\n")
+    lines = normalized_text.splitlines(keepends=True)
+    chunks = []
+    current_lines = []
+    current_line_count = 0
+    fence_open = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            fence_open = not fence_open
+
+        current_lines.append(line)
+        current_line_count += 1
+
+        should_flush = False
+        if current_line_count >= max_lines:
+            if fence_open:
+                should_flush = False
+            elif stripped == "":
+                should_flush = True
+            elif current_line_count >= max_lines + 8:
+                should_flush = True
+
+        if should_flush:
+            chunks.append("".join(current_lines))
+            current_lines = []
+            current_line_count = 0
+
+    if current_lines:
+        chunks.append("".join(current_lines))
+
+    return chunks
+
+
+def split_markdown_for_translation(markdown_text, chunk_lines=20):
+    """Return translation chunks for UI-side progressive rendering."""
+
+    return _chunk_markdown_for_translation(markdown_text, max_lines=chunk_lines)
+
+
+def _restore_chunk_outer_whitespace(original_text, translated_text):
+    """Preserve leading and trailing newlines from the original chunk."""
+
+    if not isinstance(original_text, str):
+        return translated_text
+
+    translated = translated_text if isinstance(translated_text, str) else str(translated_text)
+    leading_match = re.match(r"^\s*", original_text)
+    trailing_match = re.search(r"\s*$", original_text)
+    leading = leading_match.group(0) if leading_match else ""
+    trailing = trailing_match.group(0) if trailing_match else ""
+
+    core = translated.strip()
+    return f"{leading}{core}{trailing}"
+
+
 def _request_translation_openai_compatible(base_url, api_key, model, system_prompt, user_prompt):
     """
     Sends translation request to OpenAI-compatible chat endpoint.
@@ -112,7 +282,27 @@ def _request_translation_openai_compatible(base_url, api_key, model, system_prom
         json=payload,
         timeout=90,
     )
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        message = ""
+        try:
+            error_payload = response.json()
+        except ValueError:
+            error_payload = None
+
+        if isinstance(error_payload, dict):
+            error_value = error_payload.get("error")
+            if isinstance(error_value, dict):
+                message = str(error_value.get("message", "") or error_value)
+            elif error_value:
+                message = str(error_value)
+
+        if not message:
+            message = response.text.strip()
+
+        raise requests.HTTPError(message or str(exc), response=response) from exc
+
     data = response.json()
 
     choices = data.get("choices", []) if isinstance(data, dict) else []
@@ -169,7 +359,29 @@ def _request_translation_anthropic(base_url, api_key, model, system_prompt, user
         json=payload,
         timeout=90,
     )
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        message = ""
+        try:
+            error_payload = response.json()
+        except ValueError:
+            error_payload = None
+
+        if isinstance(error_payload, dict):
+            error_value = error_payload.get("error")
+            if isinstance(error_value, dict):
+                message = str(error_value.get("message", "") or error_value)
+            elif error_value:
+                message = str(error_value)
+            elif error_payload.get("message"):
+                message = str(error_payload.get("message"))
+
+        if not message:
+            message = response.text.strip()
+
+        raise requests.HTTPError(message or str(exc), response=response) from exc
+
     data = response.json()
     blocks = data.get("content", [])
     text_blocks = [block.get("text", "") for block in blocks if isinstance(block, dict) and block.get("type") == "text"]
@@ -239,33 +451,38 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
         provider_name = "anthropic"
 
     if provider_name not in ("openrouter", "openai", "anthropic"):
-        raise RuntimeError(
-            f"Unsupported AI provider '{provider_name}'. Use openrouter, openai, or anthropic in AI_PROVIDER"
+        raise TranslationConfigError(
+            f"Unsupported AI provider '{provider_name}'. Use openrouter, openai, or anthropic in AI_PROVIDER",
+            provider_name=provider_name,
         )
 
     def _provider_cfg(name):
+        stored_key = get_secure_ai_api_key(name)
         if name == "openrouter":
             return {
                 "name": "openrouter",
-                "api_key": os.getenv("OPENROUTER_API_KEY", "").strip() or os.getenv("OPENAI_API_KEY", "").strip(),
+                "api_key": os.getenv("OPENROUTER_API_KEY", "").strip() or stored_key or os.getenv("OPENAI_API_KEY", "").strip(),
                 "base_url": os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").strip(),
                 "model": os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini").strip(),
                 "type": "openai-compatible",
+                "env_var": "OPENROUTER_API_KEY",
             }
         if name == "openai":
             return {
                 "name": "openai",
-                "api_key": os.getenv("OPENAI_API_KEY", "").strip(),
+                "api_key": os.getenv("OPENAI_API_KEY", "").strip() or stored_key,
                 "base_url": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip(),
                 "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip(),
                 "type": "openai-compatible",
+                "env_var": "OPENAI_API_KEY",
             }
         return {
             "name": "anthropic",
-            "api_key": os.getenv("ANTHROPIC_API_KEY", "").strip(),
+            "api_key": os.getenv("ANTHROPIC_API_KEY", "").strip() or stored_key,
             "base_url": os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1").strip(),
             "model": os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest").strip(),
             "type": "anthropic",
+            "env_var": "ANTHROPIC_API_KEY",
         }
 
     provider_order = [provider_name] + [name for name in ("openrouter", "openai", "anthropic") if name != provider_name]
@@ -276,8 +493,11 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
             provider_candidates.append(cfg)
 
     if not provider_candidates:
-        raise RuntimeError(
-            "No valid AI provider config found. Please set keys in .env (OPENROUTER_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY)."
+        env_var = get_ai_provider_env_var(provider_name)
+        raise TranslationConfigError(
+            "No valid AI provider config found.",
+            provider_name=provider_name,
+            env_var=env_var,
         )
 
     system_prompt = (
@@ -329,6 +549,13 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
         except requests.RequestException as exc:
             status = getattr(getattr(exc, "response", None), "status_code", None)
             errors.append(f"{cfg['name']}: HTTP {status} {exc}")
+            if cfg["name"] == provider_name and status in (401, 403):
+                raise TranslationConfigError(
+                    f"{get_ai_provider_display_name(provider_name)} rejected the configured API key.",
+                    provider_name=provider_name,
+                    env_var=cfg.get("env_var"),
+                    invalid_key=True,
+                ) from exc
             # Try next configured provider on rate limit/auth/server issues.
             if status in (401, 402, 403, 404, 408, 409, 429, 500, 502, 503, 504):
                 continue
@@ -343,12 +570,12 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
 
     json_text = _extract_json_object(content)
     if not json_text:
-        return content.strip(), ["AI response was not strict JSON; fallback text was used."]
+        return _restore_chunk_outer_whitespace(markdown_text, content), ["AI response was not strict JSON; fallback text was used."]
 
     try:
         parsed = json.loads(json_text)
     except json.JSONDecodeError:
-        return content.strip(), ["AI response JSON parsing failed; fallback text was used."]
+        return _restore_chunk_outer_whitespace(markdown_text, content), ["AI response JSON parsing failed; fallback text was used."]
 
     translated_markdown = parsed.get("translated_markdown", "")
     ambiguity_notes = parsed.get("ambiguity_notes", [])
@@ -362,7 +589,45 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
     ambiguity_notes = [str(note).strip() for note in ambiguity_notes if str(note).strip()]
     if used_provider and used_provider != provider_name:
         ambiguity_notes.insert(0, f"Primary provider '{provider_name}' failed; fallback provider '{used_provider}' was used.")
-    return translated_markdown.strip(), ambiguity_notes
+    return _restore_chunk_outer_whitespace(markdown_text, translated_markdown), ambiguity_notes
+
+
+def translate_markdown_in_chunks(markdown_text, source_language, target_language, chunk_lines=20, progress_callback=None):
+    """Translate markdown in smaller chunks and emit progress updates."""
+
+    if not isinstance(markdown_text, str) or not markdown_text.strip():
+        return [], []
+
+    chunks = _chunk_markdown_for_translation(markdown_text, max_lines=chunk_lines)
+    translated_chunks = []
+    all_notes = []
+    total_chunks = len(chunks)
+
+    if progress_callback:
+        progress_callback(0, total_chunks, "Preparing translation...")
+
+    for index, chunk in enumerate(chunks, start=1):
+        translated_chunk, ambiguity_notes = translate_markdown_with_ai(
+            chunk,
+            source_language,
+            target_language,
+        )
+        translated_chunks.append(translated_chunk)
+        all_notes.extend(ambiguity_notes)
+        if progress_callback:
+            progress_callback(index, total_chunks, f"Translated chunk {index}/{total_chunks}")
+
+    return translated_chunks, all_notes
+
+
+def estimate_translation_chunk_count(markdown_text, chunk_lines=20):
+    """Estimate how many translation chunks will be produced."""
+
+    if not isinstance(markdown_text, str) or not markdown_text.strip():
+        return 0
+
+    chunks = _chunk_markdown_for_translation(markdown_text, max_lines=chunk_lines)
+    return max(1, len(chunks))
 
 
 def _normalize_math_content(content):
