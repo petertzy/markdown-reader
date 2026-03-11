@@ -28,6 +28,46 @@ except Exception:
 ENV_FILE_PATH = Path(__file__).resolve().parent.parent / ".env"
 AI_CREDENTIAL_SERVICE = "MarkdownReader.AI"
 
+# Hardcoded provider base URLs so the bundled .app works without a .env file.
+AI_PROVIDER_BASE_URLS = {
+    "openrouter": "https://openrouter.ai/api/v1",
+    "openai": "https://api.openai.com/v1",
+    "anthropic": "https://api.anthropic.com/v1",
+}
+
+# Curated fallback model lists shown when the live API cannot be reached.
+AI_PROVIDER_DEFAULT_MODELS = {
+    "openrouter": [
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "mistralai/mistral-7b-instruct:free",
+        "openai/gpt-4o-mini",
+        "openai/gpt-4o",
+        "openai/gpt-4-turbo",
+        "anthropic/claude-3-5-sonnet",
+        "anthropic/claude-3-haiku",
+        "google/gemini-2.0-flash-001",
+    ],
+    "openai": [
+        "gpt-4o-mini",
+        "gpt-4o",
+        "gpt-4-turbo",
+        "gpt-3.5-turbo",
+    ],
+    "anthropic": [
+        "claude-3-5-sonnet-latest",
+        "claude-3-5-haiku-latest",
+        "claude-3-opus-latest",
+        "claude-3-haiku-20240307",
+    ],
+}
+
+# Environment-variable name used to persist the user's chosen model per provider.
+AI_PROVIDER_MODEL_ENV = {
+    "openrouter": "OPENROUTER_MODEL",
+    "openai": "OPENAI_MODEL",
+    "anthropic": "ANTHROPIC_MODEL",
+}
+
 
 class TranslationConfigError(RuntimeError):
     """Raised when the configured AI provider cannot be used without user action."""
@@ -188,6 +228,126 @@ def delete_secure_ai_api_key(provider_name):
         keyring.delete_password(AI_CREDENTIAL_SERVICE, _get_keyring_username(provider_name))
     except Exception:
         return
+
+
+def get_ai_provider_model(provider_name):
+    """Return the currently selected model for *provider_name*.
+
+    Priority:
+    1. .env file value  (when the file is accessible — development mode)
+    2. runtime os.environ  (set earlier this session, e.g. after _load_env_file)
+    3. system keystore  (user saved a choice via the dialog)
+    4. built-in default  (first entry in AI_PROVIDER_DEFAULT_MODELS)
+    """
+    normalized = (provider_name or "").strip().lower()
+    env_key = AI_PROVIDER_MODEL_ENV.get(normalized)
+
+    # 1. .env file — read directly so the dialog shows the right model even
+    #    before the first call to _load_env_file() (which only runs on translation).
+    if env_key and ENV_FILE_PATH.exists():
+        try:
+            with open(ENV_FILE_PATH, "r", encoding="utf-8") as fh:
+                for raw in fh:
+                    line = raw.strip()
+                    if line.startswith("#") or "=" not in line:
+                        continue
+                    if line.startswith("export "):
+                        line = line[len("export "):].strip()
+                    k, _, v = line.partition("=")
+                    k = k.strip()
+                    v = v.strip().strip("\"'")
+                    if k == env_key and v:
+                        return v
+        except Exception:
+            pass
+
+    # 2. Already set in the process environment (e.g. after _load_env_file ran)
+    if env_key:
+        val = os.getenv(env_key, "").strip()
+        if val:
+            return val
+
+    # 3. Keyring-persisted choice (set via the dialog)
+    if keyring is not None:
+        try:
+            stored = keyring.get_password(
+                AI_CREDENTIAL_SERVICE, f"model:{normalized}"
+            )
+            if stored and stored.strip():
+                return stored.strip()
+        except Exception:
+            pass
+
+    # 4. Built-in default
+    defaults = AI_PROVIDER_DEFAULT_MODELS.get(normalized, [])
+    return defaults[0] if defaults else ""
+
+
+def set_ai_provider_model(provider_name, model_name):
+    """Persist *model_name* for *provider_name* to env + keyring."""
+    normalized = (provider_name or "").strip().lower()
+    env_key = AI_PROVIDER_MODEL_ENV.get(normalized)
+    if env_key:
+        os.environ[env_key] = model_name
+    if keyring is not None:
+        try:
+            keyring.set_password(
+                AI_CREDENTIAL_SERVICE, f"model:{normalized}", model_name
+            )
+        except Exception:
+            pass
+
+
+def fetch_available_models(provider_name, api_key, timeout=8):
+    """Fetch the model list from the provider API and return a sorted list of model IDs.
+
+    Falls back to the built-in default list on any error so the dialog always
+    has something to show.
+    """
+    normalized = (provider_name or "").strip().lower()
+    base_url = AI_PROVIDER_BASE_URLS.get(normalized, "")
+    defaults = list(AI_PROVIDER_DEFAULT_MODELS.get(normalized, []))
+
+    if not api_key or not base_url:
+        return defaults
+
+    try:
+        if normalized == "anthropic":
+            # Anthropic models endpoint
+            headers = {
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+            }
+            resp = requests.get(
+                f"{base_url.rstrip('/')}/models",
+                headers=headers,
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            models = [m["id"] for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
+        else:
+            # OpenAI-compatible endpoint (OpenRouter and OpenAI both support /models)
+            headers = {"Authorization": f"Bearer {api_key}"}
+            resp = requests.get(
+                f"{base_url.rstrip('/')}/models",
+                headers=headers,
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            models = [m["id"] for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
+
+        if models:
+            # Put defaults first so the most useful ones surface at the top,
+            # then append any extra models returned by the API.
+            known = set(defaults)
+            extras = sorted(m for m in models if m not in known)
+            return defaults + extras
+    except Exception:
+        pass
+
+    return defaults
 
 
 def _chunk_markdown_for_translation(markdown_text, max_lines=20):
@@ -458,12 +618,16 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
 
     def _provider_cfg(name):
         stored_key = get_secure_ai_api_key(name)
+        # Use hardcoded base URLs so the bundled .app works without a .env file.
+        # env vars still override when present (dev/power-user convenience).
+        base_url = AI_PROVIDER_BASE_URLS.get(name, "")
+        model = get_ai_provider_model(name)
         if name == "openrouter":
             return {
                 "name": "openrouter",
-                "api_key": os.getenv("OPENROUTER_API_KEY", "").strip() or stored_key or os.getenv("OPENAI_API_KEY", "").strip(),
-                "base_url": os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1").strip(),
-                "model": os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini").strip(),
+                "api_key": os.getenv("OPENROUTER_API_KEY", "").strip() or stored_key,
+                "base_url": os.getenv("OPENROUTER_BASE_URL", base_url).strip(),
+                "model": model,
                 "type": "openai-compatible",
                 "env_var": "OPENROUTER_API_KEY",
             }
@@ -471,16 +635,16 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
             return {
                 "name": "openai",
                 "api_key": os.getenv("OPENAI_API_KEY", "").strip() or stored_key,
-                "base_url": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip(),
-                "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip(),
+                "base_url": os.getenv("OPENAI_BASE_URL", base_url).strip(),
+                "model": model,
                 "type": "openai-compatible",
                 "env_var": "OPENAI_API_KEY",
             }
         return {
             "name": "anthropic",
             "api_key": os.getenv("ANTHROPIC_API_KEY", "").strip() or stored_key,
-            "base_url": os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1").strip(),
-            "model": os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest").strip(),
+            "base_url": os.getenv("ANTHROPIC_BASE_URL", base_url).strip(),
+            "model": model,
             "type": "anthropic",
             "env_var": "ANTHROPIC_API_KEY",
         }

@@ -15,6 +15,7 @@ from watchdog.observers import Observer
 
 from markdown_reader.file_handler import drop_file, load_file
 from markdown_reader.logic import (
+    AI_PROVIDER_DEFAULT_MODELS,
     TranslationConfigError,
     convert_html_to_markdown,
     convert_pdf_to_markdown,
@@ -23,11 +24,14 @@ from markdown_reader.logic import (
     export_to_docx,
     export_to_html,
     export_to_pdf,
+    fetch_available_models,
     get_ai_provider_display_name,
     get_ai_provider_env_var,
+    get_ai_provider_model,
     get_secure_ai_api_key,
     is_secure_key_storage_available,
     open_preview_in_browser,
+    set_ai_provider_model,
     set_secure_ai_api_key,
     split_markdown_for_translation,
     translate_markdown_with_ai,
@@ -139,6 +143,7 @@ class MarkdownReader:
         self.translation_status_var = tk.StringVar(value="")
         self.translation_job_active = False
         self._translation_session_counter = 0
+        self._translation_cancel_requested = False
 
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
 
@@ -192,30 +197,9 @@ class MarkdownReader:
         menubar.add_cascade(label="Edit", menu=editmenu)
 
         settingsmenu = tk.Menu(menubar, tearoff=0)
-        provider_menu = tk.Menu(settingsmenu, tearoff=0)
-        provider_menu.add_radiobutton(
-            label="OpenRouter",
-            variable=self.ai_provider_var,
-            value="openrouter",
-            command=lambda: self.set_ai_provider("openrouter"),
-        )
-        provider_menu.add_radiobutton(
-            label="OpenAI",
-            variable=self.ai_provider_var,
-            value="openai",
-            command=lambda: self.set_ai_provider("openai"),
-        )
-        provider_menu.add_radiobutton(
-            label="Anthropic",
-            variable=self.ai_provider_var,
-            value="anthropic",
-            command=lambda: self.set_ai_provider("anthropic"),
-        )
-        settingsmenu.add_cascade(label="AI Provider", menu=provider_menu)
-        settingsmenu.add_separator()
         settingsmenu.add_command(
-            label="Manage AI API Keys...",
-            command=self.open_ai_key_manager,
+            label="AI Provider & API Keys...",
+            command=self.open_ai_provider_config,
         )
         menubar.add_cascade(label="Settings", menu=settingsmenu)
 
@@ -388,13 +372,23 @@ class MarkdownReader:
             textvariable=self.translation_status_var,
         )
         self.translation_progress_label.pack(side=tk.TOP, anchor="w")
+        _prog_row = ttkb.Frame(self.translation_progress_frame)
+        _prog_row.pack(fill=tk.X, expand=True, pady=(4, 0))
         self.translation_progress = ttk.Progressbar(
-            self.translation_progress_frame,
+            _prog_row,
             orient=tk.HORIZONTAL,
             mode="determinate",
             variable=self.translation_progress_var,
         )
-        self.translation_progress.pack(fill=tk.X, pady=(4, 0))
+        self.translation_progress.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._translation_cancel_btn = ttkb.Button(
+            _prog_row,
+            text="Cancel",
+            bootstyle="danger-outline",
+            command=self._request_translation_cancel,
+            width=8,
+        )
+        self._translation_cancel_btn.pack(side=tk.LEFT, padx=(8, 0))
 
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True)
@@ -1379,13 +1373,21 @@ class MarkdownReader:
             or "openrouter"
         )
 
+    def _request_translation_cancel(self):
+        """Request cancellation of the running translation job."""
+        self._translation_cancel_requested = True
+        self.translation_status_var.set("Cancelling…")
+        self._translation_cancel_btn.configure(state="disabled")
+
     def _show_translation_progress(self, total_steps, message):
         """Display the translation progress bar."""
 
+        self._translation_cancel_requested = False
         safe_total = max(1, int(total_steps or 1))
         self.translation_progress.configure(maximum=safe_total)
         self.translation_progress_var.set(0)
         self.translation_status_var.set(message)
+        self._translation_cancel_btn.configure(state="normal")
         if not self.translation_progress_frame.winfo_manager():
             self.translation_progress_frame.pack(fill=tk.X, before=self.notebook)
 
@@ -1402,6 +1404,7 @@ class MarkdownReader:
 
         self.translation_progress_var.set(0)
         self.translation_status_var.set("")
+        self._translation_cancel_btn.configure(state="disabled")
         if self.translation_progress_frame.winfo_manager():
             self.translation_progress_frame.pack_forget()
 
@@ -1615,53 +1618,225 @@ class MarkdownReader:
 
         return True
 
-    def open_ai_key_manager(self):
-        """Open the menu-driven AI key management dialog."""
+    def open_ai_provider_config(self):
+        """Open the unified AI Provider & API Keys dialog."""
 
-        result = self._show_ai_key_dialog(
-            self._get_current_ai_provider(),
-            "Update the API key for the selected provider. Leave .env unused if you prefer the OS-provided secure credential store.",
-            allow_provider_change=True,
-            allow_delete=True,
+        providers = ["openrouter", "openai", "anthropic"]
+        provider_labels = {"openrouter": "OpenRouter", "openai": "OpenAI", "anthropic": "Anthropic"}
+        secure_available = is_secure_key_storage_available()
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("AI Provider & API Keys")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        dialog.geometry("600x540")
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 300
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 270
+        dialog.geometry(f"+{x}+{y}")
+
+        container = ttk.Frame(dialog, padding=16)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        # --- Provider selection ---
+        ttk.Label(container, text="Provider:").pack(anchor="w")
+        provider_var = tk.StringVar(value=self._get_current_ai_provider())
+        provider_combo = ttk.Combobox(
+            container,
+            textvariable=provider_var,
+            values=[provider_labels[p] for p in providers],
+            state="readonly",
+            width=30,
         )
-        if not result:
-            return
+        # Show display label in the combo
+        provider_combo.set(provider_labels.get(provider_var.get(), "OpenRouter"))
+        provider_combo.pack(anchor="w", pady=(4, 12))
 
-        try:
-            self._apply_ai_key_dialog_result(result, show_feedback=True)
-        except Exception as exc:
-            dialogs.Messagebox.show_error("AI API Key", f"Failed to update the key: {exc}")
+        # --- Model selection ---
+        ttk.Label(container, text="Model:").pack(anchor="w")
+        model_var = tk.StringVar()
+        model_combo = ttk.Combobox(container, textvariable=model_var, width=50)
+        model_combo.pack(anchor="w", pady=(4, 4))
+
+        fetch_status_var = tk.StringVar(value="")
+        fetch_status_label = ttk.Label(
+            container, textvariable=fetch_status_var, foreground="gray", wraplength=560
+        )
+        fetch_status_label.pack(anchor="w", pady=(0, 8))
+
+        # --- API Key ---
+        ttk.Label(container, text="API Key:").pack(anchor="w")
+        api_key_entry = ttk.Entry(container, width=64, show="*")
+        api_key_entry.pack(anchor="w", pady=(4, 4))
+
+        stored_key_status_var = tk.StringVar(value="")
+        ttk.Label(
+            container,
+            textvariable=stored_key_status_var,
+            wraplength=560,
+            justify=tk.LEFT,
+        ).pack(anchor="w", pady=(0, 8))
+
+        save_securely_var = tk.BooleanVar(value=secure_available)
+        save_checkbox = ttk.Checkbutton(
+            container,
+            text="Save API key securely in the system credential store",
+            variable=save_securely_var,
+        )
+        save_checkbox.pack(anchor="w")
+        if not secure_available:
+            save_securely_var.set(False)
+            save_checkbox.state(["disabled"])
+
+        hint_var = tk.StringVar(value="")
+        ttk.Label(
+            container,
+            textvariable=hint_var,
+            foreground="gray",
+            wraplength=560,
+            justify=tk.LEFT,
+        ).pack(anchor="w", pady=(4, 0))
+
+        # --- Buttons ---
+        button_frame = ttk.Frame(container)
+        button_frame.pack(fill=tk.X, pady=(18, 0))
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=1)
+        button_frame.columnconfigure(2, weight=1)
+
+        def _get_normalized_provider():
+            label = provider_var.get()
+            for p, lbl in provider_labels.items():
+                if lbl == label:
+                    return p
+            return label.lower()
+
+        def _refresh_ui(*_):
+            pname = _get_normalized_provider()
+            # Model list — start with defaults, fetch in background
+            defaults = list(AI_PROVIDER_DEFAULT_MODELS.get(pname, []))
+            current_model = get_ai_provider_model(pname)
+            model_combo["values"] = defaults
+            model_var.set(current_model if current_model in defaults else (defaults[0] if defaults else ""))
+            # Key status
+            stored = get_secure_ai_api_key(pname)
+            api_key_entry.delete(0, tk.END)
+            if stored:
+                stored_key_status_var.set("A stored key exists for this provider. Enter a new value to replace it.")
+                hint_var.set("The stored key will be used automatically. You can leave the field empty to keep it.")
+            else:
+                stored_key_status_var.set("No stored key for this provider.")
+                hint_var.set("")
+
+        def _fetch_models_async(*_):
+            pname = _get_normalized_provider()
+            key = api_key_entry.get().strip() or get_secure_ai_api_key(pname)
+            if not key:
+                fetch_status_var.set("Enter an API key to fetch the live model list.")
+                return
+            fetch_status_var.set("Fetching model list…")
+            model_combo.config(state="disabled")
+
+            def worker():
+                models = fetch_available_models(pname, key)
+                def update():
+                    model_combo.config(state="normal")
+                    model_combo["values"] = models
+                    cur = model_var.get()
+                    if cur not in models:
+                        model_var.set(models[0] if models else "")
+                    fetch_status_var.set(f"{len(models)} models available.")
+                dialog.after(0, update)
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        def on_save():
+            pname = _get_normalized_provider()
+            new_key = api_key_entry.get().strip()
+            chosen_model = model_var.get().strip()
+
+            # Key handling
+            if new_key:
+                env_var = get_ai_provider_env_var(pname)
+                if env_var:
+                    os.environ[env_var] = new_key
+                if save_securely_var.get():
+                    try:
+                        set_secure_ai_api_key(pname, new_key)
+                    except Exception as exc:
+                        dialogs.Messagebox.show_error("Key Storage", f"Could not save key: {exc}")
+                        return
+
+            # Model handling
+            if chosen_model:
+                set_ai_provider_model(pname, chosen_model)
+
+            # Switch provider
+            self.ai_provider_var.set(pname)
+            os.environ["AI_PROVIDER"] = pname
+
+            dialog.destroy()
+            dialogs.Messagebox.show_info(
+                "Settings Saved",
+                f"Provider: {provider_labels.get(pname, pname)}\nModel: {chosen_model or '(unchanged)'}",
+            )
+
+        def on_delete_key():
+            pname = _get_normalized_provider()
+            try:
+                delete_secure_ai_api_key(pname)
+            except Exception:
+                pass
+            env_var = get_ai_provider_env_var(pname)
+            if env_var and env_var in os.environ:
+                del os.environ[env_var]
+            api_key_entry.delete(0, tk.END)
+            stored_key_status_var.set("Stored key deleted.")
+            hint_var.set("")
+
+        ttk.Button(button_frame, text="Delete Key", command=on_delete_key, width=12).grid(
+            row=0, column=0, padx=4
+        )
+        ttk.Button(button_frame, text="Fetch Models", command=_fetch_models_async, width=12).grid(
+            row=0, column=1, padx=4
+        )
+        ttk.Button(button_frame, text="Save", command=on_save, width=12).grid(
+            row=0, column=2, padx=4
+        )
+
+        provider_combo.bind("<<ComboboxSelected>>", _refresh_ui)
+        _refresh_ui()
+
+        dialog.bind("<Return>", lambda _e: on_save())
+        dialog.bind("<Escape>", lambda _e: dialog.destroy())
+        dialog.wait_window()
+
+    # Keep the old name as an alias so _request_translation_api_key still works
+    def open_ai_key_manager(self):
+        self.open_ai_provider_config()
 
     def _request_translation_api_key(self, config_error):
-        """Prompt for an API key from a worker thread and wait for the response."""
+        """Prompt for an API key from a worker thread via the unified config dialog."""
 
         dialog_done = threading.Event()
-        dialog_result = {"value": None}
         provider_name = (getattr(config_error, "provider_name", None) or self._get_current_ai_provider()).strip().lower()
 
-        if getattr(config_error, "invalid_key", False):
-            prompt_message = (
-                f"The current {get_ai_provider_display_name(provider_name)} API key was rejected. "
-                "Enter a new key to continue the translation."
-            )
-        else:
-            prompt_message = (
-                f"No usable API key is configured for {get_ai_provider_display_name(provider_name)}. "
-                "Enter one now to continue the translation."
-            )
-
         def show_dialog():
-            dialog_result["value"] = self._show_ai_key_dialog(
-                provider_name,
-                prompt_message,
-                allow_provider_change=False,
-                allow_delete=False,
-            )
+            self.open_ai_provider_config()
             dialog_done.set()
 
         self.root.after(0, show_dialog)
         dialog_done.wait()
-        return dialog_result["value"]
+
+        # Return a synthetic "confirmed" dict so the translation worker retries.
+        env_var = get_ai_provider_env_var(provider_name)
+        has_key = bool(
+            (env_var and os.environ.get(env_var, "").strip())
+            or get_secure_ai_api_key(provider_name)
+        )
+        if has_key:
+            return {"confirmed": True, "provider_name": provider_name}
+        return None
 
     def _prepare_translation_session(
         self, tab_index, text_area, start_idx, end_idx, source_text, total_chunks
@@ -1726,8 +1901,8 @@ class MarkdownReader:
 
         if unique_notes:
             dialogs.Messagebox.show_info(
-                "Translation Notes",
                 "Translation completed with notes:\n\n" + "\n".join(f"- {note}" for note in unique_notes),
+                "Translation Notes",
             )
 
     def _fail_translation_session(self, session, error_message):
@@ -1751,8 +1926,8 @@ class MarkdownReader:
         self.translation_job_active = False
         self._hide_translation_progress()
         dialogs.Messagebox.show_error(
-            "AI Translation Failed",
             f"{error_message}\n\n{followup}",
+            "AI Translation Failed",
         )
 
     def _prompt_translation_languages(self):
@@ -1947,6 +2122,8 @@ class MarkdownReader:
             try:
                 ambiguity_notes = []
                 for chunk_index, chunk_text in enumerate(translation_chunks, start=1):
+                    if self._translation_cancel_requested:
+                        raise RuntimeError("Translation cancelled by user.")
                     while True:
                         try:
                             translated_chunk, chunk_notes = translate_markdown_with_ai(
@@ -1988,27 +2165,13 @@ class MarkdownReader:
         threading.Thread(target=worker, daemon=True).start()
 
     def set_ai_provider(self, provider_name):
-        """
-        Sets current AI provider for translation at runtime.
-
-        :param string provider_name: one of openrouter/openai/anthropic
-        """
-
+        """Sets current AI provider for translation at runtime (internal helper)."""
         normalized = (provider_name or "").strip().lower()
         if normalized == "athropic":
             normalized = "anthropic"
-
-        if normalized not in ("openrouter", "openai", "anthropic"):
-            dialogs.Messagebox.show_error(
-                "Invalid Provider", f"Unsupported provider: {provider_name}"
-            )
-            return
-
-        self.ai_provider_var.set(normalized)
-        os.environ["AI_PROVIDER"] = normalized
-        dialogs.Messagebox.show_info(
-            "AI Provider", f"AI provider switched to: {normalized}"
-        )
+        if normalized in ("openrouter", "openai", "anthropic"):
+            self.ai_provider_var.set(normalized)
+            os.environ["AI_PROVIDER"] = normalized
 
     def toggle_pdf_mode(self):
         """
