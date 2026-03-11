@@ -1,6 +1,6 @@
 # Markdown Reader
 
-Markdown Reader is a clean and intuitive Markdown reader with real-time preview support, dark mode toggle, and drag-and-drop file opening. It is compatible with macOS and Windows desktop environments and built with pure Python and Tkinter.
+Markdown Reader is a clean and intuitive Markdown reader with real-time preview support, dark mode toggle. It is compatible with macOS and Windows desktop environments and built with pure Python and Tkinter.
 
 ---
 
@@ -11,7 +11,6 @@ Markdown Reader is a clean and intuitive Markdown reader with real-time preview 
 * Dark mode toggle.
 * **Advanced Table Editor**: Interactive table insertion with customizable rows and columns.
 * **Dual PDF Conversion**: Fast PyMuPDF mode or advanced [Docling](https://github.com/docling-project/docling) mode for complex documents.
-* Drag-and-drop support for `.md`, `.html`, and `.pdf` files with automatic conversion to Markdown.
 * Built with pure Python and Tkinter — cross-platform.
 * Can be bundled as a macOS app using `py2app`.
 * Opens preview automatically and avoids multiple browser tabs for a smoother experience.
@@ -69,7 +68,6 @@ python app.py
 ### How to Use
 
 * **Open File**: Choose `.md`, `.html`, or `.pdf` file from the "File → Open File" menu.
-* **Drag-and-Drop**: Drag `.md`, `.html`, or `.pdf` files directly into the app window (HTML and PDF files are automatically converted to Markdown).
 * **Dark Mode**: Toggle via "View → Toggle Dark Mode".
 * **Preview**: Automatically opens in your web browser, only one tab is opened per session.
 * **AI Translation**: 
@@ -121,7 +119,6 @@ git push
 * PDF Export: `pypdf`
 * AI Translation: `requests` for API communication with OpenRouter, OpenAI, and Anthropic
 * Configuration: Environment variables via `.env` file
-* Supports drag-and-drop and live preview updates while avoiding multiple browser tabs
 * Auto-failover: Automatically switches AI providers on rate limits or errors
 
 ---

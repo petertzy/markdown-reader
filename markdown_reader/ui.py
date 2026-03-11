@@ -64,7 +64,7 @@ class MarkdownReader:
 
     def __init__(self, root):
         """
-        :param TkinterDnD.Tk root: The window that the application uses as a display.
+        :param tk.Tk root: The window that the application uses as a display.
         """
 
         self.root = root
