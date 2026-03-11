@@ -131,6 +131,7 @@ Python >= 3.10
 
 ---
 
+## AI-powered translation:
 To enable AI-powered translation features, you need to set up API keys:
 
 ```bash
