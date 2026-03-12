@@ -156,7 +156,7 @@ The app will automatically switch to a fallback provider if the primary provider
 ## License
 
 This project is licensed under the **MIT License**.  
-See the [LICENSE](LICENSE.md) file for the full text.
+See the [LICENCE](LICENCE.md) file for the full text.
 
 ---
 
