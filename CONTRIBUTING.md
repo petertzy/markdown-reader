@@ -13,7 +13,6 @@ Markdown Reader is a clean and intuitive Markdown reader with real-time preview 
 ## How to Get Started
 
 1. Fork the repository
-![fork](image.png)
 2. Clone the repository
 ```bash
 git clone https://github.com/(your-user-name)/markdown-reader.git
@@ -30,7 +29,6 @@ git checkout -b <new-branch>
 git push origin <new-branch>
 ```
 7. Create a pull request
-![alt text](image-1.png)
 
 ## Code Documentation Guidlines
 
