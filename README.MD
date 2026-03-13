@@ -1,19 +1,19 @@
 # Markdown Reader
 
-Markdown Reader is a clean and intuitive Markdown reader with real-time preview support, dark mode toggle. It is compatible with macOS and Windows desktop environments and built with pure Python and Tkinter.
+Markdown Reader is a clean and intuitive Markdown editor/reader with real-time preview support and dark mode toggle. It is compatible with macOS and Windows desktop environments and built with pure Python and Tkinter.
 
 ---
 
 ## Features
 
-* Real-time preview of Markdown rendered to HTML.
+* Tabbed Markdown editing with real-time HTML preview.
 * **AI-Powered Translation**: Translate Markdown documents while preserving formatting (supports OpenRouter, OpenAI, and Anthropic).
 * **Secure API Key Management**: Missing or rejected provider keys trigger an in-app dialog, and keys can be saved in the OS-provided secure credential store instead of depending on `.env`.
 * **Progressive Translation Rendering**: Long translations are split into smaller chunks, inserted into the editor as they complete, auto-scrolled into view, and tracked with a progress bar.
 * Dark mode toggle.
 * **Advanced Table Editor**: Interactive table insertion with customizable rows and columns.
 * **Dual PDF Conversion**: Fast PyMuPDF mode or advanced [Docling](https://github.com/docling-project/docling) mode for complex documents.
-* Built with pure Python and Tkinter — cross-platform.
+* Built with pure Python, Tkinter, and ttkbootstrap — cross-platform.
 * Can be bundled as a macOS app using `py2app`.
 * Opens preview automatically and avoids multiple browser tabs for a smoother experience.
 * Multi-provider AI failover: Automatically switches to fallback providers on rate limits.
@@ -69,15 +69,14 @@ python app.py
 
 ### How to Use
 
-* **Open File**: Choose `.md`, `.html`, or `.pdf` file from the "File → Open File" menu.
+* **Open File**: Choose `.md`, `.markdown`, `.html`, `.htm`, or `.pdf` from the "File → Open File" menu.
 * **Dark Mode**: Toggle via "View → Toggle Dark Mode".
 * **Preview**: Automatically opens in your web browser, only one tab is opened per session.
 * **AI Translation**: 
   - Translate selected text: "Edit → Translate with AI → Translate Selected Text with AI"
   - Translate full document: "Edit → Translate with AI → Translate Full Document with AI"
   - Select source and target languages from dropdown menus
-  - Switch AI provider: "Settings → AI Provider"
-  - Update or remove provider keys: "Settings → Manage AI API Keys..."
+  - Configure provider/model/API keys: "Settings → AI Provider & API Keys..."
   - If `.env` is missing or a key is rejected, the app prompts for the correct provider key and can save it securely in the OS-provided credential store
   - Large translations appear progressively in the editor with automatic scrolling and a visible progress bar
 * **Table Insertion**: Use "Table → Insert Table" to create custom tables with interactive cell editing.
@@ -90,7 +89,7 @@ python app.py
 
 ## Packaging as a macOS App (Optional)
 
-To bundle this app as a `.app`, install `py2app` and create a `setup.py` script:
+To bundle this app as a `.app`, use the included `setup.py` script:
 
 ### Build the App
 
@@ -120,8 +119,8 @@ git push
 * GUI: `tkinter`, `ttkbootstrap`
 * Markdown Engine: `markdown2`
 * HTML Preview: Dynamically generated HTML opened in the default browser
-* File Conversion: `html2text` for HTML, `PyMuPDF` and `docling` for PDF import
-* PDF Export: `pypdf`
+* File Conversion: `html2text` for HTML, `PyMuPDF` and `docling` for PDF import (`pypdf` is used as a fallback when PyMuPDF is unavailable)
+* PDF Export: `weasyprint`
 * AI Translation: `requests` for API communication with OpenRouter, OpenAI, and Anthropic
 * Configuration: Environment variables via `.env` file or secure OS credential storage via `keyring`
 * Auto-failover: Automatically switches AI providers on rate limits or errors
@@ -146,8 +145,7 @@ cp .env.example .env
 - **OpenAI**: [platform.openai.com](https://platform.openai.com/)
 - **Anthropic**: [console.anthropic.com](https://console.anthropic.com/)
 
-If the app is packaged and `.env` is unavailable, translation will prompt for the needed key at runtime and can store it securely through "Settings → Manage AI API Keys...".
-**Solutions**:
+If the app is packaged and `.env` is unavailable, translation will prompt for the needed key at runtime and you can configure provider/model/API keys directly in "Settings → AI Provider & API Keys...".
 
 The app will automatically switch to a fallback provider if the primary provider hits rate limits.
 
@@ -156,7 +154,7 @@ The app will automatically switch to a fallback provider if the primary provider
 ## License
 
 This project is licensed under the **MIT License**.  
-See the [LICENCE](LICENCE.md) file for the full text.
+See the [LICENSE](LICENSE.md) file for the full text.
 
 ---
 
