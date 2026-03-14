@@ -8,7 +8,7 @@ Markdown Reader is a clean and intuitive Markdown editor/reader with real-time p
 
 * Tabbed Markdown editing with real-time HTML preview.
 * **AI-Powered Translation**: Translate Markdown documents while preserving formatting (supports OpenRouter, OpenAI, and Anthropic).
-* **Secure API Key Management**: Missing or rejected provider keys trigger an in-app dialog, and keys can be saved in the OS-provided secure credential store instead of depending on `.env`.
+* **Secure API Key Management**: Missing or rejected provider keys trigger an in-app dialog, and keys can be saved in the OS-provided secure credential store.
 * **Progressive Translation Rendering**: Long translations are split into smaller chunks, inserted into the editor as they complete, auto-scrolled into view, and tracked with a progress bar.
 * Dark mode toggle.
 * **Advanced Table Editor**: Interactive table insertion with customizable rows and columns.
@@ -77,7 +77,7 @@ python app.py
   - Translate full document: "Edit → Translate with AI → Translate Full Document with AI"
   - Select source and target languages from dropdown menus
   - Configure provider/model/API keys: "Settings → AI Provider & API Keys..."
-  - If `.env` is missing or a key is rejected, the app prompts for the correct provider key and can save it securely in the OS-provided credential store
+  - If a key is missing or rejected, the app prompts for the correct provider key and can save it securely in the OS-provided credential store
   - Large translations appear progressively in the editor with automatic scrolling and a visible progress bar
 * **Table Insertion**: Use "Table → Insert Table" to create custom tables with interactive cell editing.
 * **PDF Conversion Modes**: 
@@ -122,7 +122,7 @@ git push
 * File Conversion: `html2text` for HTML, `PyMuPDF` and `docling` for PDF import (`pypdf` is used as a fallback when PyMuPDF is unavailable)
 * PDF Export: `weasyprint`
 * AI Translation: `requests` for API communication with OpenRouter, OpenAI, and Anthropic
-* Configuration: Environment variables via `.env` file or secure OS credential storage via `keyring`
+* Configuration: Per-user settings JSON for provider/model plus secure OS credential storage via `keyring` for API keys
 * Auto-failover: Automatically switches AI providers on rate limits or errors
 
 ---
@@ -135,17 +135,22 @@ Python >= 3.10
 ## AI-powered translation:
 To enable AI-powered translation features, you need to set up API keys:
 
-```bash
-# Copy the example configuration file
-cp .env.example .env
-```
+1. Open `Settings -> AI Provider & API Keys...`.
+2. Choose provider and model.
+3. Enter API key and save securely.
+
+The app stores provider/model in a per-user JSON file:
+
+- macOS: `~/Library/Application Support/MarkdownReader/settings.json`
+- Windows: `%APPDATA%/MarkdownReader/settings.json`
+- Linux: `~/.config/markdown-reader/settings.json`
 
 **How to get API keys:**
 - **OpenRouter** (recommended for free tier): [openrouter.ai](https://openrouter.ai/)
 - **OpenAI**: [platform.openai.com](https://platform.openai.com/)
 - **Anthropic**: [console.anthropic.com](https://console.anthropic.com/)
 
-If the app is packaged and `.env` is unavailable, translation will prompt for the needed key at runtime and you can configure provider/model/API keys directly in "Settings → AI Provider & API Keys...".
+API keys are saved in the OS credential store (Keychain on macOS, Credential Manager on Windows, Secret Service/KWallet on Linux when available).
 
 The app will automatically switch to a fallback provider if the primary provider hits rate limits.
 

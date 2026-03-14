@@ -30,7 +30,9 @@ from markdown_reader.logic import (
     get_ai_provider_model,
     get_secure_ai_api_key,
     is_secure_key_storage_available,
+    load_persisted_ai_settings,
     open_preview_in_browser,
+    set_current_ai_provider,
     set_ai_provider_model,
     set_secure_ai_api_key,
     split_markdown_for_translation,
@@ -87,6 +89,9 @@ class MarkdownReader:
         self.root.resizable(width=True, height=True)
         # Set minimum window size to prevent it from being too small
         self.root.minsize(800, 600)
+
+        # Ensure persisted AI settings are available before initializing UI state.
+        load_persisted_ai_settings()
 
         self.dark_mode = False
         self.preview_file = get_preview_file()
@@ -1511,7 +1516,7 @@ class MarkdownReader:
                     secure_hint_var.set(f"Secure storage is available, but the stored key could not be read: {exc}")
                 else:
                     secure_hint_var.set(
-                        "The permanent option uses the OS-provided secure credential store so packaged apps do not depend on .env files."
+                        "The permanent option uses the OS-provided secure credential store, while provider and model are saved in per-user app settings."
                     )
 
                 if has_stored_key:
@@ -1713,11 +1718,18 @@ class MarkdownReader:
 
         def _refresh_ui(*_):
             pname = _get_normalized_provider()
-            # Model list — start with defaults, fetch in background
+            # Keep the persisted model visible even when it is not in the curated defaults.
             defaults = list(AI_PROVIDER_DEFAULT_MODELS.get(pname, []))
-            current_model = get_ai_provider_model(pname)
-            model_combo["values"] = defaults
-            model_var.set(current_model if current_model in defaults else (defaults[0] if defaults else ""))
+            current_model = (get_ai_provider_model(pname) or "").strip()
+            model_values = list(defaults)
+            if current_model and current_model not in model_values:
+                model_values.insert(0, current_model)
+
+            model_combo["values"] = model_values
+            if current_model:
+                model_var.set(current_model)
+            else:
+                model_var.set(model_values[0] if model_values else "")
             # Key status
             stored = get_secure_ai_api_key(pname)
             api_key_entry.delete(0, tk.END)
@@ -1773,7 +1785,7 @@ class MarkdownReader:
 
             # Switch provider
             self.ai_provider_var.set(pname)
-            os.environ["AI_PROVIDER"] = pname
+            set_current_ai_provider(pname)
 
             dialog.destroy()
             dialogs.Messagebox.show_info(
@@ -2171,7 +2183,7 @@ class MarkdownReader:
             normalized = "anthropic"
         if normalized in ("openrouter", "openai", "anthropic"):
             self.ai_provider_var.set(normalized)
-            os.environ["AI_PROVIDER"] = normalized
+            set_current_ai_provider(normalized)
 
     def toggle_pdf_mode(self):
         """

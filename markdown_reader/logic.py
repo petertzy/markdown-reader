@@ -24,11 +24,26 @@ except Exception:
     class KeyringError(Exception):
         pass
 
-
-ENV_FILE_PATH = Path(__file__).resolve().parent.parent / ".env"
 AI_CREDENTIAL_SERVICE = "MarkdownReader.AI"
 
-# Hardcoded provider base URLs so the bundled .app works without a .env file.
+
+def _get_settings_file_path():
+    """Return the per-user settings file path for desktop app persistence."""
+
+    if sys.platform == "darwin":
+        base_dir = Path.home() / "Library" / "Application Support" / "MarkdownReader"
+    elif sys.platform.startswith("win"):
+        appdata = os.environ.get("APPDATA", "").strip()
+        base_dir = Path(appdata) / "MarkdownReader" if appdata else Path.home() / "AppData" / "Roaming" / "MarkdownReader"
+    else:
+        base_dir = Path.home() / ".config" / "markdown-reader"
+
+    return base_dir / "settings.json"
+
+
+APP_SETTINGS_FILE_PATH = _get_settings_file_path()
+
+# Hardcoded provider base URLs so bundled apps work without external env files.
 AI_PROVIDER_BASE_URLS = {
     "openrouter": "https://openrouter.ai/api/v1",
     "openai": "https://api.openai.com/v1",
@@ -99,48 +114,81 @@ def _open_file_in_browser(path):
     return webbrowser.open(_file_uri(resolved_path), new=0)
 
 
-def _load_env_file():
-    """
-    Loads .env variables into process environment (without overriding existing variables).
+def _load_app_settings():
+    """Load app settings from the per-user JSON file."""
 
-    :return: None
-    """
+    if not APP_SETTINGS_FILE_PATH.exists():
+        return {}
 
-    if not ENV_FILE_PATH.exists():
+    try:
+        with open(APP_SETTINGS_FILE_PATH, "r", encoding="utf-8") as file_obj:
+            data = json.load(file_obj)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_app_settings(settings):
+    """Write app settings to the per-user JSON file."""
+
+    if not isinstance(settings, dict):
         return
 
     try:
-        with open(ENV_FILE_PATH, "r", encoding="utf-8") as file_obj:
-            for raw_line in file_obj:
-                line = raw_line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if "=" not in line:
-                    continue
-
-                if line.startswith("export "):
-                    line = line[len("export "):].strip()
-                    if "=" not in line:
-                        continue
-
-                key, value = line.split("=", 1)
-                key = key.strip()
-                value = value.strip()
-
-                if not key:
-                    continue
-
-                if value.startswith(("'", '"')) and value.endswith(("'", '"')) and len(value) >= 2:
-                    value = value[1:-1]
-                else:
-                    # Remove inline comments for unquoted values: KEY=value # comment
-                    if " #" in value:
-                        value = value.split(" #", 1)[0].strip()
-
-                if key not in os.environ:
-                    os.environ[key] = value
+        APP_SETTINGS_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(APP_SETTINGS_FILE_PATH, "w", encoding="utf-8") as file_obj:
+            json.dump(settings, file_obj, ensure_ascii=True, indent=2)
     except Exception:
         return
+
+
+def _normalize_provider_name(provider_name):
+    """Normalize provider aliases and fallback to supported providers."""
+
+    normalized = (provider_name or "").strip().lower()
+    if normalized == "athropic":
+        normalized = "anthropic"
+    if normalized not in ("openrouter", "openai", "anthropic"):
+        normalized = "openrouter"
+    return normalized
+
+
+def load_persisted_ai_settings():
+    """Load persisted AI settings from app settings into process environment."""
+
+    settings = _load_app_settings()
+    if not settings:
+        settings = {
+            "ai_provider": "openrouter",
+            "ai_models": {},
+        }
+        _save_app_settings(settings)
+
+    saved_provider = _normalize_provider_name(settings.get("ai_provider", ""))
+    if not os.environ.get("AI_PROVIDER", "").strip():
+        os.environ["AI_PROVIDER"] = saved_provider
+
+    saved_models = settings.get("ai_models", {})
+    if not isinstance(saved_models, dict):
+        return
+
+    for provider_name, env_key in AI_PROVIDER_MODEL_ENV.items():
+        if os.environ.get(env_key, "").strip():
+            continue
+        model_name = (saved_models.get(provider_name, "") or "").strip()
+        if model_name:
+            os.environ[env_key] = model_name
+
+
+def set_current_ai_provider(provider_name):
+    """Persist and activate the selected AI provider."""
+
+    normalized = _normalize_provider_name(provider_name)
+
+    os.environ["AI_PROVIDER"] = normalized
+    settings = _load_app_settings()
+    settings["ai_provider"] = normalized
+    _save_app_settings(settings)
 
 
 def get_ai_provider_env_var(provider_name):
@@ -234,40 +282,31 @@ def get_ai_provider_model(provider_name):
     """Return the currently selected model for *provider_name*.
 
     Priority:
-    1. .env file value  (when the file is accessible — development mode)
-    2. runtime os.environ  (set earlier this session, e.g. after _load_env_file)
-    3. system keystore  (user saved a choice via the dialog)
+    1. runtime os.environ
+    2. app settings JSON (per-user persistent config)
+    3. legacy keyring value (backward compatibility)
     4. built-in default  (first entry in AI_PROVIDER_DEFAULT_MODELS)
     """
     normalized = (provider_name or "").strip().lower()
+    if normalized == "athropic":
+        normalized = "anthropic"
     env_key = AI_PROVIDER_MODEL_ENV.get(normalized)
 
-    # 1. .env file — read directly so the dialog shows the right model even
-    #    before the first call to _load_env_file() (which only runs on translation).
-    if env_key and ENV_FILE_PATH.exists():
-        try:
-            with open(ENV_FILE_PATH, "r", encoding="utf-8") as fh:
-                for raw in fh:
-                    line = raw.strip()
-                    if line.startswith("#") or "=" not in line:
-                        continue
-                    if line.startswith("export "):
-                        line = line[len("export "):].strip()
-                    k, _, v = line.partition("=")
-                    k = k.strip()
-                    v = v.strip().strip("\"'")
-                    if k == env_key and v:
-                        return v
-        except Exception:
-            pass
-
-    # 2. Already set in the process environment (e.g. after _load_env_file ran)
+    # 1. Runtime environment (explicit process override)
     if env_key:
         val = os.getenv(env_key, "").strip()
         if val:
             return val
 
-    # 3. Keyring-persisted choice (set via the dialog)
+    # 2. App settings (normal persistent storage for non-secret options)
+    settings = _load_app_settings()
+    saved_models = settings.get("ai_models", {})
+    if isinstance(saved_models, dict):
+        saved_model = (saved_models.get(normalized, "") or "").strip()
+        if saved_model:
+            return saved_model
+
+    # 3. Legacy keyring-persisted choice (for migration compatibility)
     if keyring is not None:
         try:
             stored = keyring.get_password(
@@ -284,18 +323,23 @@ def get_ai_provider_model(provider_name):
 
 
 def set_ai_provider_model(provider_name, model_name):
-    """Persist *model_name* for *provider_name* to env + keyring."""
-    normalized = (provider_name or "").strip().lower()
+    """Persist *model_name* for *provider_name* to env + app settings."""
+    normalized = _normalize_provider_name(provider_name)
     env_key = AI_PROVIDER_MODEL_ENV.get(normalized)
+    cleaned_model = (model_name or "").strip()
+    if not cleaned_model:
+        return
+
     if env_key:
-        os.environ[env_key] = model_name
-    if keyring is not None:
-        try:
-            keyring.set_password(
-                AI_CREDENTIAL_SERVICE, f"model:{normalized}", model_name
-            )
-        except Exception:
-            pass
+        os.environ[env_key] = cleaned_model
+
+    settings = _load_app_settings()
+    saved_models = settings.get("ai_models")
+    if not isinstance(saved_models, dict):
+        saved_models = {}
+    saved_models[normalized] = cleaned_model
+    settings["ai_models"] = saved_models
+    _save_app_settings(settings)
 
 
 def fetch_available_models(provider_name, api_key, timeout=8):
@@ -581,8 +625,8 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
     Translates Markdown content using an OpenAI-compatible API while preserving Markdown formatting.
 
     Configuration source:
-    1) .env (if present, loaded automatically)
-    2) Process environment variables
+    1) Runtime process environment
+    2) Per-user app settings JSON + secure key store
 
     :param string markdown_text: Markdown content to translate.
     :param string source_language: Source language name.
@@ -604,7 +648,6 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
     if source_language.lower() == target_language.lower():
         return markdown_text, ["Source and target language are identical; no translation applied."]
 
-    _load_env_file()
     provider_name = os.getenv("AI_PROVIDER", "openrouter").strip().lower()
 
     if provider_name == "athropic":
@@ -618,8 +661,8 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
 
     def _provider_cfg(name):
         stored_key = get_secure_ai_api_key(name)
-        # Use hardcoded base URLs so the bundled .app works without a .env file.
-        # env vars still override when present (dev/power-user convenience).
+        # Use hardcoded base URLs so bundled apps work without external env files.
+        # Explicit process env vars still override when present.
         base_url = AI_PROVIDER_BASE_URLS.get(name, "")
         model = get_ai_provider_model(name)
         if name == "openrouter":
@@ -3547,8 +3590,8 @@ def convert_pdf_to_markdown_docling(pdf_path):
                 cleaned,
             )
             cleaned = re.sub(
-                r'(?mis)^##\s*AI-powered translation:\s*\n\s*To enable AI-powered translation features, you need to set up API keys:\s*\n\s*```\s*\n\s*#\s*Copy the example configuration file\s*cp\s+\.env\.example\s+\.env\s*\n\s*```',
-                '## AI-powered translation:\n\nTo enable AI-powered translation features, you need to set up API keys:\n\n```bash\n# Copy the example configuration file\ncp .env.example .env\n```',
+                r'(?mis)^##\s*AI-powered translation:\s*\n\s*To enable AI-powered translation features, you need to set up API keys:\s*\n\s*```[\s\S]*?```',
+                '## AI-powered translation:\n\nTo enable AI-powered translation features, open "Settings -> AI Provider & API Keys..." and save your provider, model, and API key.',
                 cleaned,
             )
             cleaned = re.sub(
