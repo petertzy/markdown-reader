@@ -8,7 +8,7 @@ Markdown Reader is a clean and intuitive Markdown editor/reader with real-time p
 
 * Tabbed Markdown editing with real-time HTML preview.
 * **AI-Powered Translation**: Translate Markdown documents while preserving formatting (supports OpenRouter, OpenAI, and Anthropic).
-* **API Key Management**: Missing or rejected provider keys trigger an in-app dialog, and keys can be saved to the app's per-user settings file.
+* **API Key Management**: Missing or rejected provider keys trigger an in-app dialog, and keys are saved in the OS credential store.
 * **Progressive Translation Rendering**: Long translations are split into smaller chunks, inserted into the editor as they complete, auto-scrolled into view, and tracked with a progress bar.
 * Dark mode toggle.
 * **Advanced Table Editor**: Interactive table insertion with customizable rows and columns.
@@ -77,7 +77,7 @@ python app.py
   - Translate full document: "Edit → Translate with AI → Translate Full Document with AI"
   - Select source and target languages from dropdown menus
   - Configure provider/model/API keys: "Settings → AI Provider & API Keys..."
-  - If a key is missing or rejected, the app prompts for the correct provider key and can save it in the app settings file
+  - If a key is missing or rejected, the app prompts for the correct provider key and stores it in the OS credential store
   - Large translations appear progressively in the editor with automatic scrolling and a visible progress bar
 * **Table Insertion**: Use "Table → Insert Table" to create custom tables with interactive cell editing.
 * **PDF Conversion Modes**: 
@@ -122,7 +122,7 @@ git push
 * File Conversion: `html2text` for HTML, `PyMuPDF` and `docling` for PDF import (`pypdf` is used as a fallback when PyMuPDF is unavailable)
 * PDF Export: `weasyprint`
 * AI Translation: `requests` for API communication with OpenRouter, OpenAI, and Anthropic
-* Configuration: Per-user settings JSON for provider, model, and API keys. Paths: macOS `~/Library/Application Support/MarkdownReader/settings.json`; Windows `%APPDATA%/MarkdownReader/settings.json`; Linux `~/.config/markdown-reader/settings.json`
+* Configuration: Per-user settings JSON for provider/model (macOS `~/Library/Application Support/MarkdownReader/settings.json`; Windows `%APPDATA%/MarkdownReader/settings.json`; Linux `~/.config/markdown-reader/settings.json`) plus OS credential storage for API keys (`keyring`)
 * Auto-failover: Automatically switches AI providers when the primary provider returns rate-limit/auth/server errors
 
 ---
@@ -139,7 +139,7 @@ To enable AI-powered translation features, you need to set up API keys:
 2. Choose provider and model.
 3. Enter API key and save.
 
-The app stores provider, model, and API key in a per-user JSON file:
+The app stores provider and model in a per-user JSON file:
 
 - macOS: `~/Library/Application Support/MarkdownReader/settings.json`
 - Windows: `%APPDATA%/MarkdownReader/settings.json`
@@ -150,9 +150,7 @@ The app stores provider, model, and API key in a per-user JSON file:
 - **OpenAI**: [platform.openai.com](https://platform.openai.com/)
 - **Anthropic**: [console.anthropic.com](https://console.anthropic.com/)
 
-API keys are saved in the same per-user settings JSON file.
-
-On macOS and Linux, the app writes settings with owner-only file permissions when possible.
+API keys are saved in the OS credential store (Keychain on macOS, Credential Manager on Windows, Secret Service/KWallet on Linux when available).
 
 The app will automatically switch to a fallback provider when the primary provider returns rate-limit/auth/server errors.
 

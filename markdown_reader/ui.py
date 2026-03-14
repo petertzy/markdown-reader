@@ -1465,7 +1465,9 @@ class MarkdownReader:
 
             def sync_provider(*_args):
                 provider_var.set(provider_options[provider_combo.current()])
-                refresh_storage_status()
+                stored_key_status_var.set(
+                    "Stored key status is checked only when needed to avoid system prompts."
+                )
 
             provider_combo.bind("<<ComboboxSelected>>", sync_provider)
         else:
@@ -1488,7 +1490,7 @@ class MarkdownReader:
 
         ttk.Label(
             container,
-            text="Keys are stored in the app settings file (not the system keychain).",
+            text="Keys are stored in the system credential store (Keychain/Credential Manager/Secret Service).",
             foreground="gray",
             wraplength=520,
             justify=tk.LEFT,
@@ -1496,14 +1498,6 @@ class MarkdownReader:
 
         button_frame = ttk.Frame(container)
         button_frame.pack(fill=tk.X, pady=(18, 0))
-
-        def refresh_storage_status():
-            current_provider = provider_var.get().strip().lower()
-            has_stored_key = bool(get_secure_ai_api_key(current_provider))
-            if has_stored_key:
-                stored_key_status_var.set("A key is saved for this provider. Enter a new key to replace it.")
-            else:
-                stored_key_status_var.set("No key saved for this provider.")
 
         def on_confirm():
             api_key = api_key_entry.get().strip()
@@ -1549,7 +1543,9 @@ class MarkdownReader:
             row=0, column=2, padx=4
         )
 
-        refresh_storage_status()
+        stored_key_status_var.set(
+            "Stored key status is checked only when needed to avoid system prompts."
+        )
         dialog.bind("<Return>", lambda _event: on_confirm())
         dialog.bind("<Escape>", lambda _event: dialog.destroy())
         dialog.wait_window()
@@ -1693,14 +1689,13 @@ class MarkdownReader:
                 model_var.set(current_model)
             else:
                 model_var.set(model_values[0] if model_values else "")
-            # Key status
-            stored = get_secure_ai_api_key(pname)
             api_key_entry.delete(0, tk.END)
-            if stored:
-                stored_key_status_var.set("A key is saved for this provider. Leave empty to keep it, or enter a new value to replace it.")
-            else:
-                stored_key_status_var.set("No key saved for this provider.")
-            hint_var.set("Keys are stored in the app settings file (not the system keychain).")
+            stored_key_status_var.set(
+                "Stored key status is checked only when needed to avoid system prompts."
+            )
+            hint_var.set(
+                "Keys are stored in the system credential store. A prompt may appear when a key is accessed."
+            )
 
         def _fetch_models_async(*_):
             pname = _get_normalized_provider()
@@ -1765,7 +1760,9 @@ class MarkdownReader:
                 del os.environ[env_var]
             api_key_entry.delete(0, tk.END)
             stored_key_status_var.set("Stored key deleted.")
-            hint_var.set("")
+            hint_var.set(
+                "Keys are stored in the system credential store. A prompt may appear when a key is accessed."
+            )
 
         ttk.Button(button_frame, text="Delete Key", command=on_delete_key, width=12).grid(
             row=0, column=0, padx=4

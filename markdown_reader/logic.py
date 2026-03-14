@@ -138,7 +138,7 @@ def _save_app_settings(settings):
         APP_SETTINGS_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(APP_SETTINGS_FILE_PATH, "w", encoding="utf-8") as file_obj:
             json.dump(settings, file_obj, ensure_ascii=True, indent=2)
-        # Restrict to owner-only read/write so other OS users cannot read API keys.
+        # Restrict to owner-only read/write to reduce exposure of local settings.
         if sys.platform != "win32":
             import stat as _stat
             APP_SETTINGS_FILE_PATH.chmod(_stat.S_IRUSR | _stat.S_IWUSR)
@@ -223,45 +223,88 @@ def get_ai_provider_display_name(provider_name):
 
 
 def is_secure_key_storage_available():
-    """Return True — API keys are always persisted in the per-user settings file."""
+    """Return whether system secure storage (keyring) is available."""
 
-    return True
+    return keyring is not None
 
 
 def get_secure_ai_api_key(provider_name):
-    """Read a stored API key from the per-user settings file."""
+    """Read a provider API key from keyring.
+
+    For backward compatibility, this performs a lazy one-time migration from the
+    legacy JSON ``api_keys`` field if present.
+    """
 
     normalized = _normalize_provider_name(provider_name)
+
+    if keyring is not None:
+        try:
+            stored = keyring.get_password(AI_CREDENTIAL_SERVICE, normalized)
+            if stored and stored.strip():
+                return stored.strip()
+        except KeyringError:
+            pass
+        except Exception:
+            pass
+
+    # Legacy fallback: migrate old JSON-stored key when encountered.
     settings = _load_app_settings()
     api_keys = settings.get("api_keys", {})
     if isinstance(api_keys, dict):
-        val = (api_keys.get(normalized, "") or "").strip()
-        if val:
-            return val
+        legacy_key = (api_keys.get(normalized, "") or "").strip()
+        if legacy_key:
+            if keyring is not None:
+                try:
+                    keyring.set_password(AI_CREDENTIAL_SERVICE, normalized, legacy_key)
+                    del api_keys[normalized]
+                    settings["api_keys"] = api_keys
+                    _save_app_settings(settings)
+                except Exception:
+                    # If migration fails, still allow app use with legacy value.
+                    pass
+            return legacy_key
     return ""
 
 
 def set_secure_ai_api_key(provider_name, api_key):
-    """Persist a provider API key in the per-user settings file."""
+    """Persist a provider API key in keyring."""
 
     normalized = _normalize_provider_name(provider_name)
     cleaned_key = (api_key or "").strip()
     if not cleaned_key:
         raise RuntimeError("API key cannot be empty.")
+    if keyring is None:
+        raise RuntimeError("Secure key storage is not available on this system.")
 
+    try:
+        keyring.set_password(AI_CREDENTIAL_SERVICE, normalized, cleaned_key)
+    except KeyringError as exc:
+        raise RuntimeError(f"Could not store API key securely: {exc}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"Could not store API key securely: {exc}") from exc
+
+    # Clean any old plaintext JSON key for this provider after successful save.
     settings = _load_app_settings()
-    api_keys = settings.get("api_keys")
-    if not isinstance(api_keys, dict):
-        api_keys = {}
-    api_keys[normalized] = cleaned_key
-    settings["api_keys"] = api_keys
-    _save_app_settings(settings)
+    api_keys = settings.get("api_keys", {})
+    if isinstance(api_keys, dict) and normalized in api_keys:
+        del api_keys[normalized]
+        settings["api_keys"] = api_keys
+        _save_app_settings(settings)
 
 
 def delete_secure_ai_api_key(provider_name):
-    """Remove a provider API key from the per-user settings file."""
+    """Remove a provider API key from keyring."""
 
     normalized = _normalize_provider_name(provider_name)
+    if keyring is not None:
+        try:
+            keyring.delete_password(AI_CREDENTIAL_SERVICE, normalized)
+        except KeyringError:
+            pass
+        except Exception:
+            pass
+
+    # Also remove any legacy plaintext JSON copy.
     settings = _load_app_settings()
     api_keys = settings.get("api_keys", {})
     if isinstance(api_keys, dict) and normalized in api_keys:
@@ -764,8 +807,35 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
             continue
 
     if not content:
+        tried_providers = ", ".join([c["name"] for c in provider_candidates])
         error_text = " | ".join(errors[:3]) if errors else "Unknown translation error"
-        raise RuntimeError(f"AI translation failed. Tried providers: {', '.join([c['name'] for c in provider_candidates])}. {error_text}")
+
+        # Friendlier guidance for a common configuration issue.
+        for err in errors:
+            lowered = err.lower()
+            if "not a chat model" in lowered or "v1/chat/completions" in lowered:
+                bad_provider = (err.split(":", 1)[0] or "").strip().lower()
+                bad_cfg = next((c for c in provider_candidates if c.get("name") == bad_provider), None)
+                bad_model = (bad_cfg or {}).get("model", "")
+                provider_label = get_ai_provider_display_name(bad_provider or provider_name)
+
+                message = (
+                    "AI translation could not continue because the selected model is not chat-compatible.\n\n"
+                    f"Provider: {provider_label}"
+                )
+                if bad_model:
+                    message += f"\nModel: {bad_model}"
+                message += (
+                    "\n\nPlease open Settings -> AI Provider & API Keys..., "
+                    "choose a chat-capable model, and retry."
+                )
+                raise RuntimeError(message)
+
+        raise RuntimeError(
+            "AI translation failed after trying configured providers.\n"
+            f"Tried providers: {tried_providers}\n"
+            f"Details: {error_text}"
+        )
 
     json_text = _extract_json_object(content)
     if not json_text:
