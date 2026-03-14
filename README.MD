@@ -8,7 +8,7 @@ Markdown Reader is a clean and intuitive Markdown editor/reader with real-time p
 
 * Tabbed Markdown editing with real-time HTML preview.
 * **AI-Powered Translation**: Translate Markdown documents while preserving formatting (supports OpenRouter, OpenAI, and Anthropic).
-* **Secure API Key Management**: Missing or rejected provider keys trigger an in-app dialog, and keys can be saved in the OS-provided secure credential store.
+* **API Key Management**: Missing or rejected provider keys trigger an in-app dialog, and keys can be saved to the app's per-user settings file.
 * **Progressive Translation Rendering**: Long translations are split into smaller chunks, inserted into the editor as they complete, auto-scrolled into view, and tracked with a progress bar.
 * Dark mode toggle.
 * **Advanced Table Editor**: Interactive table insertion with customizable rows and columns.
@@ -16,7 +16,7 @@ Markdown Reader is a clean and intuitive Markdown editor/reader with real-time p
 * Built with pure Python, Tkinter, and ttkbootstrap — cross-platform.
 * Can be bundled as a macOS app using `py2app`.
 * Opens preview automatically and avoids multiple browser tabs for a smoother experience.
-* Multi-provider AI failover: Automatically switches to fallback providers on rate limits.
+* Multi-provider AI failover: Automatically switches to fallback providers on rate-limit/auth/server errors.
 
 ---
 
@@ -77,7 +77,7 @@ python app.py
   - Translate full document: "Edit → Translate with AI → Translate Full Document with AI"
   - Select source and target languages from dropdown menus
   - Configure provider/model/API keys: "Settings → AI Provider & API Keys..."
-  - If a key is missing or rejected, the app prompts for the correct provider key and can save it securely in the OS-provided credential store
+  - If a key is missing or rejected, the app prompts for the correct provider key and can save it in the app settings file
   - Large translations appear progressively in the editor with automatic scrolling and a visible progress bar
 * **Table Insertion**: Use "Table → Insert Table" to create custom tables with interactive cell editing.
 * **PDF Conversion Modes**: 
@@ -122,8 +122,8 @@ git push
 * File Conversion: `html2text` for HTML, `PyMuPDF` and `docling` for PDF import (`pypdf` is used as a fallback when PyMuPDF is unavailable)
 * PDF Export: `weasyprint`
 * AI Translation: `requests` for API communication with OpenRouter, OpenAI, and Anthropic
-* Configuration: Per-user settings JSON for provider/model plus secure OS credential storage via `keyring` for API keys
-* Auto-failover: Automatically switches AI providers on rate limits or errors
+* Configuration: Per-user settings JSON for provider, model, and API keys (`~/Library/Application Support/MarkdownReader/settings.json` on macOS)
+* Auto-failover: Automatically switches AI providers when the primary provider returns rate-limit/auth/server errors
 
 ---
 
@@ -137,9 +137,9 @@ To enable AI-powered translation features, you need to set up API keys:
 
 1. Open `Settings -> AI Provider & API Keys...`.
 2. Choose provider and model.
-3. Enter API key and save securely.
+3. Enter API key and save.
 
-The app stores provider/model in a per-user JSON file:
+The app stores provider, model, and API key in a per-user JSON file:
 
 - macOS: `~/Library/Application Support/MarkdownReader/settings.json`
 - Windows: `%APPDATA%/MarkdownReader/settings.json`
@@ -150,9 +150,11 @@ The app stores provider/model in a per-user JSON file:
 - **OpenAI**: [platform.openai.com](https://platform.openai.com/)
 - **Anthropic**: [console.anthropic.com](https://console.anthropic.com/)
 
-API keys are saved in the OS credential store (Keychain on macOS, Credential Manager on Windows, Secret Service/KWallet on Linux when available).
+API keys are saved in the same per-user settings JSON file.
 
-The app will automatically switch to a fallback provider if the primary provider hits rate limits.
+On macOS and Linux, the app writes settings with owner-only file permissions when possible.
+
+The app will automatically switch to a fallback provider when the primary provider returns rate-limit/auth/server errors.
 
 ---
 
