@@ -138,6 +138,10 @@ def _save_app_settings(settings):
         APP_SETTINGS_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(APP_SETTINGS_FILE_PATH, "w", encoding="utf-8") as file_obj:
             json.dump(settings, file_obj, ensure_ascii=True, indent=2)
+        # Restrict to owner-only read/write so other OS users cannot read API keys.
+        if sys.platform != "win32":
+            import stat as _stat
+            APP_SETTINGS_FILE_PATH.chmod(_stat.S_IRUSR | _stat.S_IWUSR)
     except Exception:
         return
 
@@ -218,64 +222,52 @@ def get_ai_provider_display_name(provider_name):
     return provider_name or "AI"
 
 
-def _get_keyring_username(provider_name):
-    return f"provider:{(provider_name or '').strip().lower()}"
-
-
 def is_secure_key_storage_available():
-    """Return True when a system-backed key store is available."""
+    """Return True — API keys are always persisted in the per-user settings file."""
 
-    return keyring is not None
+    return True
 
 
 def get_secure_ai_api_key(provider_name):
-    """Read a provider API key from the system key store."""
+    """Read a stored API key from the per-user settings file."""
 
-    if keyring is None:
-        return ""
-
-    env_var = get_ai_provider_env_var(provider_name)
-    if not env_var:
-        return ""
-
-    try:
-        value = keyring.get_password(AI_CREDENTIAL_SERVICE, _get_keyring_username(provider_name))
-    except KeyringError as exc:
-        raise RuntimeError(f"Unable to read stored API key: {exc}") from exc
-
-    return (value or "").strip()
+    normalized = _normalize_provider_name(provider_name)
+    settings = _load_app_settings()
+    api_keys = settings.get("api_keys", {})
+    if isinstance(api_keys, dict):
+        val = (api_keys.get(normalized, "") or "").strip()
+        if val:
+            return val
+    return ""
 
 
 def set_secure_ai_api_key(provider_name, api_key):
-    """Persist a provider API key to the system key store."""
+    """Persist a provider API key in the per-user settings file."""
 
-    if keyring is None:
-        raise RuntimeError("Secure key storage is not available on this system.")
-
+    normalized = _normalize_provider_name(provider_name)
     cleaned_key = (api_key or "").strip()
     if not cleaned_key:
         raise RuntimeError("API key cannot be empty.")
 
-    try:
-        keyring.set_password(
-            AI_CREDENTIAL_SERVICE,
-            _get_keyring_username(provider_name),
-            cleaned_key,
-        )
-    except KeyringError as exc:
-        raise RuntimeError(f"Unable to store API key securely: {exc}") from exc
+    settings = _load_app_settings()
+    api_keys = settings.get("api_keys")
+    if not isinstance(api_keys, dict):
+        api_keys = {}
+    api_keys[normalized] = cleaned_key
+    settings["api_keys"] = api_keys
+    _save_app_settings(settings)
 
 
 def delete_secure_ai_api_key(provider_name):
-    """Delete a provider API key from the system key store."""
+    """Remove a provider API key from the per-user settings file."""
 
-    if keyring is None:
-        raise RuntimeError("Secure key storage is not available on this system.")
-
-    try:
-        keyring.delete_password(AI_CREDENTIAL_SERVICE, _get_keyring_username(provider_name))
-    except Exception:
-        return
+    normalized = _normalize_provider_name(provider_name)
+    settings = _load_app_settings()
+    api_keys = settings.get("api_keys", {})
+    if isinstance(api_keys, dict) and normalized in api_keys:
+        del api_keys[normalized]
+        settings["api_keys"] = api_keys
+        _save_app_settings(settings)
 
 
 def get_ai_provider_model(provider_name):

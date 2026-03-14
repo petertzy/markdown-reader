@@ -1449,10 +1449,7 @@ class MarkdownReader:
         ).pack(anchor="w", pady=(0, 12))
 
         provider_var = tk.StringVar(value=initial_provider)
-        secure_available = is_secure_key_storage_available()
-        save_securely_var = tk.BooleanVar(value=secure_available)
         stored_key_status_var = tk.StringVar(value="")
-        secure_hint_var = tk.StringVar(value="")
         result = {"confirmed": False}
 
         if allow_provider_change:
@@ -1489,16 +1486,10 @@ class MarkdownReader:
             justify=tk.LEFT,
         ).pack(anchor="w", pady=(0, 10))
 
-        save_checkbox = ttk.Checkbutton(
-            container,
-            text="Save securely in the system credential store",
-            variable=save_securely_var,
-        )
-        save_checkbox.pack(anchor="w")
-
         ttk.Label(
             container,
-            textvariable=secure_hint_var,
+            text="Keys are stored in the app settings file (not the system keychain).",
+            foreground="gray",
             wraplength=520,
             justify=tk.LEFT,
         ).pack(anchor="w", pady=(6, 0))
@@ -1508,27 +1499,11 @@ class MarkdownReader:
 
         def refresh_storage_status():
             current_provider = provider_var.get().strip().lower()
-            if secure_available:
-                try:
-                    has_stored_key = bool(get_secure_ai_api_key(current_provider))
-                except Exception as exc:
-                    has_stored_key = False
-                    secure_hint_var.set(f"Secure storage is available, but the stored key could not be read: {exc}")
-                else:
-                    secure_hint_var.set(
-                        "The permanent option uses the OS-provided secure credential store, while provider and model are saved in per-user app settings."
-                    )
-
-                if has_stored_key:
-                    stored_key_status_var.set("A secure key is already stored for this provider. Enter a new key to replace it.")
-                else:
-                    stored_key_status_var.set("No secure key is currently stored for this provider.")
-                save_checkbox.state(["!disabled"])
+            has_stored_key = bool(get_secure_ai_api_key(current_provider))
+            if has_stored_key:
+                stored_key_status_var.set("A key is saved for this provider. Enter a new key to replace it.")
             else:
-                stored_key_status_var.set("Secure storage is not available. The key can only be used for this session.")
-                secure_hint_var.set("Install and configure a supported keyring backend to enable permanent key storage.")
-                save_securely_var.set(False)
-                save_checkbox.state(["disabled"])
+                stored_key_status_var.set("No key saved for this provider.")
 
         def on_confirm():
             api_key = api_key_entry.get().strip()
@@ -1541,7 +1516,7 @@ class MarkdownReader:
                     "confirmed": True,
                     "provider_name": provider_var.get().strip().lower(),
                     "api_key": api_key,
-                    "save_securely": secure_available and bool(save_securely_var.get()),
+                    "save_securely": True,
                     "delete_stored": False,
                 }
             )
@@ -1628,7 +1603,6 @@ class MarkdownReader:
 
         providers = ["openrouter", "openai", "anthropic"]
         provider_labels = {"openrouter": "OpenRouter", "openai": "OpenAI", "anthropic": "Anthropic"}
-        secure_available = is_secure_key_storage_available()
 
         dialog = tk.Toplevel(self.root)
         dialog.title("AI Provider & API Keys")
@@ -1682,17 +1656,6 @@ class MarkdownReader:
             justify=tk.LEFT,
         ).pack(anchor="w", pady=(0, 8))
 
-        save_securely_var = tk.BooleanVar(value=secure_available)
-        save_checkbox = ttk.Checkbutton(
-            container,
-            text="Save API key securely in the system credential store",
-            variable=save_securely_var,
-        )
-        save_checkbox.pack(anchor="w")
-        if not secure_available:
-            save_securely_var.set(False)
-            save_checkbox.state(["disabled"])
-
         hint_var = tk.StringVar(value="")
         ttk.Label(
             container,
@@ -1734,11 +1697,10 @@ class MarkdownReader:
             stored = get_secure_ai_api_key(pname)
             api_key_entry.delete(0, tk.END)
             if stored:
-                stored_key_status_var.set("A stored key exists for this provider. Enter a new value to replace it.")
-                hint_var.set("The stored key will be used automatically. You can leave the field empty to keep it.")
+                stored_key_status_var.set("A key is saved for this provider. Leave empty to keep it, or enter a new value to replace it.")
             else:
-                stored_key_status_var.set("No stored key for this provider.")
-                hint_var.set("")
+                stored_key_status_var.set("No key saved for this provider.")
+            hint_var.set("Keys are stored in the app settings file (not the system keychain).")
 
         def _fetch_models_async(*_):
             pname = _get_normalized_provider()
@@ -1772,12 +1734,11 @@ class MarkdownReader:
                 env_var = get_ai_provider_env_var(pname)
                 if env_var:
                     os.environ[env_var] = new_key
-                if save_securely_var.get():
-                    try:
-                        set_secure_ai_api_key(pname, new_key)
-                    except Exception as exc:
-                        dialogs.Messagebox.show_error("Key Storage", f"Could not save key: {exc}")
-                        return
+                try:
+                    set_secure_ai_api_key(pname, new_key)
+                except Exception as exc:
+                    dialogs.Messagebox.show_error("Key Storage", f"Could not save key: {exc}")
+                    return
 
             # Model handling
             if chosen_model:
