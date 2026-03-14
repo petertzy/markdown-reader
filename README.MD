@@ -122,7 +122,7 @@ git push
 * File Conversion: `html2text` for HTML, `PyMuPDF` and `docling` for PDF import (`pypdf` is used as a fallback when PyMuPDF is unavailable)
 * PDF Export: `weasyprint`
 * AI Translation: `requests` for API communication with OpenRouter, OpenAI, and Anthropic
-* Configuration: Per-user settings JSON for provider, model, and API keys (`~/Library/Application Support/MarkdownReader/settings.json` on macOS)
+* Configuration: Per-user settings JSON for provider, model, and API keys. Paths: macOS `~/Library/Application Support/MarkdownReader/settings.json`; Windows `%APPDATA%/MarkdownReader/settings.json`; Linux `~/.config/markdown-reader/settings.json`
 * Auto-failover: Automatically switches AI providers when the primary provider returns rate-limit/auth/server errors
 
 ---
