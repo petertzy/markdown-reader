@@ -226,6 +226,11 @@ class MarkdownReader:
 
         self.root.config(menu=menubar)
 
+        #Help menu 
+        helpmenu = tk.Menu(menubar, tearoff=0) 
+        helpmenu.add_command(label="Help Contents", command=self.show_help)
+        menubar.add_cascade(label="Help", menu=helpmenu)
+
         # --- Toolbar ---
         style.configure("primary.TFrame")
         toolbar = ttkb.Frame(
@@ -2608,4 +2613,76 @@ Example - Data Table:
                 f"Could not export PDF:\n{exc}\n\nSee console for full traceback.",
             )
             traceback.print_exc()
+
+    def show_help(self):
+        """
+        Displays a help dialog with information about the application features.
+        """
+        help_window = tk.Toplevel(self.root)
+        help_window.title("Help Contents")
+        help_window.geometry("600x500")
+        help_window.transient(self.root)
+        help_window.resizable(False, False)
+        
+        # Center the help window
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 300
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 250
+        help_window.geometry(f"+{x}+{y}")
+        
+        # Create a frame with scrollbar
+        frame = ttkb.Frame(help_window)
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Add title
+        title_label = ttk.Label(
+            frame, 
+            text="Markdown Reader - Help", 
+            font=("Arial", 12, "bold")
+        )
+        title_label.pack(anchor="w", pady=(0, 10))
+        
+        # Create help text with 10 bullet points
+        help_text = ScrolledText(
+            frame, 
+            height=25, 
+            width=65, 
+            wrap=tk.WORD,
+            font=("Arial", 10)
+        )
+        help_text.pack(fill=tk.BOTH, expand=True)
+        
+        help_content = """• File Operations: Use the File menu to create new markdown files, open existing files, and save your work. Markdown files are automatically saved to your chosen location.
+
+    • Export Formats: Export your markdown documents to multiple formats including HTML, Word (.docx), and PDF. Choose File > Export to select your desired format.
+
+    • Text Formatting: Use the toolbar buttons or keyboard shortcuts to apply formatting - Bold (B), Italic (I), Underline (U). You can also use **text** for bold and *text* for italic.
+
+    • Font Customization: Change the font family and size using the toolbar dropdowns. Use Ctrl+Scroll (or middle-click drag) to quickly zoom in and out while editing.
+
+    • Table Support: Insert markdown tables using the Table menu or the table button (⊞) in the toolbar. Tables support standard markdown pipe syntax (| column |).
+
+    • Dark Mode: Toggle between light and dark themes using View > Toggle Dark Mode for comfortable editing in any lighting condition.
+
+    • AI Translation: Translate selected text or entire documents using AI providers. Configure your API keys in Settings > AI Provider & API Keys.
+
+    • PDF Handling: Choose between fast PDF conversion (PyMuPDF) or advanced conversion (Docling). Switch modes under Tools > Use Advanced PDF Conversion (Docling).
+
+    • Multi-Tab Editing: Work with multiple files simultaneously using tabs. Right-click tabs to close them, or use the keyboard shortcuts for navigation.
+
+    • Keyboard Shortcuts: Save files with Ctrl+S, undo with Ctrl+Z, redo with Ctrl+Y, and translate documents with Ctrl+Shift+T for quick workflow management."""
+        
+        help_text.insert("1.0", help_content)
+        help_text.config(state=tk.DISABLED)  # Make text read-only
+        
+        # Add close button
+        button_frame = ttkb.Frame(help_window)
+        button_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        close_btn = ttkb.Button(
+            button_frame, 
+            text="Close", 
+            command=help_window.destroy,
+            bootstyle="info"
+        )
+        close_btn.pack(side=tk.RIGHT)
 
