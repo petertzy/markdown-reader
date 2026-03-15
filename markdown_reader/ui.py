@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import threading
 import tkinter as tk
 import tkinter.font  # moved here from inside methods
@@ -419,12 +420,15 @@ class MarkdownReader:
 
     def bind_events(self):
         """
-        Sets up key binds for shortcuts.
+        Register global keyboard shortcuts for file and translation actions.
+
+        :return: A None value after all shortcut bindings are registered.
+
+        :raises tk.TclError: If a Tk binding cannot be registered on the root widget.
         """
 
         # Keyboard shortcuts
         self.root.bind_all("<Control-s>", lambda event: self.save_file())
-        self.root.bind_all("<Command-s>", lambda event: self.save_file())
         self.root.bind_all("<Control-z>", lambda event: self.undo_action())
         self.root.bind_all("<Control-y>", lambda event: self.redo_action())
         self.root.bind_all(
@@ -432,12 +436,14 @@ class MarkdownReader:
             lambda event: self.translate_with_ai(selected_only=False),
         )
         self.root.bind_all("<Control-n>", lambda event: self.new_file())
-        self.root.bind_all("<Command-z>", lambda event: self.undo_action())
-        self.root.bind_all("<Command-Shift-Z>", lambda event: self.redo_action())
-        self.root.bind_all(
-            "<Command-Shift-T>",
-            lambda event: self.translate_with_ai(selected_only=False),
-        )
+        if sys.platform == "darwin":
+            self.root.bind_all("<Command-s>", lambda event: self.save_file())
+            self.root.bind_all("<Command-z>", lambda event: self.undo_action())
+            self.root.bind_all("<Command-Shift-Z>", lambda event: self.redo_action())
+            self.root.bind_all(
+                "<Command-Shift-T>",
+                lambda event: self.translate_with_ai(selected_only=False),
+            )
 
     def _on_drop_files(self, event):
         """
@@ -479,6 +485,33 @@ class MarkdownReader:
         text_area.bind("<Button-2>", self._on_middle_press)
         text_area.bind("<B2-Motion>", self._on_middle_drag)
         text_area.bind("<ButtonRelease-2>", self._on_middle_release)
+
+        # Formatting bindings must be widget-level
+        text_area.bind(
+            "<Control-KeyPress-b>",
+            lambda event: (self.toggle_bold(), "break")[1],
+        )
+        text_area.bind(
+            "<Control-KeyPress-i>",
+            lambda event: (self.toggle_italic(), "break")[1],
+        )
+        text_area.bind(
+            "<Control-KeyPress-u>",
+            lambda event: (self.toggle_underline(), "break")[1],
+        )
+        if sys.platform == "darwin":
+            text_area.bind(
+                "<Command-KeyPress-b>",
+                lambda event: (self.toggle_bold(), "break")[1],
+            )
+            text_area.bind(
+                "<Command-KeyPress-i>",
+                lambda event: (self.toggle_italic(), "break")[1],
+            )
+            text_area.bind(
+                "<Command-KeyPress-u>",
+                lambda event: (self.toggle_underline(), "break")[1],
+            )
 
         # Setup IME interception
         wid = str(text_area)
