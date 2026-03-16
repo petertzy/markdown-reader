@@ -2620,13 +2620,13 @@ Example - Data Table:
         """
         help_window = tk.Toplevel(self.root)
         help_window.title("Markdown Reader - Help")
-        help_window.geometry("650x600")
+        help_window.geometry("700x800")
         help_window.transient(self.root)
         help_window.resizable(False, False)
         
         # Center the help window
-        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 325
-        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 300
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 350
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 400
         help_window.geometry(f"+{x}+{y}")
         
         # Colors
@@ -2637,23 +2637,13 @@ Example - Data Table:
         main_container = tk.Frame(help_window, bg=bg_color)
         main_container.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
         
-        # Title
-        title_label = tk.Label(
-            main_container,
-            text="File Menu",
-            font=("Arial", 13, "bold"),
-            fg=text_color,
-            bg=bg_color
-        )
-        title_label.pack(anchor="w", pady=(0, 15))
-        
         # Help text area
         help_text = ScrolledText(
             main_container,
-            height=20,
-            width=70,
+            height=35,
+            width=75,
             wrap=tk.WORD,
-            font=("Arial", 10),
+            font=("Arial", 8),
             bg=bg_color,
             fg=text_color,
             insertbackground=text_color,
@@ -2663,9 +2653,15 @@ Example - Data Table:
         help_text.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
         
         # Tags for formatting
-        help_text.tag_configure("bold_item", font=("Arial", 10, "bold"), foreground=text_color)
+        help_text.tag_configure("bold_item", font=("Arial", 8, "bold"), foreground=text_color)
+        help_text.tag_configure("menu_header", font=("Arial", 9, "bold"), foreground=text_color,justify="center",spacing1=10,spacing3=10)
         
-        # Insert content
+        # File Menu
+        help_text.insert("end", "File Menu", "menu_header")
+        # help_text.insert("end", "\n" + "─"*80 + "\n", "separator")
+        # help_text.insert("end", "\nView Menu\n", "menu_header")
+        help_text.insert("end", "\n\n")
+        
         help_text.insert("end", "New", "bold_item")
         help_text.insert("end", "\nCreates a new blank Markdown (.md) document for editing.\n\n")
         
@@ -2691,20 +2687,57 @@ Example - Data Table:
         help_text.insert("end", "\nCloses all open Markdown documents in the editor.\n\n")
         
         help_text.insert("end", "Exit", "bold_item")
-        help_text.insert("end", "\nCloses the application completely.")
+        help_text.insert("end", "\nCloses the application completely.\n\n")
+
+        # View Menu
+        help_text.insert("end", "View Menu", "menu_header")
+        help_text.insert("end", "\n\n")
+        
+        help_text.insert("end", "Toggle Dark Mode", "bold_item")
+        help_text.insert("end", "\nSwitches the interface between light and dark themes for improved readability.\n\n")
+        
+        help_text.insert("end", "Open Preview in Browser", "bold_item")
+        help_text.insert("end", "\nOpens the rendered Markdown preview in your default web browser.\n\n")
+        
+        # Edit Menu
+        help_text.insert("end", "Edit Menu", "menu_header")
+        help_text.insert("end", "\n\n")
+        
+        help_text.insert("end", "Undo", "bold_item")
+        help_text.insert("end", "\nReverts the most recent change made in the document.\n\n")
+        
+        help_text.insert("end", "Redo", "bold_item")
+        help_text.insert("end", "\nRestores the most recently undone change.\n\n")
+        
+        help_text.insert("end", "Translate with AI", "bold_item")
+        help_text.insert("end", "\nUses AI to translate selected text into another language.\n\n")
+        
+        # Settings Menu
+        help_text.insert("end", "Settings Menu", "menu_header")
+        help_text.insert("end", "\n\n")
+        
+        help_text.insert("end", "AI Provider & API Keys", "bold_item")
+        help_text.insert("end", "\nConfigures AI service providers and API keys used for AI-powered features.\n\n")
+        
+        # Tools Menu
+        help_text.insert("end", "Tools Menu", "menu_header")
+        help_text.insert("end", "\n\n")
+        
+        help_text.insert("end", "Use Advanced PDF Conversion (Docling)", "bold_item")
+        help_text.insert("end", "\nEnables enhanced PDF generation using the Docling conversion engine.\n\n")
+        
+        help_text.insert("end", "PDF Converter Info", "bold_item")
+        help_text.insert("end", "\nDisplays information about the PDF conversion engine used by the application.\n\n")
+        
+        # Table Menu
+        help_text.insert("end", "Table Menu", "menu_header")
+        help_text.insert("end", "\n\n")
+        
+        help_text.insert("end", "Insert Table", "bold_item")
+        help_text.insert("end", "\nInserts a Markdown-formatted table into the document.\n\n")
+        
+        help_text.insert("end", "Table Syntax Help", "bold_item")
+        help_text.insert("end", "\nProvides guidance on writing and formatting tables using Markdown syntax.")
         
         help_text.config(state=tk.DISABLED)
-        
-        # Close button
-        button_frame = tk.Frame(main_container, bg=bg_color)
-        button_frame.pack(fill=tk.X)
-        
-        close_btn = ttkb.Button(
-            button_frame,
-            text="Close",
-            command=help_window.destroy,
-            bootstyle="danger",
-            width=15
-        )
-        close_btn.pack(side=tk.RIGHT)
 
