@@ -151,6 +151,89 @@ class MarkdownReader:
         self._translation_session_counter = 0
         self._translation_cancel_requested = False
 
+        self.global_shortcuts = [
+            ("New File", "<Control-KeyPress-n>", self.new_file),
+            ("Open File", "<Control-KeyPress-o>", self.open_file),
+            ("Save File", "<Control-KeyPress-s>", self.save_file),
+            ("Close Current Tab", "<Control-KeyPress-w>", self.close_current_tab),
+            ("Close All Tabs", "<Control-Shift-KeyPress-W>", self.close_all_tabs),
+            ("Undo", "<Control-KeyPress-z>", self.undo_action),
+            ("Redo", "<Control-KeyPress-y>", self.redo_action),
+            ("Redo", "<Control-Shift-KeyPress-Z>", self.redo_action),
+            (
+                "Translate Selected Text with AI",
+                "<Control-KeyPress-t>",
+                lambda: self.translate_with_ai(selected_only=True),
+            ),
+            (
+                "Translate Full Document with AI",
+                "<Control-Shift-KeyPress-T>",
+                lambda: self.translate_with_ai(selected_only=False),
+            ),
+            (
+                "Open Preview in Browser",
+                "<Control-Shift-KeyPress-O>",
+                lambda: open_preview_in_browser(self.preview_file, self),
+            ),
+            ("Toggle Dark Mode", "<F6>", self.toggle_dark_mode),
+        ]
+        self.editor_shortcuts = [
+            ("Bold", "<Control-KeyPress-b>", self.toggle_bold),
+            ("Italic", "<Control-KeyPress-i>", self.toggle_italic),
+            ("Underline", "<Control-KeyPress-u>", self.toggle_underline),
+            ("Heading 1", "<Control-KeyPress-1>", lambda: self.apply_style("Heading 1")),
+            ("Heading 2", "<Control-KeyPress-2>", lambda: self.apply_style("Heading 2")),
+            ("Heading 3", "<Control-KeyPress-3>", lambda: self.apply_style("Heading 3")),
+            ("Normal Text", "<Control-KeyPress-0>", lambda: self.apply_style("Normal text")),
+            ("Insert Table", "<Control-Alt-KeyPress-t>", self.insert_table),
+            ("Export to HTML", "<Control-Alt-KeyPress-h>", self.export_to_html_dialog),
+            ("Export to Word", "<Control-Alt-KeyPress-d>", self.export_to_docx_dialog),
+            ("Export to PDF", "<Control-Alt-KeyPress-p>", self.export_to_pdf_dialog),
+        ]
+
+        if sys.platform == "darwin":
+            self.global_shortcuts.extend(
+                [
+                    ("New File", "<Command-KeyPress-n>", self.new_file),
+                    ("Open File", "<Command-KeyPress-o>", self.open_file),
+                    ("Save File", "<Command-KeyPress-s>", self.save_file),
+                    ("Close Current Tab", "<Command-KeyPress-w>", self.close_current_tab),
+                    ("Close All Tabs", "<Command-Shift-KeyPress-W>", self.close_all_tabs),
+                    ("Undo", "<Command-KeyPress-z>", self.undo_action),
+                    ("Redo", "<Command-Shift-KeyPress-Z>", self.redo_action),
+                    (
+                        "Translate Selected Text with AI",
+                        "<Command-KeyPress-t>",
+                        lambda: self.translate_with_ai(selected_only=True),
+                    ),
+                    (
+                        "Translate Full Document with AI",
+                        "<Command-Shift-KeyPress-T>",
+                        lambda: self.translate_with_ai(selected_only=False),
+                    ),
+                    (
+                        "Open Preview in Browser",
+                        "<Command-Shift-KeyPress-O>",
+                        lambda: open_preview_in_browser(self.preview_file, self),
+                    ),
+                ]
+            )
+            self.editor_shortcuts.extend(
+                [
+                    ("Bold", "<Command-KeyPress-b>", self.toggle_bold),
+                    ("Italic", "<Command-KeyPress-i>", self.toggle_italic),
+                    ("Underline", "<Command-KeyPress-u>", self.toggle_underline),
+                    ("Heading 1", "<Command-KeyPress-1>", lambda: self.apply_style("Heading 1")),
+                    ("Heading 2", "<Command-KeyPress-2>", lambda: self.apply_style("Heading 2")),
+                    ("Heading 3", "<Command-KeyPress-3>", lambda: self.apply_style("Heading 3")),
+                    ("Normal Text", "<Command-KeyPress-0>", lambda: self.apply_style("Normal text")),
+                    ("Insert Table", "<Command-Option-KeyPress-t>", self.insert_table),
+                    ("Export to HTML", "<Command-Option-KeyPress-h>", self.export_to_html_dialog),
+                    ("Export to Word", "<Command-Option-KeyPress-d>", self.export_to_docx_dialog),
+                    ("Export to PDF", "<Command-Option-KeyPress-p>", self.export_to_pdf_dialog),
+                ]
+            )
+
         self.root.protocol("WM_DELETE_WINDOW", self.quit)
 
         self.create_widgets()
@@ -420,29 +503,17 @@ class MarkdownReader:
 
     def bind_events(self):
         """
-        Register global keyboard shortcuts for file and translation actions.
+        Register application-wide keyboard shortcuts.
 
-        :return: A None value after all shortcut bindings are registered.
+        :return: A None value after all app-wide shortcut bindings are registered.
 
-        :raises tk.TclError: If a Tk binding cannot be registered on the root widget.
+        :raises tk.TclError: If a shortcut binding cannot be registered on the root widget.
         """
 
-        # Keyboard shortcuts
-        self.root.bind_all("<Control-s>", lambda event: self.save_file())
-        self.root.bind_all("<Control-z>", lambda event: self.undo_action())
-        self.root.bind_all("<Control-y>", lambda event: self.redo_action())
-        self.root.bind_all(
-            "<Control-Shift-T>",
-            lambda event: self.translate_with_ai(selected_only=False),
-        )
-        self.root.bind_all("<Control-n>", lambda event: self.new_file())
-        if sys.platform == "darwin":
-            self.root.bind_all("<Command-s>", lambda event: self.save_file())
-            self.root.bind_all("<Command-z>", lambda event: self.undo_action())
-            self.root.bind_all("<Command-Shift-Z>", lambda event: self.redo_action())
+        for _shortcut_name, pattern, handler in self.global_shortcuts:
             self.root.bind_all(
-                "<Command-Shift-T>",
-                lambda event: self.translate_with_ai(selected_only=False),
+                pattern,
+                lambda event, handler=handler: (handler(), "break")[1],
             )
 
     def _on_drop_files(self, event):
@@ -468,7 +539,11 @@ class MarkdownReader:
 
     def new_file(self):
         """
-        Handles opening a new file and deals with relevant IME files.
+        Create a new editor tab and register editor-scoped behavior.
+
+        :return: A None value after the new editor tab is created and configured.
+
+        :raises tk.TclError: If the editor widget or tab cannot be created.
         """
 
         frame = tk.Frame(self.notebook)
@@ -486,31 +561,10 @@ class MarkdownReader:
         text_area.bind("<B2-Motion>", self._on_middle_drag)
         text_area.bind("<ButtonRelease-2>", self._on_middle_release)
 
-        # Formatting bindings must be widget-level
-        text_area.bind(
-            "<Control-KeyPress-b>",
-            lambda event: (self.toggle_bold(), "break")[1],
-        )
-        text_area.bind(
-            "<Control-KeyPress-i>",
-            lambda event: (self.toggle_italic(), "break")[1],
-        )
-        text_area.bind(
-            "<Control-KeyPress-u>",
-            lambda event: (self.toggle_underline(), "break")[1],
-        )
-        if sys.platform == "darwin":
+        for _shortcut_name, pattern, handler in self.editor_shortcuts:
             text_area.bind(
-                "<Command-KeyPress-b>",
-                lambda event: (self.toggle_bold(), "break")[1],
-            )
-            text_area.bind(
-                "<Command-KeyPress-i>",
-                lambda event: (self.toggle_italic(), "break")[1],
-            )
-            text_area.bind(
-                "<Command-KeyPress-u>",
-                lambda event: (self.toggle_underline(), "break")[1],
+                pattern,
+                lambda event, handler=handler: (handler(), "break")[1],
             )
 
         # Setup IME interception
