@@ -161,11 +161,6 @@ class MarkdownReader:
             ("Redo", "<Control-KeyPress-y>", self.redo_action),
             ("Redo", "<Control-Shift-KeyPress-Z>", self.redo_action),
             (
-                "Translate Selected Text with AI",
-                "<Control-KeyPress-t>",
-                lambda: self.translate_with_ai(selected_only=True),
-            ),
-            (
                 "Translate Full Document with AI",
                 "<Control-Shift-KeyPress-T>",
                 lambda: self.translate_with_ai(selected_only=False),
@@ -181,6 +176,11 @@ class MarkdownReader:
             ("Bold", "<Control-KeyPress-b>", self.toggle_bold),
             ("Italic", "<Control-KeyPress-i>", self.toggle_italic),
             ("Underline", "<Control-KeyPress-u>", self.toggle_underline),
+            (
+                "Translate Selected Text with AI",
+                "<Control-KeyPress-t>",
+                lambda: self.translate_with_ai(selected_only=True),
+            ),
             ("Heading 1", "<Control-KeyPress-1>", lambda: self.apply_style("Heading 1")),
             ("Heading 2", "<Control-KeyPress-2>", lambda: self.apply_style("Heading 2")),
             ("Heading 3", "<Control-KeyPress-3>", lambda: self.apply_style("Heading 3")),
@@ -202,11 +202,6 @@ class MarkdownReader:
                     ("Undo", "<Command-KeyPress-z>", self.undo_action),
                     ("Redo", "<Command-Shift-KeyPress-Z>", self.redo_action),
                     (
-                        "Translate Selected Text with AI",
-                        "<Command-KeyPress-t>",
-                        lambda: self.translate_with_ai(selected_only=True),
-                    ),
-                    (
                         "Translate Full Document with AI",
                         "<Command-Shift-KeyPress-T>",
                         lambda: self.translate_with_ai(selected_only=False),
@@ -223,6 +218,11 @@ class MarkdownReader:
                     ("Bold", "<Command-KeyPress-b>", self.toggle_bold),
                     ("Italic", "<Command-KeyPress-i>", self.toggle_italic),
                     ("Underline", "<Command-KeyPress-u>", self.toggle_underline),
+                    (
+                        "Translate Selected Text with AI",
+                        "<Command-KeyPress-t>",
+                        lambda: self.translate_with_ai(selected_only=True),
+                    ),
                     ("Heading 1", "<Command-KeyPress-1>", lambda: self.apply_style("Heading 1")),
                     ("Heading 2", "<Command-KeyPress-2>", lambda: self.apply_style("Heading 2")),
                     ("Heading 3", "<Command-KeyPress-3>", lambda: self.apply_style("Heading 3")),
@@ -312,6 +312,22 @@ class MarkdownReader:
         tablemenu.add_separator()
         tablemenu.add_command(label="Table Syntax Help", command=self.show_table_help)
         menubar.add_cascade(label="Table", menu=tablemenu)
+
+        shortcutsmenu = tk.Menu(menubar, tearoff=0)
+        for action_name, pattern, handler in self.global_shortcuts:
+            shortcutsmenu.add_command(
+                label=action_name,
+                accelerator=self._format_shortcut_pattern(pattern),
+                command=handler,
+            )
+        shortcutsmenu.add_separator()
+        for action_name, pattern, handler in self.editor_shortcuts:
+            shortcutsmenu.add_command(
+                label=action_name,
+                accelerator=self._format_shortcut_pattern(pattern),
+                command=handler,
+            )
+        menubar.add_cascade(label="Shortcuts", menu=shortcutsmenu)
 
         self.root.config(menu=menubar)
 
@@ -515,6 +531,51 @@ class MarkdownReader:
                 pattern,
                 lambda event, handler=handler: (handler(), "break")[1],
             )
+
+    def _format_shortcut_pattern(self, pattern):
+        """
+        Converts a Tk key binding pattern into a human-readable shortcut label.
+
+        :param str pattern: The Tk event pattern to format.
+
+        :return: A str containing the formatted shortcut label, or an empty string when no pattern is provided.
+
+        :raises AttributeError: If a non-string pattern is provided and does not support string operations.
+        """
+
+        if not pattern:
+            return ""
+
+        cleaned = pattern.strip("<>")
+        parts = [part for part in cleaned.split("-") if part]
+        pretty_parts = []
+
+        for part in parts:
+            lowered = part.lower()
+
+            if lowered == "keypress":
+                continue
+            if lowered == "control":
+                pretty_parts.append("Ctrl")
+                continue
+            if lowered == "command":
+                pretty_parts.append("Cmd")
+                continue
+            if lowered in ("option", "alt"):
+                pretty_parts.append("Alt")
+                continue
+            if lowered == "shift":
+                pretty_parts.append("Shift")
+                continue
+
+            if part.startswith("F") and part[1:].isdigit():
+                pretty_parts.append(part)
+            elif len(part) == 1:
+                pretty_parts.append(part.upper())
+            else:
+                pretty_parts.append(part)
+
+        return "+".join(pretty_parts)
 
     def _on_drop_files(self, event):
         """
