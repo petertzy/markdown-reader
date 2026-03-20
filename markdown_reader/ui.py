@@ -150,6 +150,15 @@ class MarkdownReader:
         self.translation_job_active = False
         self._translation_session_counter = 0
         self._translation_cancel_requested = False
+        self._last_search_query = ""
+        self._search_dialog = None
+        self._search_entry = None
+        self._replace_entry = None
+        self._search_status_var = tk.StringVar(value="")
+        self._last_replace_text = ""
+        self._search_case_sensitive_var = tk.BooleanVar(value=False)
+        self._search_whole_word_var = tk.BooleanVar(value=False)
+        self._search_regex_var = tk.BooleanVar(value=False)
 
         self.global_shortcuts = [
             ("New File", "<Control-KeyPress-n>", self.new_file),
@@ -173,6 +182,8 @@ class MarkdownReader:
             ("Toggle Dark Mode", "<F6>", self.toggle_dark_mode),
         ]
         self.editor_shortcuts = [
+            ("Search", "<Control-KeyPress-f>", self.open_search_dialog),
+            ("Replace", "<Control-KeyPress-h>", self.open_replace_dialog),
             ("Bold", "<Control-KeyPress-b>", self.toggle_bold),
             ("Italic", "<Control-KeyPress-i>", self.toggle_italic),
             ("Underline", "<Control-KeyPress-u>", self.toggle_underline),
@@ -215,6 +226,8 @@ class MarkdownReader:
             )
             self.editor_shortcuts.extend(
                 [
+                    ("Search", "<Command-KeyPress-f>", self.open_search_dialog),
+                    ("Replace", "<Command-Option-KeyPress-f>", self.open_replace_dialog),
                     ("Bold", "<Command-KeyPress-b>", self.toggle_bold),
                     ("Italic", "<Command-KeyPress-i>", self.toggle_italic),
                     ("Underline", "<Command-KeyPress-u>", self.toggle_underline),
@@ -272,6 +285,9 @@ class MarkdownReader:
         editmenu = ttkb.Menu(menubar, tearoff=0)
         editmenu.add_command(label="Undo", command=self.undo_action)
         editmenu.add_command(label="Redo", command=self.redo_action)
+        editmenu.add_separator()
+        editmenu.add_command(label="Search...", command=self.open_search_dialog)
+        editmenu.add_command(label="Replace...", command=self.open_replace_dialog)
         editmenu.add_separator()
         translatemenu = tk.Menu(editmenu, tearoff=0)
         translatemenu.add_command(
@@ -1496,7 +1512,7 @@ class MarkdownReader:
         """
 
         text_area = self.get_current_text_area()
-        if text_area and text_area.edit_modified():
+        if text_area:
             try:
                 text_area.edit_undo()
             except tk.TclError:
@@ -1515,6 +1531,484 @@ class MarkdownReader:
                 text_area.edit_redo()
             except tk.TclError:
                 pass
+
+    def _bind_search_dialog_shortcuts(self, widget):
+        """
+        Route editor undo/redo shortcuts through a search-dialog widget.
+        """
+
+        widget.bind("<Command-KeyPress-z>", lambda _e: (self.undo_action(), "break")[1])
+        widget.bind("<Control-KeyPress-z>", lambda _e: (self.undo_action(), "break")[1])
+        widget.bind("<Command-Shift-KeyPress-z>", lambda _e: (self.redo_action(), "break")[1])
+        widget.bind("<Command-Shift-KeyPress-Z>", lambda _e: (self.redo_action(), "break")[1])
+        widget.bind("<Control-Shift-KeyPress-z>", lambda _e: (self.redo_action(), "break")[1])
+        widget.bind("<Control-Shift-KeyPress-Z>", lambda _e: (self.redo_action(), "break")[1])
+        widget.bind("<Control-KeyPress-y>", lambda _e: (self.redo_action(), "break")[1])
+
+    def _bind_search_dialog_shortcuts_recursive(self, widget):
+        """
+        Recursively apply search-dialog shortcut routing to a widget tree.
+        """
+
+        self._bind_search_dialog_shortcuts(widget)
+        for child in widget.winfo_children():
+            self._bind_search_dialog_shortcuts_recursive(child)
+
+    def open_search_dialog(self):
+        """
+        Opens a VSCode-style search dialog for the active editor.
+        """
+
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+
+        if self._search_dialog and self._search_dialog.winfo_exists():
+            self._search_dialog.deiconify()
+            self._search_dialog.lift()
+            if self._search_entry and self._search_entry.winfo_exists():
+                self._search_entry.focus_set()
+                self._search_entry.selection_range(0, tk.END)
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Search")
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+
+        self._search_dialog = dialog
+
+        # Match the insert-table dialog approach: fixed size and centered placement.
+        dialog.geometry("960x280")
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+
+        container = tk.Frame(dialog, relief=tk.RAISED, borderwidth=1)
+        container.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
+
+        top_row = tk.Frame(container)
+        top_row.pack(fill=tk.X, padx=10, pady=(10, 6))
+
+        tk.Label(top_row, text="Find:", anchor="w").pack(side=tk.LEFT, padx=(0, 8))
+
+        selected_text = ""
+        try:
+            selected_text = text_area.get("sel.first", "sel.last").strip()
+        except tk.TclError:
+            selected_text = ""
+
+        initial_query = selected_text or self._last_search_query
+        self._last_search_query = initial_query
+        search_var = tk.StringVar(value=initial_query)
+
+        entry_font = (self.current_font_family, max(13, self.current_font_size))
+
+        search_entry = ttk.Entry(top_row, textvariable=search_var, width=42, font=entry_font)
+        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._search_entry = search_entry
+
+        ttkb.Button(
+            top_row,
+            text="↑",
+            width=3,
+            bootstyle=(INFO, OUTLINE),
+            command=lambda: self.find_previous_match(),
+        ).pack(side=tk.LEFT, padx=(8, 4))
+        ttkb.Button(
+            top_row,
+            text="↓",
+            width=3,
+            bootstyle=(PRIMARY, OUTLINE),
+            command=lambda: self.find_next_match(),
+        ).pack(side=tk.LEFT, padx=(0, 4))
+
+        ttkb.Button(
+            top_row,
+            text="Cancel",
+            width=10,
+            bootstyle=SECONDARY,
+            command=self._close_search_dialog,
+        ).pack(side=tk.LEFT, padx=(4, 0))
+
+        hint_label = tk.Label(
+            container,
+            text="Enter: Next   Shift+Enter: Previous   Esc: Close",
+            anchor="w",
+            fg="#6f6f6f",
+        )
+        hint_label.pack(fill=tk.X, padx=10, pady=(2, 6))
+
+        option_row = tk.Frame(container)
+        option_row.pack(fill=tk.X, padx=10, pady=(0, 6))
+
+        ttk.Checkbutton(
+            option_row,
+            text="Aa Match Case",
+            variable=self._search_case_sensitive_var,
+            command=lambda: self._refresh_search_matches(keep_current=False),
+        ).pack(side=tk.LEFT, padx=(0, 12))
+        ttk.Checkbutton(
+            option_row,
+            text="ab Whole Word",
+            variable=self._search_whole_word_var,
+            command=lambda: self._refresh_search_matches(keep_current=False),
+        ).pack(side=tk.LEFT, padx=(0, 12))
+        ttk.Checkbutton(
+            option_row,
+            text=".* Use Regular Expression",
+            variable=self._search_regex_var,
+            command=lambda: self._refresh_search_matches(keep_current=False),
+        ).pack(side=tk.LEFT)
+
+        status_label = tk.Label(
+            container,
+            textvariable=self._search_status_var,
+            anchor="w",
+            fg="#2a6f97",
+        )
+        status_label.pack(fill=tk.X, padx=10, pady=(0, 8))
+
+        def on_query_change(*_args):
+            self._last_search_query = search_var.get().strip()
+            self._refresh_search_matches(keep_current=False)
+
+        search_var.trace_add("write", on_query_change)
+
+        search_entry.bind("<Return>", lambda _e: (self.find_next_match(), "break")[1])
+        search_entry.bind("<KP_Enter>", lambda _e: (self.find_next_match(), "break")[1])
+        search_entry.bind("<Shift-Return>", lambda _e: (self.find_previous_match(), "break")[1])
+
+        dialog.bind("<Return>", lambda _e: (self.find_next_match(), "break")[1])
+        dialog.bind("<KP_Enter>", lambda _e: (self.find_next_match(), "break")[1])
+        dialog.bind("<Shift-Return>", lambda _e: (self.find_previous_match(), "break")[1])
+        dialog.bind("<Escape>", lambda _e: self._close_search_dialog())
+        dialog.protocol("WM_DELETE_WINDOW", self._close_search_dialog)
+
+        search_entry.focus_set()
+        search_entry.selection_range(0, tk.END)
+
+        replace_row = tk.Frame(container)
+        replace_row.pack(fill=tk.X, padx=10, pady=(0, 8))
+
+        tk.Label(replace_row, text="Replace:", anchor="w").pack(side=tk.LEFT, padx=(0, 8))
+
+        replace_var = tk.StringVar(value=self._last_replace_text)
+        replace_entry = ttk.Entry(replace_row, textvariable=replace_var, width=42, font=entry_font)
+        replace_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._replace_entry = replace_entry
+
+        ttkb.Button(
+            replace_row,
+            text="Replace",
+            width=10,
+            bootstyle=SUCCESS,
+            command=self.replace_current_match,
+        ).pack(side=tk.LEFT, padx=(8, 4))
+        ttkb.Button(
+            replace_row,
+            text="Replace All",
+            width=12,
+            bootstyle=PRIMARY,
+            command=self.replace_all_matches,
+        ).pack(side=tk.LEFT, padx=(0, 0))
+
+        replace_var.trace_add("write", lambda *_args: setattr(self, "_last_replace_text", replace_var.get()))
+
+        self._bind_search_dialog_shortcuts_recursive(dialog)
+
+        self._refresh_search_matches(keep_current=False)
+
+    def open_replace_dialog(self):
+        """
+        Opens the search dialog and focuses the replace field.
+        """
+
+        self.open_search_dialog()
+        if self._replace_entry and self._replace_entry.winfo_exists():
+            self._replace_entry.focus_set()
+            self._replace_entry.selection_range(0, tk.END)
+
+    def _close_search_dialog(self):
+        """
+        Closes the search dialog and clears its visual highlights.
+        """
+
+        if self._search_dialog and self._search_dialog.winfo_exists():
+            self._search_dialog.destroy()
+        self._search_dialog = None
+        self._search_entry = None
+        self._replace_entry = None
+        self._search_status_var.set("")
+
+        text_area = self.get_current_text_area()
+        if text_area:
+            self._clear_search_highlight(text_area)
+
+    def _is_search_dialog_active(self):
+        """
+        Returns True when the search dialog is currently open.
+        """
+
+        return bool(self._search_dialog and self._search_dialog.winfo_exists())
+
+    def _refresh_search_matches(self, keep_current=True, prefer_backward=False):
+        """
+        Highlights all matches and optionally selects the next/previous current match.
+        """
+
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return None
+
+        query = (self._last_search_query or "").strip()
+
+        previous_current = None
+        if keep_current:
+            current_ranges = text_area.tag_ranges("search_match_current")
+            if len(current_ranges) >= 2:
+                previous_current = (str(current_ranges[0]), str(current_ranges[1]))
+
+        text_area.tag_configure("search_match_all", background="#d9e9ff", foreground="#000000")
+        text_area.tag_configure("search_match_current", background="#ffd166", foreground="#000000")
+        self._clear_search_highlight(text_area)
+
+        if not query:
+            self._search_status_var.set("Type to search in current document")
+            return None
+
+        compiled = self._build_search_regex(query)
+        if compiled is None:
+            return None
+
+        content = text_area.get("1.0", "end-1c")
+        matches = []
+        for match in compiled.finditer(content):
+            start_offset, end_offset = match.span()
+            # Ignore zero-length matches to keep navigation stable.
+            if end_offset <= start_offset:
+                continue
+            start_index = text_area.index(f"1.0+{start_offset}c")
+            end_index = text_area.index(f"1.0+{end_offset}c")
+            matches.append((start_index, end_index))
+            text_area.tag_add("search_match_all", start_index, end_index)
+
+        if not matches:
+            self._search_status_var.set(f'No matches for "{query}"')
+            return None
+
+        current = previous_current
+
+        if current is None:
+            insert_index = text_area.index("insert")
+            if prefer_backward:
+                for start, end in reversed(matches):
+                    if text_area.compare(start, "<", insert_index):
+                        current = (start, end)
+                        break
+                if current is None:
+                    current = matches[-1]
+            else:
+                for start, end in matches:
+                    if text_area.compare(start, ">=", insert_index):
+                        current = (start, end)
+                        break
+                if current is None:
+                    current = matches[0]
+
+        text_area.tag_add("search_match_current", current[0], current[1])
+        self._search_status_var.set(f"{len(matches)} match(es)")
+        return matches
+
+    def _build_search_regex(self, query):
+        """
+        Builds a compiled regex from current search options.
+        """
+
+        flags = 0 if self._search_case_sensitive_var.get() else re.IGNORECASE
+        use_regex = self._search_regex_var.get()
+        whole_word = self._search_whole_word_var.get()
+
+        pattern = query if use_regex else re.escape(query)
+        if whole_word:
+            pattern = rf"\b(?:{pattern})\b"
+
+        try:
+            return re.compile(pattern, flags)
+        except re.error as exc:
+            self._search_status_var.set(f"Invalid regex: {exc}")
+            return None
+
+    def _clear_search_highlight(self, text_area):
+        """
+        Clears the search highlight tag in the given text widget.
+        """
+
+        text_area.tag_remove("search_match_all", "1.0", tk.END)
+        text_area.tag_remove("search_match_current", "1.0", tk.END)
+
+    def _select_from_matches(self, matches, forward=True):
+        """
+        Selects the next or previous match from prepared match positions.
+        """
+
+        text_area = self.get_current_text_area()
+        if not text_area or not matches:
+            return
+
+        current_ranges = text_area.tag_ranges("search_match_current")
+        current_start = str(current_ranges[0]) if len(current_ranges) >= 2 else None
+
+        if current_start is None:
+            target = matches[0] if forward else matches[-1]
+        else:
+            indices = [i for i, (start, _) in enumerate(matches) if start == current_start]
+            current_idx = indices[0] if indices else 0
+            target_idx = (current_idx + 1) % len(matches) if forward else (current_idx - 1) % len(matches)
+            target = matches[target_idx]
+
+        text_area.tag_remove("search_match_current", "1.0", tk.END)
+        text_area.tag_add("search_match_current", target[0], target[1])
+        text_area.tag_remove(tk.SEL, "1.0", tk.END)
+        text_area.tag_add(tk.SEL, target[0], target[1])
+        text_area.mark_set("insert", target[1] if forward else target[0])
+        text_area.see(target[0])
+
+        # Keep focus in search box only when focus is already in the search UI.
+        # This keeps Enter-to-next behavior for search typing, while still
+        # allowing users to click and edit the document like VSCode.
+        focus_widget = self.root.focus_get()
+        focus_in_search_ui = False
+        if self._is_search_dialog_active() and focus_widget is not None and self._search_dialog is not None:
+            try:
+                focus_in_search_ui = str(focus_widget).startswith(str(self._search_dialog))
+            except Exception:
+                focus_in_search_ui = False
+
+        if focus_in_search_ui and self._search_entry and self._search_entry.winfo_exists():
+            self._search_entry.focus_set()
+            self._search_entry.icursor(tk.END)
+        elif not focus_in_search_ui:
+            text_area.focus_set()
+
+    def find_previous_match(self):
+        """
+        Finds and highlights the previous occurrence of the current search query.
+        """
+
+        matches = self._refresh_search_matches(keep_current=True, prefer_backward=True)
+        if matches:
+            self._select_from_matches(matches, forward=False)
+
+    def find_next_match(self):
+        """
+        Finds and highlights the next occurrence of the current search query.
+        """
+
+        matches = self._refresh_search_matches(keep_current=True, prefer_backward=False)
+        if matches:
+            self._select_from_matches(matches, forward=True)
+
+    def replace_current_match(self):
+        """
+        Replaces the currently selected match and moves to the next match.
+        """
+
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+
+        matches = self._refresh_search_matches(keep_current=True, prefer_backward=False)
+        if not matches:
+            return
+
+        current_ranges = text_area.tag_ranges("search_match_current")
+        if len(current_ranges) < 2:
+            self._select_from_matches(matches, forward=True)
+            current_ranges = text_area.tag_ranges("search_match_current")
+            if len(current_ranges) < 2:
+                return
+
+        start = str(current_ranges[0])
+        end = str(current_ranges[1])
+        matched_text = text_area.get(start, end)
+        replace_text = self._last_replace_text
+
+        if self._search_regex_var.get():
+            query = (self._last_search_query or "").strip()
+            if not query:
+                return
+            compiled = self._build_search_regex(query)
+            if compiled is None:
+                return
+            replaced_text = compiled.sub(replace_text, matched_text, count=1)
+        else:
+            replaced_text = replace_text
+
+        text_area.edit_separator()
+        text_area.delete(start, end)
+        text_area.insert(start, replaced_text)
+        text_area.edit_separator()
+        text_area.edit_modified(True)
+
+        try:
+            idx = self.notebook.index(self.notebook.select())
+            self.mark_tab_modified(idx)
+        except Exception:
+            pass
+
+        self.update_preview()
+        text_area.mark_set("insert", f"{start}+{len(replaced_text)}c")
+        if self._replace_entry and self._replace_entry.winfo_exists():
+            self._replace_entry.focus_set()
+            self._replace_entry.icursor(tk.END)
+        self.find_next_match()
+
+    def replace_all_matches(self):
+        """
+        Replaces all matches in the current editor.
+        """
+
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+
+        query = (self._last_search_query or "").strip()
+        if not query:
+            self._search_status_var.set("Type to search in current document")
+            return
+
+        compiled = self._build_search_regex(query)
+        if compiled is None:
+            return
+
+        replace_text = self._last_replace_text
+        content = text_area.get("1.0", "end-1c")
+        replaced_content, count = compiled.subn(replace_text, content)
+
+        if count == 0:
+            self._search_status_var.set("No matches to replace")
+            return
+
+        text_area.edit_separator()
+        text_area.delete("1.0", tk.END)
+        text_area.insert("1.0", replaced_content)
+        text_area.edit_separator()
+        text_area.edit_modified(True)
+
+        try:
+            idx = self.notebook.index(self.notebook.select())
+            self.mark_tab_modified(idx)
+        except Exception:
+            pass
+
+        self.update_preview()
+        self._search_status_var.set(f"Replaced {count} occurrence(s)")
+        if self._replace_entry and self._replace_entry.winfo_exists():
+            self._replace_entry.focus_set()
+            self._replace_entry.icursor(tk.END)
+        self._refresh_search_matches(keep_current=False)
 
     def _get_current_ai_provider(self):
         """Return the current runtime AI provider."""
