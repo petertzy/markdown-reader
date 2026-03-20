@@ -1061,6 +1061,10 @@ def _is_probably_math_token(token):
     core = token.strip()
     core = core.strip("'\".,;:!?")
 
+    # Never treat inline-code fragments as math.
+    if '`' in core:
+        return False
+
     if _looks_like_url_or_path(core):
         return False
     
