@@ -74,6 +74,8 @@ python app.py
 ### How to Use
 
 * **Open File**: Choose `.md`, `.markdown`, `.html`, `.htm`, or `.pdf` from the "File → Open File" menu.
+* **Open with Double-Click**: Double-clicking a `.md` file opens it directly with the app and displays the document with a real-time preview.
+* **Editor-Only Mode**: To open a `.md` file in the editor without automatically generating a web preview, configure the double-click behavior via "Settings → Open Behavior → Editor Only".
 * **Dark Mode**: Toggle via "View → Toggle Dark Mode".
 * **Preview**: Automatically opens in your web browser, only one tab is opened per session.
 * **AI Translation**: 
