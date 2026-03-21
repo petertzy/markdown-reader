@@ -182,6 +182,34 @@ class TestAIAgentUIHelpers(unittest.TestCase):
         self.assertEqual(status_calls[-1], "Suggestion rejected")
         self.assertEqual(captured["status"], "rejected")
 
+    def test_show_ai_automation_log_loads_latest_ten(self):
+        app = MarkdownReader.__new__(MarkdownReader)
+        app.ai_action_audit_logs = []
+
+        logs = []
+        for index in range(12):
+            logs.append(
+                {
+                    "timestamp": f"2026-03-21T15:00:{index:02d}Z",
+                    "status": "applied",
+                    "action_type": "replace_selection",
+                    "reason": f"r{index}",
+                }
+            )
+
+        with patch("markdown_reader.ui.load_ai_automation_logs", return_value=logs) as mock_load, patch(
+            "markdown_reader.ui.dialogs.Messagebox.show_info"
+        ) as mock_show:
+            app.show_ai_automation_log()
+
+        mock_load.assert_called_once_with(limit=10)
+        self.assertEqual(mock_show.call_count, 1)
+        shown_text = mock_show.call_args[0][0]
+        shown_lines = [line for line in shown_text.split("\n") if line.strip()]
+        self.assertEqual(len(shown_lines), 10)
+        self.assertIn("r2", shown_text)
+        self.assertIn("r11", shown_text)
+
 
 if __name__ == "__main__":
     unittest.main()

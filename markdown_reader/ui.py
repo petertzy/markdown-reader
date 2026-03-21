@@ -1,5 +1,6 @@
 import os
 import re
+import subprocess
 import sys
 import threading
 from datetime import datetime, timezone
@@ -17,6 +18,7 @@ from watchdog.observers import Observer
 
 from markdown_reader.file_handler import drop_file, load_file
 from markdown_reader.logic import (
+    APP_SETTINGS_FILE_PATH,
     AI_PROVIDER_DEFAULT_MODELS,
     AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES,
     TranslationConfigError,
@@ -332,6 +334,11 @@ class MarkdownReader:
         settingsmenu.add_command(
             label="AI Provider & API Keys...",
             command=self.open_ai_provider_config,
+        )
+        settingsmenu.add_separator()
+        settingsmenu.add_command(
+            label="Open AI Data Folder",
+            command=self.open_ai_data_folder,
         )
         menubar.add_cascade(label="Settings", menu=settingsmenu)
 
@@ -945,12 +952,19 @@ class MarkdownReader:
     def show_ai_automation_log(self):
         """Show recent AI automation audit logs in a dialog."""
 
+        display_limit = 10
+
+        # Refresh from persisted store so the dialog always reflects latest data.
+        persisted_logs = load_ai_automation_logs(limit=display_limit)
+        if persisted_logs:
+            self.ai_action_audit_logs = persisted_logs
+
         if not self.ai_action_audit_logs:
-            dialogs.Messagebox.show_info("AI Audit Log", "No AI automation actions logged yet.")
+            dialogs.Messagebox.show_info("No AI automation actions logged yet.", "AI Audit Log")
             return
 
         rows = []
-        for item in self.ai_action_audit_logs[-20:]:
+        for item in self.ai_action_audit_logs[-display_limit:]:
             stamp = str(item.get("timestamp", "")).strip()
             status = str(item.get("status", "")).strip() or "unknown"
             action_type = str(item.get("action_type", "")).strip() or "none"
@@ -961,7 +975,7 @@ class MarkdownReader:
             rows.append(line)
 
         text = "\n".join(rows)
-        dialogs.Messagebox.show_info("AI Audit Log", text)
+        dialogs.Messagebox.show_info(text, "AI Audit Log")
 
     def _on_notebook_tab_changed(self, _event=None):
         """Refresh AI chat panel when switching tabs."""
@@ -1380,6 +1394,23 @@ class MarkdownReader:
                 pretty_parts.append(part)
 
         return "+".join(pretty_parts)
+
+    def open_ai_data_folder(self):
+        """Open the per-user AI data folder that stores settings, chat history, and audit logs."""
+
+        try:
+            data_dir = APP_SETTINGS_FILE_PATH.parent
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+            path_str = str(data_dir)
+            if sys.platform == "darwin":
+                subprocess.Popen(["open", path_str])
+            elif sys.platform.startswith("win"):
+                os.startfile(path_str)
+            else:
+                subprocess.Popen(["xdg-open", path_str])
+        except Exception as exc:
+            dialogs.Messagebox.show_error("AI Data Folder", f"Failed to open folder: {exc}")
 
     def _on_drop_files(self, event):
         """
