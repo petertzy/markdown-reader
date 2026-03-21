@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from markdown_reader.ui import MarkdownReader
 
@@ -20,6 +21,15 @@ class TestAIAgentUIHelpers(unittest.TestCase):
             {
                 "type": "insert_at_cursor",
                 "content": "\n- New bullet\n",
+            }
+        )
+        self.assertTrue(ok)
+        self.assertEqual(reason, "")
+
+        ok, reason = app._validate_ai_action_payload(
+            {
+                "type": "replace_document",
+                "content": "# New document\n\nBody",
             }
         )
         self.assertTrue(ok)
@@ -54,7 +64,7 @@ class TestAIAgentUIHelpers(unittest.TestCase):
             "new-doc": [{"role": "assistant", "content": "existing"}],
         }
         app.ai_chat_pending_actions = {
-            "old-doc": {"type": "insert_at_cursor", "content": "x", "reason": "test"}
+            "old-doc": {"type": "replace_selection", "content": "x", "reason": "test"}
         }
         persist_calls = {"count": 0}
         app._persist_ai_chat_histories = lambda: persist_calls.__setitem__("count", persist_calls["count"] + 1)
@@ -70,7 +80,7 @@ class TestAIAgentUIHelpers(unittest.TestCase):
             ],
         )
         self.assertNotIn("old-doc", app.ai_chat_pending_actions)
-        self.assertEqual(app.ai_chat_pending_actions["new-doc"]["type"], "insert_at_cursor")
+        self.assertEqual(app.ai_chat_pending_actions["new-doc"]["type"], "replace_selection")
         self.assertEqual(persist_calls["count"], 1)
 
     def test_migrate_chat_document_key_noop_when_invalid(self):
@@ -93,14 +103,14 @@ class TestAIAgentUIHelpers(unittest.TestCase):
         text = app._compose_assistant_chat_text(
             "Here is your summary:",
             {
-                "type": "insert_at_cursor",
+                "type": "replace_selection",
                 "content": "- Key point A\n- Key point B",
                 "reason": "summary",
             },
         )
 
         self.assertIn("Here is your summary:", text)
-        self.assertIn("Proposed content preview (insert_at_cursor):", text)
+        self.assertIn("Proposed content preview (replace_selection):", text)
         self.assertIn("- Key point A", text)
 
     def test_compose_assistant_chat_text_skips_duplicate_preview_when_same_content(self):
@@ -121,6 +131,56 @@ class TestAIAgentUIHelpers(unittest.TestCase):
 
         self.assertEqual(text, summary)
         self.assertNotIn("Proposed content preview", text)
+
+    def test_append_ai_audit_log_caps_entries(self):
+        app = MarkdownReader.__new__(MarkdownReader)
+        app.ai_action_audit_logs = []
+        app._get_document_id_for_tab = lambda tab_index=None: "doc-1"
+
+        with patch("markdown_reader.ui.AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES", 2), patch(
+            "markdown_reader.ui.append_ai_automation_log"
+        ) as mock_append:
+            app._append_ai_audit_log("proposed", "replace_selection", content="a")
+            app._append_ai_audit_log("applied", "replace_selection", content="b")
+            app._append_ai_audit_log("rejected", "replace_selection", content="c")
+
+        self.assertEqual(len(app.ai_action_audit_logs), 2)
+        self.assertEqual(app.ai_action_audit_logs[-1]["status"], "rejected")
+        self.assertEqual(mock_append.call_count, 3)
+
+    def test_reject_ai_agent_action_clears_pending(self):
+        app = MarkdownReader.__new__(MarkdownReader)
+        app.ai_chat_pending_actions = {
+            "doc-1": {
+                "type": "replace_selection",
+                "content": "- item",
+                "reason": "test",
+                "action_id": "ai-1",
+            }
+        }
+        app._get_document_id_for_tab = lambda tab_index=None: "doc-1"
+        app._validate_ai_action_payload = lambda action: (True, "")
+        app._render_current_chat_history = lambda: None
+        status_calls = []
+
+        class _StatusVar:
+            def set(self, val):
+                status_calls.append(val)
+
+        app.ai_agent_status_var = _StatusVar()
+        captured = {}
+
+        def _append_log(**kwargs):
+            captured.update(kwargs)
+
+        app._append_ai_audit_log = _append_log
+
+        with patch("markdown_reader.ui.messagebox.askyesno", return_value=True):
+            app.reject_ai_agent_action()
+
+        self.assertEqual(app.ai_chat_pending_actions["doc-1"]["type"], "none")
+        self.assertEqual(status_calls[-1], "Suggestion rejected")
+        self.assertEqual(captured["status"], "rejected")
 
 
 if __name__ == "__main__":

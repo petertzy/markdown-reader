@@ -5,6 +5,7 @@ import sys
 import webbrowser
 import re
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import html2text
 from html import escape as html_escape
@@ -43,6 +44,7 @@ def _get_settings_file_path():
 
 APP_SETTINGS_FILE_PATH = _get_settings_file_path()
 AI_CHAT_HISTORY_FILE_PATH = APP_SETTINGS_FILE_PATH.parent / "chat_history.json"
+AI_AUTOMATION_LOG_FILE_PATH = APP_SETTINGS_FILE_PATH.parent / "ai_automation_log.json"
 
 # Hardcoded provider base URLs so bundled apps work without external env files.
 AI_PROVIDER_BASE_URLS = {
@@ -88,6 +90,480 @@ AI_AGENT_MAX_DOC_CONTEXT = 12000
 AI_AGENT_MAX_SELECTION_CONTEXT = 4000
 AI_AGENT_MAX_HISTORY_MESSAGES = 16
 AI_AGENT_MAX_HISTORY_PREVIEW = 1200
+AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES = 300
+
+AI_AUTOMATION_TASK_TEMPLATES = [
+    {
+        "id": "format_selection",
+        "title": "Format Selected Section",
+        "prompt": "Apply Markdown formatting rules to the selected section.",
+        "requires_selection": True,
+    },
+    {
+        "id": "generate_toc",
+        "title": "Generate Table of Contents",
+        "prompt": "Generate a Markdown table of contents from headings and insert it.",
+        "requires_selection": False,
+    },
+    {
+        "id": "generate_summary",
+        "title": "Generate Summary",
+        "prompt": "Generate a concise document summary in Markdown bullet points.",
+        "requires_selection": False,
+    },
+    {
+        "id": "fix_code_blocks",
+        "title": "Format and Fix Code Blocks",
+        "prompt": "Format Markdown code fences and fix common fence syntax issues.",
+        "requires_selection": False,
+    },
+]
+
+
+def get_ai_automation_task_templates():
+    """Return built-in AI automation task templates."""
+
+    templates = []
+    for item in AI_AUTOMATION_TASK_TEMPLATES:
+        if not isinstance(item, dict):
+            continue
+        templates.append(
+            {
+                "id": str(item.get("id", "")).strip(),
+                "title": str(item.get("title", "")).strip(),
+                "prompt": str(item.get("prompt", "")).strip(),
+                "requires_selection": bool(item.get("requires_selection", False)),
+            }
+        )
+    return [t for t in templates if t["id"] and t["title"] and t["prompt"]]
+
+
+def load_ai_automation_logs(limit=AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES):
+    """Load persisted AI automation audit logs."""
+
+    if not AI_AUTOMATION_LOG_FILE_PATH.exists():
+        return []
+
+    try:
+        with open(AI_AUTOMATION_LOG_FILE_PATH, "r", encoding="utf-8") as file_obj:
+            data = json.load(file_obj)
+    except Exception:
+        return []
+
+    if not isinstance(data, list):
+        return []
+
+    cleaned = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        entry = {
+            "timestamp": str(item.get("timestamp", "")).strip(),
+            "doc_id": str(item.get("doc_id", "")).strip(),
+            "status": str(item.get("status", "")).strip().lower(),
+            "action_type": str(item.get("action_type", "")).strip().lower(),
+            "reason": str(item.get("reason", "")).strip(),
+            "user_message": str(item.get("user_message", "")).strip(),
+            "content_preview": str(item.get("content_preview", "")).strip(),
+            "related_action_id": str(item.get("related_action_id", "")).strip(),
+            "action_id": str(item.get("action_id", "")).strip(),
+        }
+        if not entry["timestamp"]:
+            continue
+        cleaned.append(entry)
+
+    if limit and isinstance(limit, int) and limit > 0:
+        return cleaned[-limit:]
+    return cleaned
+
+
+def save_ai_automation_logs(log_entries):
+    """Persist AI automation audit logs."""
+
+    if not isinstance(log_entries, list):
+        return
+
+    serializable = []
+    for item in log_entries[-AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES:]:
+        if not isinstance(item, dict):
+            continue
+        timestamp = str(item.get("timestamp", "")).strip()
+        if not timestamp:
+            continue
+        serializable.append(
+            {
+                "timestamp": timestamp,
+                "doc_id": str(item.get("doc_id", "")).strip(),
+                "status": str(item.get("status", "")).strip().lower(),
+                "action_type": str(item.get("action_type", "")).strip().lower(),
+                "reason": str(item.get("reason", "")).strip(),
+                "user_message": str(item.get("user_message", "")).strip(),
+                "content_preview": str(item.get("content_preview", "")).strip(),
+                "related_action_id": str(item.get("related_action_id", "")).strip(),
+                "action_id": str(item.get("action_id", "")).strip(),
+            }
+        )
+
+    try:
+        AI_AUTOMATION_LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(AI_AUTOMATION_LOG_FILE_PATH, "w", encoding="utf-8") as file_obj:
+            json.dump(serializable, file_obj, ensure_ascii=True, indent=2)
+    except Exception:
+        return
+
+
+def append_ai_automation_log(entry):
+    """Append a single AI automation audit log entry and persist it."""
+
+    if not isinstance(entry, dict):
+        return
+
+    logs = load_ai_automation_logs(limit=AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES)
+    logs.append(entry)
+    if len(logs) > AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES:
+        logs = logs[-AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES:]
+    save_ai_automation_logs(logs)
+
+
+def _apply_markdown_formatting_rules(markdown_text):
+    """Apply lightweight Markdown formatting normalization rules."""
+
+    if not isinstance(markdown_text, str):
+        return ""
+
+    normalized = markdown_text.replace("\r\n", "\n")
+    lines = normalized.split("\n")
+    output = []
+
+    for raw_line in lines:
+        line = raw_line.rstrip()
+        line = re.sub(r"^(#{1,6})([^\s#])", r"\1 \2", line)
+        line = re.sub(r"^(\s*)([-*+])(\S)", r"\1\2 \3", line)
+        line = re.sub(r"^(\s*\d+\.)(\S)", r"\1 \2", line)
+        output.append(line)
+
+    compacted = "\n".join(output)
+    compacted = re.sub(r"\n{3,}", "\n\n", compacted)
+    return compacted
+
+
+def _guess_code_language(code_block):
+    """Guess a language for a code block when fence language is omitted."""
+
+    sample = (code_block or "").strip()
+    lowered = sample.lower()
+    if not sample:
+        return "text"
+    if "def " in sample or "import " in sample or "print(" in sample:
+        return "python"
+    if "function " in sample or "const " in sample or "=>" in sample:
+        return "javascript"
+    if lowered.startswith("{") and lowered.endswith("}"):
+        return "json"
+    if "<html" in lowered or "<div" in lowered or "</" in lowered:
+        return "html"
+    if "select " in lowered and " from " in lowered:
+        return "sql"
+    return "text"
+
+
+def _format_and_fix_code_blocks(markdown_text):
+    """Normalize Markdown code fences and close unbalanced blocks."""
+
+    if not isinstance(markdown_text, str):
+        return ""
+
+    normalized = markdown_text.replace("\r\n", "\n")
+    lines = normalized.split("\n")
+    out_lines = []
+    in_fence = False
+    fence_marker = "```"
+    block_lines = []
+
+    for line in lines:
+        fence_match = re.match(r"^\s*(```+|~~~+)([^`]*)$", line)
+        if fence_match:
+            marker = fence_match.group(1)
+            suffix = (fence_match.group(2) or "").strip()
+
+            if not in_fence:
+                in_fence = True
+                fence_marker = marker
+                block_lines = []
+                if suffix:
+                    out_lines.append(f"{marker}{suffix}")
+                else:
+                    out_lines.append(marker)
+                continue
+
+            if in_fence and marker.startswith(fence_marker[0]):
+                if out_lines and re.match(r"^\s*(```+|~~~+)\s*$", out_lines[-(len(block_lines) + 1)]):
+                    opening = out_lines[-(len(block_lines) + 1)]
+                    if opening.strip() in ("```", "~~~"):
+                        guessed = _guess_code_language("\n".join(block_lines))
+                        if guessed:
+                            out_lines[-(len(block_lines) + 1)] = f"{opening.strip()}{guessed}"
+
+                out_lines.append(fence_marker)
+                in_fence = False
+                block_lines = []
+                continue
+
+        out_lines.append(line.rstrip())
+        if in_fence:
+            block_lines.append(line)
+
+    if in_fence:
+        if out_lines and re.match(r"^\s*(```+|~~~+)\s*$", out_lines[-(len(block_lines) + 1)]):
+            opening = out_lines[-(len(block_lines) + 1)]
+            guessed = _guess_code_language("\n".join(block_lines))
+            if guessed and opening.strip() in ("```", "~~~"):
+                out_lines[-(len(block_lines) + 1)] = f"{opening.strip()}{guessed}"
+        out_lines.append(fence_marker)
+
+    return "\n".join(out_lines)
+
+
+def _slugify_heading_text(text):
+    """Create a Markdown anchor slug from heading text."""
+
+    plain = re.sub(r"[`*_~\[\](){}]", "", text or "").strip().lower()
+    plain = re.sub(r"[^a-z0-9\s\-]", "", plain)
+    plain = re.sub(r"\s+", "-", plain)
+    plain = re.sub(r"\-+", "-", plain).strip("-")
+    return plain
+
+
+def _generate_markdown_toc(markdown_text):
+    """Generate a Markdown TOC from heading lines."""
+
+    if not isinstance(markdown_text, str) or not markdown_text.strip():
+        return ""
+
+    toc_lines = []
+    for line in markdown_text.replace("\r\n", "\n").split("\n"):
+        match = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
+        if not match:
+            continue
+        level = len(match.group(1))
+        title = match.group(2).strip()
+        anchor = _slugify_heading_text(title)
+        if not anchor:
+            continue
+        indent = "  " * max(0, level - 1)
+        toc_lines.append(f"{indent}- [{title}](#{anchor})")
+
+    if not toc_lines:
+        return ""
+    return "## Table of Contents\n\n" + "\n".join(toc_lines) + "\n"
+
+
+def _merge_toc_into_document(document_text, toc_text):
+    """Merge TOC text into a document, replacing existing TOC block when present."""
+
+    doc = (document_text or "").replace("\r\n", "\n")
+    toc = (toc_text or "").strip()
+    if not toc:
+        return doc
+
+    toc_block_pattern = re.compile(
+        r"^##\s+Table of Contents\s*\n(?:.*?)(?=^##\s+|\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+    replacement = toc.rstrip() + "\n\n"
+    if toc_block_pattern.search(doc):
+        merged = toc_block_pattern.sub(replacement, doc, count=1)
+        return merged.rstrip() + "\n"
+
+    if doc.strip():
+        return replacement + doc.lstrip("\n")
+    return toc.rstrip() + "\n"
+
+
+def _generate_lightweight_summary(markdown_text):
+    """Generate a deterministic summary from headings and first paragraph."""
+
+    if not isinstance(markdown_text, str) or not markdown_text.strip():
+        return ""
+
+    normalized = markdown_text.replace("\r\n", "\n")
+    headings = []
+    for line in normalized.split("\n"):
+        match = re.match(r"^#{1,3}\s+(.+?)\s*$", line)
+        if match:
+            headings.append(match.group(1).strip())
+        if len(headings) >= 5:
+            break
+
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", normalized) if p.strip()]
+    lead = ""
+    for paragraph in paragraphs:
+        if paragraph.startswith("#"):
+            continue
+        lead = re.sub(r"\s+", " ", paragraph)
+        break
+
+    lines = ["## Summary"]
+    if lead:
+        lines.append("")
+        lines.append(f"- {lead[:240]}{'...' if len(lead) > 240 else ''}")
+    if headings:
+        lines.append("")
+        lines.append("- Main sections:")
+        for heading in headings:
+            lines.append(f"  - {heading}")
+    return "\n".join(lines).strip() + "\n"
+
+
+def build_ai_automation_fallback(user_message, document_text="", selected_text=""):
+    """Build deterministic local automation actions for common repetitive tasks."""
+
+    msg = (user_message or "").strip()
+    lowered = msg.lower()
+    selection = selected_text if isinstance(selected_text, str) else ""
+    document = document_text if isinstance(document_text, str) else ""
+    target = selection if selection.strip() else document
+
+    if not msg:
+        return None
+
+    if any(keyword in lowered for keyword in ("template", "task template", "automation template")):
+        template_lines = []
+        for template in get_ai_automation_task_templates():
+            selection_hint = " (selection required)" if template["requires_selection"] else ""
+            template_lines.append(f"- {template['id']}: {template['title']}{selection_hint}")
+        return {
+            "assistant_message": "Available automation templates:\n" + "\n".join(template_lines),
+            "proposed_action": {
+                "type": "none",
+                "content": "",
+                "reason": "task_templates",
+            },
+            "used_provider": "local-fallback",
+        }
+
+    if any(keyword in lowered for keyword in ("table of contents", "toc", "目录")):
+        toc_source = document if document.strip() else target
+        toc = _generate_markdown_toc(toc_source)
+        if toc:
+            if not selection.strip():
+                merged_document = _merge_toc_into_document(document, toc)
+                return {
+                    "assistant_message": f"{toc}",
+                    "proposed_action": {
+                        "type": "replace_document",
+                        "content": merged_document,
+                        "reason": "generate_toc_full_document",
+                    },
+                    "used_provider": "local-fallback",
+                }
+            return {
+                "assistant_message": "Generated a table of contents. Review and apply if it matches your document structure.",
+                "proposed_action": {
+                    "type": "replace_selection",
+                    "content": toc,
+                    "reason": "generate_toc",
+                },
+                "used_provider": "local-fallback",
+            }
+
+    if "summary" in lowered or "summarize" in lowered or "总结" in lowered:
+        summary_source = document if document.strip() else target
+        summary = _generate_lightweight_summary(summary_source)
+        if not selection.strip():
+            if summary:
+                return {
+                    "assistant_message": f"{summary}",
+                    "proposed_action": {
+                        "type": "replace_document",
+                        "content": summary,
+                        "reason": "generate_summary_full_document",
+                    },
+                    "used_provider": "local-fallback",
+                }
+            return {
+                "assistant_message": "No document content available to summarize.",
+                "proposed_action": {
+                    "type": "none",
+                    "content": "",
+                    "reason": "no_content_for_summary",
+                },
+                "used_provider": "local-fallback",
+            }
+        if summary:
+            return {
+                "assistant_message": "Generated a concise summary based on current content.",
+                "proposed_action": {
+                    "type": "replace_selection",
+                    "content": summary,
+                    "reason": "generate_summary",
+                },
+                "used_provider": "local-fallback",
+            }
+
+    if (
+        "format code" in lowered
+        or "code block" in lowered
+        or "correct syntax" in lowered
+        or "fix code" in lowered
+    ):
+        if target.strip():
+            if not selection.strip():
+                return {
+                    "assistant_message": "Select the code block you want to fix, then run this task again.",
+                    "proposed_action": {
+                        "type": "none",
+                        "content": "",
+                        "reason": "selection_required_for_code_fix",
+                    },
+                    "used_provider": "local-fallback",
+                }
+            fixed = _format_and_fix_code_blocks(target)
+            return {
+                "assistant_message": "Prepared formatted code blocks and fixed common fence syntax issues.",
+                "proposed_action": {
+                    "type": "replace_selection",
+                    "content": fixed,
+                    "reason": "fix_code_blocks",
+                },
+                "used_provider": "local-fallback",
+            }
+
+    if "format" in lowered or "formatting" in lowered:
+        if target.strip():
+            if not selection.strip():
+                if document.strip():
+                    formatted_document = _apply_markdown_formatting_rules(document)
+                    return {
+                        "assistant_message": "Applied Markdown formatting normalization rules to the full document.",
+                        "proposed_action": {
+                            "type": "replace_document",
+                            "content": formatted_document,
+                            "reason": "format_rules_full_document",
+                        },
+                        "used_provider": "local-fallback",
+                    }
+                return {
+                    "assistant_message": "Select the section you want to format, then run this task again.",
+                    "proposed_action": {
+                        "type": "none",
+                        "content": "",
+                        "reason": "selection_required_for_format",
+                    },
+                    "used_provider": "local-fallback",
+                }
+            formatted = _apply_markdown_formatting_rules(target)
+            return {
+                "assistant_message": "Applied Markdown formatting normalization rules.",
+                "proposed_action": {
+                    "type": "replace_selection",
+                    "content": formatted,
+                    "reason": "format_rules",
+                },
+                "used_provider": "local-fallback",
+            }
+
+    return None
 
 
 def load_ai_chat_histories():
@@ -965,6 +1441,15 @@ def request_ai_agent_response(user_message, document_text="", selected_text="", 
     if not message:
         raise RuntimeError("Message cannot be empty.")
 
+    # Support deterministic offline automation for common repetitive tasks.
+    fallback_result = build_ai_automation_fallback(
+        message,
+        document_text=document_text,
+        selected_text=selected_text,
+    )
+    if fallback_result:
+        return fallback_result
+
     provider_name = os.getenv("AI_PROVIDER", "openrouter").strip().lower()
     if provider_name == "athropic":
         provider_name = "anthropic"
@@ -1051,10 +1536,11 @@ def request_ai_agent_response(user_message, document_text="", selected_text="", 
     system_prompt = (
         "You are an in-editor AI agent for Markdown documents. "
         "You must answer clearly and safely. "
+        "Automate repetitive editor tasks when appropriate (formatting, TOC, summaries, code block cleanup). "
         "When user intent implies a direct editor action, propose exactly one action. "
-        "Allowed actions: none, replace_selection, insert_at_cursor. "
+        "Allowed actions: none, replace_selection. "
         "Never propose shell commands, file-system operations, or code execution. "
-        "Prefer replacing selection for commands like 'format this section' and use insertion for generated additions. "
+        "Use replace_selection for all editor edits. "
         "Return strict JSON only."
     )
 
@@ -1063,7 +1549,7 @@ def request_ai_agent_response(user_message, document_text="", selected_text="", 
         "{\n"
         "  \"assistant_message\": \"<string>\",\n"
         "  \"proposed_action\": {\n"
-        "    \"type\": \"none|replace_selection|insert_at_cursor\",\n"
+        "    \"type\": \"none|replace_selection\",\n"
         "    \"content\": \"<string>\",\n"
         "    \"reason\": \"<short string>\"\n"
         "  }\n"
@@ -1074,7 +1560,9 @@ def request_ai_agent_response(user_message, document_text="", selected_text="", 
         "3) Preserve Markdown validity in generated content.\n"
         "4) Keep response concise and editor-focused.\n"
         "5) If user asks to summarize, assistant_message must include the actual summary text, not meta commentary.\n"
-        "6) Avoid placeholders like 'Here is a summary' without the summary body.\n\n"
+        "6) Avoid placeholders like 'Here is a summary' without the summary body.\n"
+        "7) For formatting requests, normalize Markdown headings/lists/code fences.\n"
+        "8) For table-of-contents requests, output Markdown links with heading anchors.\n\n"
         "Recent conversation:\n"
         f"{history_block}\n\n"
         "Current selected text:\n"
@@ -1155,7 +1643,9 @@ def request_ai_agent_response(user_message, document_text="", selected_text="", 
         action = {}
 
     action_type = str(action.get("type", "none")).strip().lower()
-    if action_type not in ("none", "replace_selection", "insert_at_cursor"):
+    if action_type == "insert_at_cursor":
+        action_type = "replace_selection"
+    if action_type not in ("none", "replace_selection"):
         action_type = "none"
 
     action_content = str(action.get("content", ""))

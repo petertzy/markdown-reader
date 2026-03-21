@@ -9,6 +9,9 @@ Markdown Reader is a clean and intuitive Markdown editor/reader with real-time p
 * Tabbed Markdown editing with real-time HTML preview.
 * **AI-Powered Translation**: Translate Markdown documents while preserving formatting (supports OpenRouter, OpenAI, and Anthropic).
 * **Built-in AI Agent Chat**: A dockable in-app chat panel can read current document context and suggest/apply edits.
+* **AI Task Automation Templates**: Run reusable templates for formatting, TOC generation, summaries, and code-block cleanup.
+* **Approval/Reject Workflow**: Every AI-proposed change can be explicitly applied or rejected from the panel.
+* **AI Audit Trail**: Proposed/applied/rejected/undone AI actions are logged for auditing and rollback tracking.
 * **API Key Management**: Missing or rejected provider keys trigger an in-app dialog, and keys are saved in the OS credential store.
 * **Progressive Translation Rendering**: Long translations are split into smaller chunks, inserted into the editor as they complete, auto-scrolled into view, and tracked with a progress bar.
 * Dark mode toggle.
@@ -82,10 +85,22 @@ python app.py
   - Large translations appear progressively in the editor with automatic scrolling and a visible progress bar
 * **AI Agent Chat Panel**:
   - Show/hide: "View → Show AI Agent Panel"
-  - Supports commands like "format this section" and "generate summary"
+  - You can type natural-language requests directly in the chat box; no special command syntax is required
+  - The AI agent can automatically prepare edit suggestions for tasks such as summaries, formatting, TOC generation, and code-block fixes
+  - Typical chat requests:
+    - `generate summary`
+    - `generate table of contents`
+    - `format this section`
+    - `format code blocks and correct syntax`
+  - Supports commands like "format this section", "generate summary", and "generate table of contents"
+  - Built-in automation templates can trigger repetitive editor tasks quickly
+  - Can format and fix Markdown code blocks (including unclosed fences)
   - Context scope toggle: "Full document" or "Selection only"
   - Uses current document and/or selected text as context based on the selected scope
-  - AI suggestions can be applied directly to the editor with confirmation and validation checks
+  - Workflow: send a natural-language request -> review AI preview -> click "Apply Suggestion" to apply
+  - AI suggestions can be applied or rejected with confirmation and validation checks
+  - "Undo AI Task" allows one-click rollback of the latest applied AI change
+  - "Audit Log" shows recent AI automation events for traceability
   - Chat history is stored per document and restored automatically
 * **Table Insertion**: Use "Table → Insert Table" to create custom tables with interactive cell editing.
 * **PDF Conversion Modes**: 
