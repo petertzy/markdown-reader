@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import threading
+from datetime import datetime, timezone
 import tkinter as tk
 import tkinter.font  # moved here from inside methods
 from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -17,7 +18,9 @@ from watchdog.observers import Observer
 from markdown_reader.file_handler import drop_file, load_file
 from markdown_reader.logic import (
     AI_PROVIDER_DEFAULT_MODELS,
+    AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES,
     TranslationConfigError,
+    append_ai_automation_log,
     convert_html_to_markdown,
     convert_pdf_to_markdown,
     convert_pdf_to_markdown_docling,
@@ -26,6 +29,7 @@ from markdown_reader.logic import (
     export_to_html,
     export_to_pdf,
     fetch_available_models,
+    get_ai_automation_task_templates,
     get_ai_provider_display_name,
     get_ai_provider_env_var,
     get_ai_provider_model,
@@ -36,6 +40,7 @@ from markdown_reader.logic import (
     open_preview_in_browser,
     request_ai_agent_response,
     save_ai_chat_histories,
+    load_ai_automation_logs,
     set_current_ai_provider,
     set_ai_provider_model,
     set_secure_ai_api_key,
@@ -156,6 +161,9 @@ class MarkdownReader:
         self.ai_agent_status_var = tk.StringVar(value="")
         self.ai_chat_histories = load_ai_chat_histories()
         self.ai_chat_pending_actions = {}
+        self.ai_automation_templates = get_ai_automation_task_templates()
+        self.ai_action_audit_logs = load_ai_automation_logs()
+        self.ai_last_applied_action_id_by_doc = {}
         self._chat_busy = False
         self._untitled_counter = 0
         self.tab_document_ids = []
@@ -583,7 +591,7 @@ class MarkdownReader:
         """Create the dockable AI agent chat panel widgets."""
 
         header = ttkb.Frame(self.ai_chat_panel)
-        header.pack(fill=tk.X, pady=(0, 6))
+        header.pack(fill=tk.X, pady=(0, 3))
 
         ttk.Label(
             header,
@@ -601,20 +609,27 @@ class MarkdownReader:
         self.ai_chat_history_box = ScrolledText(
             self.ai_chat_panel,
             wrap=tk.WORD,
-            height=20,
+            height=12,
             state=tk.DISABLED,
             font=(self.current_font_family, max(11, self.current_font_size - 1)),
         )
         self.ai_chat_history_box.pack(fill=tk.BOTH, expand=True)
 
         controls = ttkb.Frame(self.ai_chat_panel)
-        controls.pack(fill=tk.X, pady=(8, 6))
+        controls.pack(fill=tk.X, pady=(4, 3))
 
         ttkb.Button(
             controls,
             text="Format Section",
             bootstyle="info-outline",
             command=lambda: self._send_ai_agent_preset("format this section"),
+            width=12,
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        ttkb.Button(
+            controls,
+            text="Generate TOC",
+            bootstyle="warning-outline",
+            command=lambda: self._send_ai_agent_preset("generate table of contents"),
             width=12,
         ).pack(side=tk.LEFT, padx=(0, 6))
         ttkb.Button(
@@ -632,8 +647,30 @@ class MarkdownReader:
             width=12,
         ).pack(side=tk.LEFT)
 
+        template_row = ttkb.Frame(self.ai_chat_panel)
+        template_row.pack(fill=tk.X, pady=(0, 3))
+        ttk.Label(template_row, text="Automation Template:").pack(side=tk.LEFT, padx=(0, 8))
+        self.ai_template_var = tk.StringVar(value=(self.ai_automation_templates[0]["id"] if self.ai_automation_templates else ""))
+        template_choices = [f"{item['id']}: {item['title']}" for item in self.ai_automation_templates]
+        self._ai_template_combo = ttk.Combobox(
+            template_row,
+            state="readonly",
+            width=44,
+            values=template_choices,
+        )
+        if template_choices:
+            self._ai_template_combo.current(0)
+        self._ai_template_combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 6))
+        ttkb.Button(
+            template_row,
+            text="Run Template",
+            bootstyle="secondary-outline",
+            width=12,
+            command=self._run_selected_ai_template,
+        ).pack(side=tk.LEFT)
+
         context_scope_row = ttkb.Frame(self.ai_chat_panel)
-        context_scope_row.pack(fill=tk.X, pady=(0, 6))
+        context_scope_row.pack(fill=tk.X, pady=(0, 3))
         ttk.Label(context_scope_row, text="Context Scope:").pack(side=tk.LEFT, padx=(0, 8))
         ttk.Radiobutton(
             context_scope_row,
@@ -651,7 +688,7 @@ class MarkdownReader:
         self.ai_chat_input_box = ScrolledText(
             self.ai_chat_panel,
             wrap=tk.WORD,
-            height=5,
+            height=3,
             font=(self.current_font_family, max(11, self.current_font_size - 1)),
         )
         self.ai_chat_input_box.pack(fill=tk.X)
@@ -665,7 +702,7 @@ class MarkdownReader:
         )
 
         footer = ttkb.Frame(self.ai_chat_panel)
-        footer.pack(fill=tk.X, pady=(6, 0))
+        footer.pack(fill=tk.X, pady=(3, 0))
 
         self._ai_apply_btn = ttkb.Button(
             footer,
@@ -676,6 +713,34 @@ class MarkdownReader:
             width=14,
         )
         self._ai_apply_btn.pack(side=tk.LEFT, padx=(0, 6))
+
+        self._ai_reject_btn = ttkb.Button(
+            footer,
+            text="Reject",
+            bootstyle="danger-outline",
+            command=self.reject_ai_agent_action,
+            state=tk.DISABLED,
+            width=10,
+        )
+        self._ai_reject_btn.pack(side=tk.LEFT, padx=(0, 6))
+
+        self._ai_undo_btn = ttkb.Button(
+            footer,
+            text="Undo AI Task",
+            bootstyle="warning-outline",
+            command=self.undo_last_ai_action,
+            width=12,
+        )
+        self._ai_undo_btn.pack(side=tk.LEFT, padx=(0, 6))
+
+        self._ai_logs_btn = ttkb.Button(
+            footer,
+            text="Audit Log",
+            bootstyle="secondary-outline",
+            command=self.show_ai_automation_log,
+            width=10,
+        )
+        self._ai_logs_btn.pack(side=tk.LEFT, padx=(0, 6))
 
         self._ai_send_btn = ttkb.Button(
             footer,
@@ -774,10 +839,11 @@ class MarkdownReader:
         box.see(tk.END)
 
         action = self.ai_chat_pending_actions.get(doc_id, {"type": "none"}) if doc_id else {"type": "none"}
-        has_action = action.get("type") in ("replace_selection", "insert_at_cursor") and bool(
+        has_action = action.get("type") in ("replace_selection", "replace_document") and bool(
             str(action.get("content", "")).strip()
         )
         self._ai_apply_btn.configure(state=(tk.NORMAL if has_action else tk.DISABLED))
+        self._ai_reject_btn.configure(state=(tk.NORMAL if has_action else tk.DISABLED))
 
     def _append_chat_message(self, role, content, tab_index=None):
         """Append a chat message to the history of the selected tab."""
@@ -797,6 +863,105 @@ class MarkdownReader:
             del bucket[:-80]
         self._persist_ai_chat_histories()
         self._render_current_chat_history()
+
+    def _append_ai_audit_log(
+        self,
+        status,
+        action_type,
+        user_message="",
+        content="",
+        reason="",
+        related_action_id="",
+        action_id="",
+        doc_id=None,
+    ):
+        """Append and persist a single AI automation audit event."""
+
+        clean_status = (status or "").strip().lower()
+        clean_action_type = (action_type or "").strip().lower() or "none"
+        preview = (content or "").strip()
+        if len(preview) > 400:
+            preview = preview[:400] + " ..."
+
+        target_doc_id = (doc_id or self._get_document_id_for_tab() or "").strip()
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "doc_id": target_doc_id,
+            "status": clean_status,
+            "action_type": clean_action_type,
+            "reason": (reason or "").strip(),
+            "user_message": (user_message or "").strip(),
+            "content_preview": preview,
+            "related_action_id": (related_action_id or "").strip(),
+            "action_id": (action_id or "").strip(),
+        }
+        self.ai_action_audit_logs.append(entry)
+        if len(self.ai_action_audit_logs) > AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES:
+            del self.ai_action_audit_logs[:-AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES]
+        append_ai_automation_log(entry)
+
+    def _run_selected_ai_template(self):
+        """Send selected automation template prompt to the AI agent input."""
+
+        if not hasattr(self, "_ai_template_combo"):
+            return
+
+        selected_label = (self._ai_template_combo.get() or "").strip()
+        if not selected_label:
+            dialogs.Messagebox.show_info("AI Agent", "Please select an automation template.")
+            return
+
+        template_id = selected_label.split(":", 1)[0].strip()
+        selected_template = None
+        for item in self.ai_automation_templates:
+            if item.get("id") == template_id:
+                selected_template = item
+                break
+
+        if not selected_template:
+            dialogs.Messagebox.show_info("AI Agent", "Selected template is not available.")
+            return
+
+        requires_selection = bool(selected_template.get("requires_selection", False))
+        if requires_selection:
+            text_area = self.get_current_text_area()
+            if text_area:
+                try:
+                    selected = text_area.get("sel.first", "sel.last")
+                except tk.TclError:
+                    selected = ""
+                if not selected.strip():
+                    dialogs.Messagebox.show_info(
+                        "AI Agent",
+                        "This template requires selected text in the editor.",
+                    )
+                    return
+
+        prompt = str(selected_template.get("prompt", "")).strip()
+        if not prompt:
+            return
+        self._send_ai_agent_preset(prompt)
+
+    def show_ai_automation_log(self):
+        """Show recent AI automation audit logs in a dialog."""
+
+        if not self.ai_action_audit_logs:
+            dialogs.Messagebox.show_info("AI Audit Log", "No AI automation actions logged yet.")
+            return
+
+        rows = []
+        for item in self.ai_action_audit_logs[-20:]:
+            stamp = str(item.get("timestamp", "")).strip()
+            status = str(item.get("status", "")).strip() or "unknown"
+            action_type = str(item.get("action_type", "")).strip() or "none"
+            reason = str(item.get("reason", "")).strip()
+            line = f"{stamp} | {status} | {action_type}"
+            if reason:
+                line += f" | {reason}"
+            rows.append(line)
+
+        text = "\n".join(rows)
+        dialogs.Messagebox.show_info("AI Audit Log", text)
 
     def _on_notebook_tab_changed(self, _event=None):
         """Refresh AI chat panel when switching tabs."""
@@ -884,7 +1049,10 @@ class MarkdownReader:
                             selected_text=selected_text,
                             chat_history=history_snapshot,
                         )
-                        self.root.after(0, lambda data=result, idx=tab_index: self._finish_ai_agent_response(data, idx))
+                        self.root.after(
+                            0,
+                            lambda data=result, idx=tab_index, msg=user_message: self._finish_ai_agent_response(data, idx, msg),
+                        )
                         break
                     except TranslationConfigError as exc:
                         dialog_result = self._request_translation_api_key(exc)
@@ -896,7 +1064,7 @@ class MarkdownReader:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _finish_ai_agent_response(self, result, tab_index):
+    def _finish_ai_agent_response(self, result, tab_index, user_message=""):
         """Finalize a successful AI agent response."""
 
         self._chat_busy = False
@@ -915,19 +1083,38 @@ class MarkdownReader:
         action_type = str(action.get("type", "none")).strip().lower()
         content = str(action.get("content", ""))
         reason = str(action.get("reason", "")).strip()
-        if action_type not in ("none", "replace_selection", "insert_at_cursor"):
+        if action_type == "insert_at_cursor":
+            action_type = "replace_selection"
+        if action_type not in ("none", "replace_selection", "replace_document"):
             action_type = "none"
             content = ""
         if action_type != "none" and not content.strip():
             action_type = "none"
             content = ""
 
-        safe_action = {"type": action_type, "content": content, "reason": reason}
+        action_id = datetime.now(timezone.utc).strftime("ai-%Y%m%d%H%M%S%f")
+        safe_action = {
+            "type": action_type,
+            "content": content,
+            "reason": reason,
+            "action_id": action_id,
+            "user_message": (user_message or "").strip(),
+        }
         self.ai_chat_pending_actions[tab_doc_id] = safe_action
         visible_text = self._compose_assistant_chat_text(assistant_message, safe_action)
         if visible_text:
             self._append_chat_message("assistant", visible_text, tab_index=tab_index)
         self._render_current_chat_history()
+
+        self._append_ai_audit_log(
+            status="proposed",
+            action_type=action_type,
+            user_message=user_message,
+            content=content,
+            reason=reason,
+            action_id=action_id,
+            doc_id=tab_doc_id,
+        )
 
         if action_type == "none":
             self.ai_agent_status_var.set("Reply received")
@@ -950,8 +1137,10 @@ class MarkdownReader:
             return base_message
 
         action_type = str(action.get("type", "none")).strip().lower()
+        if action_type == "insert_at_cursor":
+            action_type = "replace_selection"
         content = str(action.get("content", "")).strip()
-        if action_type not in ("replace_selection", "insert_at_cursor") or not content:
+        if action_type not in ("replace_selection", "replace_document") or not content:
             return base_message
 
         normalized_base = re.sub(r"\s+", " ", base_message).strip().lower()
@@ -974,7 +1163,9 @@ class MarkdownReader:
             return False, "Invalid action payload."
 
         action_type = str(action.get("type", "none")).strip().lower()
-        if action_type not in ("replace_selection", "insert_at_cursor"):
+        if action_type == "insert_at_cursor":
+            action_type = "replace_selection"
+        if action_type not in ("replace_selection", "replace_document"):
             return False, "No applicable action."
 
         content = str(action.get("content", ""))
@@ -1005,17 +1196,31 @@ class MarkdownReader:
         action_type = action["type"]
         content = action["content"]
         action_reason = (action.get("reason") or "").strip()
+        action_id = (action.get("action_id") or "").strip()
+        user_message = (action.get("user_message") or "").strip()
 
         prompt = "Apply this AI suggestion to the editor?"
         if action_reason:
             prompt += f"\n\nReason: {action_reason}"
         prompt += f"\n\nAction: {action_type}\nCharacters: {len(content)}"
         if not messagebox.askyesno("Apply AI Suggestion", prompt):
+            self._append_ai_audit_log(
+                status="rejected",
+                action_type=action_type,
+                user_message=user_message,
+                content=content,
+                reason=action_reason or "user_declined_confirmation",
+                related_action_id=action_id,
+                doc_id=doc_id,
+            )
             return
 
         try:
             text_area.edit_separator()
-            if action_type == "replace_selection":
+            if action_type == "replace_document":
+                text_area.delete("1.0", "end-1c")
+                text_area.insert("1.0", content)
+            else:
                 try:
                     start_idx = text_area.index("sel.first")
                     end_idx = text_area.index("sel.last")
@@ -1024,9 +1229,6 @@ class MarkdownReader:
                     return
                 text_area.delete(start_idx, end_idx)
                 text_area.insert(start_idx, content)
-            else:
-                insert_idx = text_area.index("insert")
-                text_area.insert(insert_idx, content)
 
             text_area.edit_separator()
             idx = self.notebook.index(self.notebook.select())
@@ -1036,8 +1238,103 @@ class MarkdownReader:
             self.ai_chat_pending_actions[doc_id] = {"type": "none", "content": "", "reason": ""}
             self._render_current_chat_history()
             self.ai_agent_status_var.set("Suggestion applied")
+            self.ai_last_applied_action_id_by_doc[doc_id] = action_id
+            self._append_ai_audit_log(
+                status="applied",
+                action_type=action_type,
+                user_message=user_message,
+                content=content,
+                reason=action_reason,
+                related_action_id=action_id,
+                doc_id=doc_id,
+            )
         except Exception as exc:
+            self._append_ai_audit_log(
+                status="failed",
+                action_type=action_type,
+                user_message=user_message,
+                content=content,
+                reason=str(exc),
+                related_action_id=action_id,
+                doc_id=doc_id,
+            )
             dialogs.Messagebox.show_error("AI Agent", f"Failed to apply suggestion: {exc}")
+
+    def reject_ai_agent_action(self):
+        """Reject and clear the current pending AI suggestion."""
+
+        doc_id = self._get_document_id_for_tab()
+        if not doc_id:
+            return
+
+        action = self.ai_chat_pending_actions.get(doc_id)
+        ok, reason = self._validate_ai_action_payload(action)
+        if not ok:
+            dialogs.Messagebox.show_info("AI Agent", reason)
+            return
+
+        action_type = action["type"]
+        content = action["content"]
+        action_reason = (action.get("reason") or "").strip()
+        action_id = (action.get("action_id") or "").strip()
+        user_message = (action.get("user_message") or "").strip()
+
+        if not messagebox.askyesno("Reject AI Suggestion", "Reject and clear this AI suggestion?"):
+            return
+
+        self.ai_chat_pending_actions[doc_id] = {"type": "none", "content": "", "reason": ""}
+        self._render_current_chat_history()
+        self.ai_agent_status_var.set("Suggestion rejected")
+        self._append_ai_audit_log(
+            status="rejected",
+            action_type=action_type,
+            user_message=user_message,
+            content=content,
+            reason=action_reason or "rejected_from_button",
+            related_action_id=action_id,
+            doc_id=doc_id,
+        )
+
+    def undo_last_ai_action(self):
+        """Undo one editor step and log it as AI-task rollback."""
+
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+
+        doc_id = self._get_document_id_for_tab()
+        if not doc_id:
+            return
+
+        last_action_id = (self.ai_last_applied_action_id_by_doc.get(doc_id) or "").strip()
+        if not last_action_id:
+            dialogs.Messagebox.show_info(
+                "Undo AI Task",
+                "No applied AI task found for this document.",
+            )
+            return
+
+        if not messagebox.askyesno(
+            "Undo AI Task",
+            "This performs one Undo step in the editor for the last applied AI task.",
+        ):
+            return
+
+        try:
+            text_area.edit_undo()
+            idx = self.notebook.index(self.notebook.select())
+            self.mark_tab_modified(idx)
+            self.update_preview()
+            self.ai_agent_status_var.set("Last AI task undone")
+            self._append_ai_audit_log(
+                status="undone",
+                action_type="undo",
+                reason="undo_last_ai_task",
+                related_action_id=last_action_id,
+                doc_id=doc_id,
+            )
+        except tk.TclError:
+            dialogs.Messagebox.show_info("Undo AI Task", "No undo step is currently available.")
 
     def _format_shortcut_pattern(self, pattern):
         """
