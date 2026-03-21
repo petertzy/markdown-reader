@@ -31,8 +31,11 @@ from markdown_reader.logic import (
     get_ai_provider_model,
     get_secure_ai_api_key,
     is_secure_key_storage_available,
+    load_ai_chat_histories,
     load_persisted_ai_settings,
     open_preview_in_browser,
+    request_ai_agent_response,
+    save_ai_chat_histories,
     set_current_ai_provider,
     set_ai_provider_model,
     set_secure_ai_api_key,
@@ -145,9 +148,17 @@ class MarkdownReader:
         self.ai_provider_var = tk.StringVar(
             value=os.getenv("AI_PROVIDER", "openrouter").strip().lower() or "openrouter"
         )
+        self.ai_chat_panel_visible_var = tk.BooleanVar(value=False)
+        self.ai_chat_context_mode_var = tk.StringVar(value="selection")
         self.translation_progress_var = tk.DoubleVar(value=0)
         self.translation_status_var = tk.StringVar(value="")
         self.translation_job_active = False
+        self.ai_agent_status_var = tk.StringVar(value="")
+        self.ai_chat_histories = load_ai_chat_histories()
+        self.ai_chat_pending_actions = {}
+        self._chat_busy = False
+        self._untitled_counter = 0
+        self.tab_document_ids = []
         self._translation_session_counter = 0
         self._translation_cancel_requested = False
         self._last_search_query = ""
@@ -169,6 +180,7 @@ class MarkdownReader:
             ("Undo", "<Control-KeyPress-z>", self.undo_action),
             ("Redo", "<Control-KeyPress-y>", self.redo_action),
             ("Redo", "<Control-Shift-KeyPress-Z>", self.redo_action),
+            ("Toggle AI Agent Panel", "<Control-Shift-KeyPress-A>", self._toggle_ai_chat_panel_shortcut),
             (
                 "Translate Full Document with AI",
                 "<Control-Shift-KeyPress-T>",
@@ -212,6 +224,7 @@ class MarkdownReader:
                     ("Close All Tabs", "<Command-Shift-KeyPress-W>", self.close_all_tabs),
                     ("Undo", "<Command-KeyPress-z>", self.undo_action),
                     ("Redo", "<Command-Shift-KeyPress-Z>", self.redo_action),
+                    ("Toggle AI Agent Panel", "<Command-Shift-KeyPress-A>", self._toggle_ai_chat_panel_shortcut),
                     (
                         "Translate Full Document with AI",
                         "<Command-Shift-KeyPress-T>",
@@ -279,6 +292,12 @@ class MarkdownReader:
         viewmenu.add_command(
             label="Open Preview in Browser",
             command=lambda: open_preview_in_browser(self.preview_file, self),
+        )
+        viewmenu.add_separator()
+        viewmenu.add_checkbutton(
+            label="Show AI Agent Panel",
+            variable=self.ai_chat_panel_visible_var,
+            command=self.toggle_ai_chat_panel,
         )
         menubar.add_cascade(label="View", menu=viewmenu)
 
@@ -511,8 +530,17 @@ class MarkdownReader:
         )
         self._translation_cancel_btn.pack(side=tk.LEFT, padx=(8, 0))
 
-        self.notebook = ttk.Notebook(self.root)
+        self.editor_split_pane = ttk.Panedwindow(self.root, orient=tk.HORIZONTAL)
+        self.editor_split_pane.pack(fill=tk.BOTH, expand=True)
+
+        self.editor_panel = ttkb.Frame(self.editor_split_pane)
+        self.notebook = ttk.Notebook(self.editor_panel)
         self.notebook.pack(fill=tk.BOTH, expand=True)
+        self.editor_split_pane.add(self.editor_panel, weight=4)
+
+        self.ai_chat_panel = ttkb.Frame(self.editor_split_pane, padding=(8, 8, 8, 8))
+        self._build_ai_chat_panel()
+        self.editor_split_pane.add(self.ai_chat_panel, weight=2)
 
         self.editors = []
         self.file_paths = []
@@ -530,6 +558,9 @@ class MarkdownReader:
             else "<Button-3>",
             self.show_tab_context_menu,
         )
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed)
+
+        self._set_ai_chat_panel_visible(self.ai_chat_panel_visible_var.get())
 
         self.new_file()
 
@@ -547,6 +578,466 @@ class MarkdownReader:
                 pattern,
                 lambda event, handler=handler: (handler(), "break")[1],
             )
+
+    def _build_ai_chat_panel(self):
+        """Create the dockable AI agent chat panel widgets."""
+
+        header = ttkb.Frame(self.ai_chat_panel)
+        header.pack(fill=tk.X, pady=(0, 6))
+
+        ttk.Label(
+            header,
+            text="AI Agent",
+            font=("TkDefaultFont", 11, "bold"),
+        ).pack(side=tk.LEFT)
+        ttkb.Button(
+            header,
+            text="Hide",
+            width=8,
+            bootstyle="secondary-outline",
+            command=lambda: self.ai_chat_panel_visible_var.set(False) or self.toggle_ai_chat_panel(),
+        ).pack(side=tk.RIGHT)
+
+        self.ai_chat_history_box = ScrolledText(
+            self.ai_chat_panel,
+            wrap=tk.WORD,
+            height=20,
+            state=tk.DISABLED,
+            font=(self.current_font_family, max(11, self.current_font_size - 1)),
+        )
+        self.ai_chat_history_box.pack(fill=tk.BOTH, expand=True)
+
+        controls = ttkb.Frame(self.ai_chat_panel)
+        controls.pack(fill=tk.X, pady=(8, 6))
+
+        ttkb.Button(
+            controls,
+            text="Format Section",
+            bootstyle="info-outline",
+            command=lambda: self._send_ai_agent_preset("format this section"),
+            width=12,
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        ttkb.Button(
+            controls,
+            text="Generate Summary",
+            bootstyle="primary-outline",
+            command=lambda: self._send_ai_agent_preset("generate summary"),
+            width=15,
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        ttkb.Button(
+            controls,
+            text="Clear History",
+            bootstyle="danger-outline",
+            command=self._clear_current_chat_history,
+            width=12,
+        ).pack(side=tk.LEFT)
+
+        context_scope_row = ttkb.Frame(self.ai_chat_panel)
+        context_scope_row.pack(fill=tk.X, pady=(0, 6))
+        ttk.Label(context_scope_row, text="Context Scope:").pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Radiobutton(
+            context_scope_row,
+            text="Full document",
+            variable=self.ai_chat_context_mode_var,
+            value="full",
+        ).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Radiobutton(
+            context_scope_row,
+            text="Selection only",
+            variable=self.ai_chat_context_mode_var,
+            value="selection",
+        ).pack(side=tk.LEFT)
+
+        self.ai_chat_input_box = ScrolledText(
+            self.ai_chat_panel,
+            wrap=tk.WORD,
+            height=5,
+            font=(self.current_font_family, max(11, self.current_font_size - 1)),
+        )
+        self.ai_chat_input_box.pack(fill=tk.X)
+        self.ai_chat_input_box.bind(
+            "<Control-Return>",
+            lambda _event: (self.send_ai_agent_message(), "break")[1],
+        )
+        self.ai_chat_input_box.bind(
+            "<Command-Return>",
+            lambda _event: (self.send_ai_agent_message(), "break")[1],
+        )
+
+        footer = ttkb.Frame(self.ai_chat_panel)
+        footer.pack(fill=tk.X, pady=(6, 0))
+
+        self._ai_apply_btn = ttkb.Button(
+            footer,
+            text="Apply Suggestion",
+            bootstyle="success-outline",
+            command=self.apply_ai_agent_action,
+            state=tk.DISABLED,
+            width=14,
+        )
+        self._ai_apply_btn.pack(side=tk.LEFT, padx=(0, 6))
+
+        self._ai_send_btn = ttkb.Button(
+            footer,
+            text="Send",
+            bootstyle="success",
+            command=self.send_ai_agent_message,
+            width=8,
+        )
+        self._ai_send_btn.pack(side=tk.LEFT)
+
+        ttk.Label(
+            footer,
+            textvariable=self.ai_agent_status_var,
+            foreground="gray",
+            anchor="e",
+        ).pack(side=tk.RIGHT, fill=tk.X, expand=True)
+
+    def _set_ai_chat_panel_visible(self, visible):
+        """Show or hide the AI chat panel in the split pane."""
+
+        should_show = bool(visible)
+        panes = {str(pane) for pane in self.editor_split_pane.panes()}
+        panel_widget = str(self.ai_chat_panel)
+        if should_show and panel_widget not in panes:
+            self.editor_split_pane.add(self.ai_chat_panel, weight=2)
+        if not should_show and panel_widget in panes:
+            self.editor_split_pane.forget(self.ai_chat_panel)
+
+    def toggle_ai_chat_panel(self):
+        """Toggle the dockable AI chat panel."""
+
+        self._set_ai_chat_panel_visible(self.ai_chat_panel_visible_var.get())
+
+    def _toggle_ai_chat_panel_shortcut(self):
+        """Toggle AI panel from keyboard shortcut and sync menu check state."""
+
+        self.ai_chat_panel_visible_var.set(not self.ai_chat_panel_visible_var.get())
+        self.toggle_ai_chat_panel()
+
+    def _get_document_id_for_tab(self, tab_index=None):
+        """Return persistent document id for a tab."""
+
+        if tab_index is None:
+            if not self.editors:
+                return None
+            tab_index = self.notebook.index(self.notebook.select())
+
+        if 0 <= tab_index < len(self.tab_document_ids):
+            return self.tab_document_ids[tab_index]
+        return None
+
+    def _persist_ai_chat_histories(self):
+        """Persist chat history data."""
+
+        save_ai_chat_histories(self.ai_chat_histories)
+
+    def _migrate_chat_document_key(self, old_doc_id, new_doc_id):
+        """Migrate chat history and pending action to a new document id."""
+
+        old_key = (old_doc_id or "").strip()
+        new_key = (new_doc_id or "").strip()
+        if not old_key or not new_key or old_key == new_key:
+            return
+
+        old_history = self.ai_chat_histories.pop(old_key, [])
+        new_history = self.ai_chat_histories.get(new_key, [])
+        combined = (new_history + old_history)[-80:]
+        if combined:
+            self.ai_chat_histories[new_key] = combined
+
+        old_action = self.ai_chat_pending_actions.pop(old_key, None)
+        if old_action:
+            self.ai_chat_pending_actions[new_key] = old_action
+
+        self._persist_ai_chat_histories()
+
+    def _render_current_chat_history(self):
+        """Render current tab chat history in the panel."""
+
+        if not hasattr(self, "ai_chat_history_box"):
+            return
+
+        doc_id = self._get_document_id_for_tab()
+        messages = self.ai_chat_histories.get(doc_id, []) if doc_id else []
+
+        box = self.ai_chat_history_box
+        box.configure(state=tk.NORMAL)
+        box.delete("1.0", tk.END)
+        for item in messages:
+            role = item.get("role", "assistant")
+            prefix = "You" if role == "user" else "AI"
+            content = (item.get("content") or "").strip()
+            if content:
+                box.insert(tk.END, f"{prefix}: {content}\n\n")
+        box.configure(state=tk.DISABLED)
+        box.see(tk.END)
+
+        action = self.ai_chat_pending_actions.get(doc_id, {"type": "none"}) if doc_id else {"type": "none"}
+        has_action = action.get("type") in ("replace_selection", "insert_at_cursor") and bool(
+            str(action.get("content", "")).strip()
+        )
+        self._ai_apply_btn.configure(state=(tk.NORMAL if has_action else tk.DISABLED))
+
+    def _append_chat_message(self, role, content, tab_index=None):
+        """Append a chat message to the history of the selected tab."""
+
+        clean_role = (role or "assistant").strip().lower()
+        clean_content = (content or "").strip()
+        if clean_role not in ("user", "assistant") or not clean_content:
+            return
+
+        doc_id = self._get_document_id_for_tab(tab_index)
+        if not doc_id:
+            return
+
+        bucket = self.ai_chat_histories.setdefault(doc_id, [])
+        bucket.append({"role": clean_role, "content": clean_content})
+        if len(bucket) > 80:
+            del bucket[:-80]
+        self._persist_ai_chat_histories()
+        self._render_current_chat_history()
+
+    def _on_notebook_tab_changed(self, _event=None):
+        """Refresh AI chat panel when switching tabs."""
+
+        self.ai_agent_status_var.set("")
+        self._render_current_chat_history()
+
+    def _clear_current_chat_history(self):
+        """Clear chat history for the current document."""
+
+        doc_id = self._get_document_id_for_tab()
+        if not doc_id:
+            return
+        if not messagebox.askyesno("Clear Chat", "Clear chat history for this document?"):
+            return
+
+        self.ai_chat_histories.pop(doc_id, None)
+        self.ai_chat_pending_actions.pop(doc_id, None)
+        self._persist_ai_chat_histories()
+        self._render_current_chat_history()
+
+    def _send_ai_agent_preset(self, command_text):
+        """Send common preset commands to the AI agent."""
+
+        cmd = (command_text or "").strip()
+        if not cmd:
+            return
+        self.ai_chat_input_box.delete("1.0", tk.END)
+        self.ai_chat_input_box.insert("1.0", cmd)
+        self.send_ai_agent_message()
+
+    def send_ai_agent_message(self):
+        """Send a message to the AI agent with document context."""
+
+        if self._chat_busy:
+            dialogs.Messagebox.show_info("AI Agent", "AI Agent is processing another request.")
+            return
+
+        text_area = self.get_current_text_area()
+        if not text_area:
+            dialogs.Messagebox.show_info("No document", "Please open or create a document first.")
+            return
+
+        user_message = self.ai_chat_input_box.get("1.0", "end-1c").strip()
+        if not user_message:
+            return
+
+        tab_index = self.notebook.index(self.notebook.select())
+        doc_id = self._get_document_id_for_tab(tab_index)
+        if not doc_id:
+            return
+
+        context_mode = (self.ai_chat_context_mode_var.get() or "full").strip().lower()
+        if context_mode == "selection":
+            document_text = ""
+        else:
+            document_text = text_area.get("1.0", "end-1c")
+        try:
+            selected_text = text_area.get("sel.first", "sel.last")
+        except tk.TclError:
+            selected_text = ""
+
+        if context_mode == "selection" and not selected_text.strip():
+            dialogs.Messagebox.show_info(
+                "AI Agent",
+                "Selection-only mode is enabled. Please select text first.",
+            )
+            return
+
+        history_snapshot = list(self.ai_chat_histories.get(doc_id, []))
+        self._append_chat_message("user", user_message, tab_index=tab_index)
+        self.ai_chat_input_box.delete("1.0", tk.END)
+
+        self._chat_busy = True
+        self._ai_send_btn.configure(state=tk.DISABLED)
+        self.ai_agent_status_var.set("AI Agent is thinking...")
+
+        def worker():
+            try:
+                while True:
+                    try:
+                        result = request_ai_agent_response(
+                            user_message,
+                            document_text=document_text,
+                            selected_text=selected_text,
+                            chat_history=history_snapshot,
+                        )
+                        self.root.after(0, lambda data=result, idx=tab_index: self._finish_ai_agent_response(data, idx))
+                        break
+                    except TranslationConfigError as exc:
+                        dialog_result = self._request_translation_api_key(exc)
+                        if not dialog_result:
+                            raise RuntimeError("No API key provided.") from exc
+                        self._apply_ai_key_dialog_result(dialog_result, show_feedback=False)
+            except Exception as exc:
+                self.root.after(0, lambda err=str(exc): self._fail_ai_agent_response(err))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_ai_agent_response(self, result, tab_index):
+        """Finalize a successful AI agent response."""
+
+        self._chat_busy = False
+        self._ai_send_btn.configure(state=tk.NORMAL)
+
+        tab_doc_id = self._get_document_id_for_tab(tab_index)
+        if not tab_doc_id:
+            self.ai_agent_status_var.set("")
+            return
+
+        assistant_message = str((result or {}).get("assistant_message", "")).strip()
+
+        action = (result or {}).get("proposed_action", {})
+        if not isinstance(action, dict):
+            action = {"type": "none", "content": "", "reason": ""}
+        action_type = str(action.get("type", "none")).strip().lower()
+        content = str(action.get("content", ""))
+        reason = str(action.get("reason", "")).strip()
+        if action_type not in ("none", "replace_selection", "insert_at_cursor"):
+            action_type = "none"
+            content = ""
+        if action_type != "none" and not content.strip():
+            action_type = "none"
+            content = ""
+
+        safe_action = {"type": action_type, "content": content, "reason": reason}
+        self.ai_chat_pending_actions[tab_doc_id] = safe_action
+        visible_text = self._compose_assistant_chat_text(assistant_message, safe_action)
+        if visible_text:
+            self._append_chat_message("assistant", visible_text, tab_index=tab_index)
+        self._render_current_chat_history()
+
+        if action_type == "none":
+            self.ai_agent_status_var.set("Reply received")
+        else:
+            self.ai_agent_status_var.set("Suggestion ready to apply (preview shown in chat)")
+
+    def _fail_ai_agent_response(self, error_message):
+        """Finalize a failed AI agent request."""
+
+        self._chat_busy = False
+        self._ai_send_btn.configure(state=tk.NORMAL)
+        self.ai_agent_status_var.set("")
+        dialogs.Messagebox.show_error("AI Agent", f"Request failed: {error_message}")
+
+    def _compose_assistant_chat_text(self, assistant_message, action):
+        """Build chat-visible assistant text, including suggested content preview."""
+
+        base_message = (assistant_message or "").strip() or "(No assistant response.)"
+        if not isinstance(action, dict):
+            return base_message
+
+        action_type = str(action.get("type", "none")).strip().lower()
+        content = str(action.get("content", "")).strip()
+        if action_type not in ("replace_selection", "insert_at_cursor") or not content:
+            return base_message
+
+        normalized_base = re.sub(r"\s+", " ", base_message).strip().lower()
+        normalized_content = re.sub(r"\s+", " ", content).strip().lower()
+        if normalized_base and normalized_base == normalized_content:
+            return base_message
+
+        preview_limit = 2400
+        preview = content if len(content) <= preview_limit else content[:preview_limit] + "\n..."
+        return (
+            f"{base_message}\n\n"
+            f"Proposed content preview ({action_type}):\n"
+            f"{preview}"
+        )
+
+    def _validate_ai_action_payload(self, action):
+        """Validate AI action payload before applying to the editor."""
+
+        if not isinstance(action, dict):
+            return False, "Invalid action payload."
+
+        action_type = str(action.get("type", "none")).strip().lower()
+        if action_type not in ("replace_selection", "insert_at_cursor"):
+            return False, "No applicable action."
+
+        content = str(action.get("content", ""))
+        if not content.strip():
+            return False, "Action content is empty."
+        if "\x00" in content:
+            return False, "Action contains invalid null bytes."
+        if len(content) > 20000:
+            return False, "Action content is too large; please refine your request."
+        return True, ""
+
+    def apply_ai_agent_action(self):
+        """Apply AI-generated editor action with validation checks."""
+
+        text_area = self.get_current_text_area()
+        if not text_area:
+            return
+
+        doc_id = self._get_document_id_for_tab()
+        if not doc_id:
+            return
+        action = self.ai_chat_pending_actions.get(doc_id)
+        ok, reason = self._validate_ai_action_payload(action)
+        if not ok:
+            dialogs.Messagebox.show_info("AI Agent", reason)
+            return
+
+        action_type = action["type"]
+        content = action["content"]
+        action_reason = (action.get("reason") or "").strip()
+
+        prompt = "Apply this AI suggestion to the editor?"
+        if action_reason:
+            prompt += f"\n\nReason: {action_reason}"
+        prompt += f"\n\nAction: {action_type}\nCharacters: {len(content)}"
+        if not messagebox.askyesno("Apply AI Suggestion", prompt):
+            return
+
+        try:
+            text_area.edit_separator()
+            if action_type == "replace_selection":
+                try:
+                    start_idx = text_area.index("sel.first")
+                    end_idx = text_area.index("sel.last")
+                except tk.TclError:
+                    dialogs.Messagebox.show_info("AI Agent", "Please select a section to replace.")
+                    return
+                text_area.delete(start_idx, end_idx)
+                text_area.insert(start_idx, content)
+            else:
+                insert_idx = text_area.index("insert")
+                text_area.insert(insert_idx, content)
+
+            text_area.edit_separator()
+            idx = self.notebook.index(self.notebook.select())
+            self.mark_tab_modified(idx)
+            self.update_preview()
+
+            self.ai_chat_pending_actions[doc_id] = {"type": "none", "content": "", "reason": ""}
+            self._render_current_chat_history()
+            self.ai_agent_status_var.set("Suggestion applied")
+        except Exception as exc:
+            dialogs.Messagebox.show_error("AI Agent", f"Failed to apply suggestion: {exc}")
 
     def _format_shortcut_pattern(self, pattern):
         """
@@ -732,8 +1223,11 @@ class MarkdownReader:
         self.notebook.select(tab_index)
         self.editors.append(text_area)
         self.file_paths.append(None)
+        self._untitled_counter += 1
+        self.tab_document_ids.append(f"untitled:{self._untitled_counter}")
 
         self.notebook.tab(tab_index, text="Untitled")
+        self._render_current_chat_history()
 
     def open_file(self):
         """
@@ -820,6 +1314,11 @@ class MarkdownReader:
                 tab_text = os.path.basename(abs_path)
                 self.notebook.tab(idx, text=tab_text)
                 self.current_file_path = abs_path
+
+            if 0 <= idx < len(self.tab_document_ids):
+                old_doc_id = self.tab_document_ids[idx]
+                self.tab_document_ids[idx] = abs_path
+                self._migrate_chat_document_key(old_doc_id, abs_path)
         except Exception as e:
             dialogs.Messagebox.show_error("Error", f"Failed to load file: {e}")
         finally:
@@ -854,6 +1353,9 @@ class MarkdownReader:
         self.notebook.forget(idx)
         del self.editors[idx]
         del self.file_paths[idx]
+        if idx < len(self.tab_document_ids):
+            del self.tab_document_ids[idx]
+        self._render_current_chat_history()
 
     def close_all_tabs(self):
         """
@@ -864,8 +1366,11 @@ class MarkdownReader:
             self.notebook.forget(0)
             del self.editors[0]
             del self.file_paths[0]
+            if self.tab_document_ids:
+                del self.tab_document_ids[0]
         # Clear modified tabs set
         self.modified_tabs.clear()
+        self._render_current_chat_history()
 
     def show_tab_context_menu(self, event):
         """
@@ -917,6 +1422,8 @@ class MarkdownReader:
             self.notebook.forget(idx)
             del self.editors[idx]
             del self.file_paths[idx]
+            if idx < len(self.tab_document_ids):
+                del self.tab_document_ids[idx]
 
             # Update tab_widgets dictionary
             if hasattr(self, "tab_widgets"):
@@ -929,6 +1436,7 @@ class MarkdownReader:
                     new_key = key if key < idx else key - 1
                     new_widgets[new_key] = value
                 self.tab_widgets = new_widgets
+            self._render_current_chat_history()
 
     def start_watching(self, path):
         """
@@ -1150,10 +1658,15 @@ class MarkdownReader:
             )
             if file_path:
                 try:
+                    old_doc_id = self._get_document_id_for_tab(idx)
                     content = text_area.get("1.0", "end-1c")
                     with open(file_path, "w", encoding="utf-8") as f:
                         f.write(content)
                     self.file_paths[idx] = file_path
+                    abs_file_path = os.path.abspath(file_path)
+                    if 0 <= idx < len(self.tab_document_ids):
+                        self.tab_document_ids[idx] = abs_file_path
+                    self._migrate_chat_document_key(old_doc_id, abs_file_path)
                     tab_text = os.path.basename(file_path)
                     self.notebook.tab(idx, text=tab_text)
                     # Mark tab as saved (will ensure no asterisk)

@@ -8,6 +8,7 @@ Markdown Reader is a clean and intuitive Markdown editor/reader with real-time p
 
 * Tabbed Markdown editing with real-time HTML preview.
 * **AI-Powered Translation**: Translate Markdown documents while preserving formatting (supports OpenRouter, OpenAI, and Anthropic).
+* **Built-in AI Agent Chat**: A dockable in-app chat panel can read current document context and suggest/apply edits.
 * **API Key Management**: Missing or rejected provider keys trigger an in-app dialog, and keys are saved in the OS credential store.
 * **Progressive Translation Rendering**: Long translations are split into smaller chunks, inserted into the editor as they complete, auto-scrolled into view, and tracked with a progress bar.
 * Dark mode toggle.
@@ -79,6 +80,13 @@ python app.py
   - Configure provider/model/API keys: "Settings → AI Provider & API Keys..."
   - If a key is missing or rejected, the app prompts for the correct provider key and stores it in the OS credential store
   - Large translations appear progressively in the editor with automatic scrolling and a visible progress bar
+* **AI Agent Chat Panel**:
+  - Show/hide: "View → Show AI Agent Panel"
+  - Supports commands like "format this section" and "generate summary"
+  - Context scope toggle: "Full document" or "Selection only"
+  - Uses current document and/or selected text as context based on the selected scope
+  - AI suggestions can be applied directly to the editor with confirmation and validation checks
+  - Chat history is stored per document and restored automatically
 * **Table Insertion**: Use "Table → Insert Table" to create custom tables with interactive cell editing.
 * **PDF Conversion Modes**: 
   - Fast mode (default): Uses PyMuPDF for quick extraction
