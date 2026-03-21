@@ -42,6 +42,7 @@ def _get_settings_file_path():
 
 
 APP_SETTINGS_FILE_PATH = _get_settings_file_path()
+AI_CHAT_HISTORY_FILE_PATH = APP_SETTINGS_FILE_PATH.parent / "chat_history.json"
 
 # Hardcoded provider base URLs so bundled apps work without external env files.
 AI_PROVIDER_BASE_URLS = {
@@ -82,6 +83,74 @@ AI_PROVIDER_MODEL_ENV = {
     "openai": "OPENAI_MODEL",
     "anthropic": "ANTHROPIC_MODEL",
 }
+
+AI_AGENT_MAX_DOC_CONTEXT = 12000
+AI_AGENT_MAX_SELECTION_CONTEXT = 4000
+AI_AGENT_MAX_HISTORY_MESSAGES = 16
+AI_AGENT_MAX_HISTORY_PREVIEW = 1200
+
+
+def load_ai_chat_histories():
+    """Load persisted AI chat history grouped by document id."""
+
+    if not AI_CHAT_HISTORY_FILE_PATH.exists():
+        return {}
+
+    try:
+        with open(AI_CHAT_HISTORY_FILE_PATH, "r", encoding="utf-8") as file_obj:
+            data = json.load(file_obj)
+    except Exception:
+        return {}
+
+    if not isinstance(data, dict):
+        return {}
+
+    cleaned = {}
+    for doc_id, messages in data.items():
+        if not isinstance(doc_id, str) or not isinstance(messages, list):
+            continue
+        safe_messages = []
+        for item in messages:
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role", "")).strip().lower()
+            content = str(item.get("content", "")).strip()
+            if role not in ("user", "assistant") or not content:
+                continue
+            safe_messages.append({"role": role, "content": content})
+        if safe_messages:
+            cleaned[doc_id] = safe_messages[-80:]
+    return cleaned
+
+
+def save_ai_chat_histories(histories):
+    """Persist AI chat histories grouped by document id."""
+
+    if not isinstance(histories, dict):
+        return
+
+    serializable = {}
+    for doc_id, messages in histories.items():
+        if not isinstance(doc_id, str) or not isinstance(messages, list):
+            continue
+        safe_messages = []
+        for item in messages[-80:]:
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role", "")).strip().lower()
+            content = str(item.get("content", "")).strip()
+            if role not in ("user", "assistant") or not content:
+                continue
+            safe_messages.append({"role": role, "content": content})
+        if safe_messages:
+            serializable[doc_id] = safe_messages
+
+    try:
+        AI_CHAT_HISTORY_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with open(AI_CHAT_HISTORY_FILE_PATH, "w", encoding="utf-8") as file_obj:
+            json.dump(serializable, file_obj, ensure_ascii=True, indent=2)
+    except Exception:
+        return
 
 
 class TranslationConfigError(RuntimeError):
@@ -887,6 +956,225 @@ def translate_markdown_in_chunks(markdown_text, source_language, target_language
             progress_callback(index, total_chunks, f"Translated chunk {index}/{total_chunks}")
 
     return translated_chunks, all_notes
+
+
+def request_ai_agent_response(user_message, document_text="", selected_text="", chat_history=None):
+    """Request a structured AI agent response for editor chat workflows."""
+
+    message = (user_message or "").strip()
+    if not message:
+        raise RuntimeError("Message cannot be empty.")
+
+    provider_name = os.getenv("AI_PROVIDER", "openrouter").strip().lower()
+    if provider_name == "athropic":
+        provider_name = "anthropic"
+    if provider_name not in ("openrouter", "openai", "anthropic"):
+        raise TranslationConfigError(
+            f"Unsupported AI provider '{provider_name}'. Use openrouter, openai, or anthropic in AI_PROVIDER",
+            provider_name=provider_name,
+        )
+
+    def _provider_cfg(name):
+        stored_key = get_secure_ai_api_key(name)
+        base_url = AI_PROVIDER_BASE_URLS.get(name, "")
+        model = get_ai_provider_model(name)
+        if name == "openrouter":
+            return {
+                "name": "openrouter",
+                "api_key": os.getenv("OPENROUTER_API_KEY", "").strip() or stored_key,
+                "base_url": os.getenv("OPENROUTER_BASE_URL", base_url).strip(),
+                "model": model,
+                "type": "openai-compatible",
+                "env_var": "OPENROUTER_API_KEY",
+            }
+        if name == "openai":
+            return {
+                "name": "openai",
+                "api_key": os.getenv("OPENAI_API_KEY", "").strip() or stored_key,
+                "base_url": os.getenv("OPENAI_BASE_URL", base_url).strip(),
+                "model": model,
+                "type": "openai-compatible",
+                "env_var": "OPENAI_API_KEY",
+            }
+        return {
+            "name": "anthropic",
+            "api_key": os.getenv("ANTHROPIC_API_KEY", "").strip() or stored_key,
+            "base_url": os.getenv("ANTHROPIC_BASE_URL", base_url).strip(),
+            "model": model,
+            "type": "anthropic",
+            "env_var": "ANTHROPIC_API_KEY",
+        }
+
+    provider_order = [provider_name] + [
+        name for name in ("openrouter", "openai", "anthropic") if name != provider_name
+    ]
+    provider_candidates = []
+    for name in provider_order:
+        cfg = _provider_cfg(name)
+        if cfg["api_key"] and cfg["base_url"] and cfg["model"]:
+            provider_candidates.append(cfg)
+
+    if not provider_candidates:
+        env_var = get_ai_provider_env_var(provider_name)
+        raise TranslationConfigError(
+            "No valid AI provider config found.",
+            provider_name=provider_name,
+            env_var=env_var,
+        )
+
+    doc_context = (document_text or "").strip()
+    selected_context = (selected_text or "").strip()
+    if len(doc_context) > AI_AGENT_MAX_DOC_CONTEXT:
+        doc_context = doc_context[:AI_AGENT_MAX_DOC_CONTEXT] + "\n\n[Document context truncated]"
+    if len(selected_context) > AI_AGENT_MAX_SELECTION_CONTEXT:
+        selected_context = selected_context[:AI_AGENT_MAX_SELECTION_CONTEXT] + "\n\n[Selection context truncated]"
+
+    history_lines = []
+    safe_history = chat_history if isinstance(chat_history, list) else []
+    for item in safe_history[-AI_AGENT_MAX_HISTORY_MESSAGES:]:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role", "")).strip().lower()
+        if role not in ("user", "assistant"):
+            continue
+        content = str(item.get("content", "")).strip()
+        if not content:
+            continue
+        if len(content) > AI_AGENT_MAX_HISTORY_PREVIEW:
+            content = content[:AI_AGENT_MAX_HISTORY_PREVIEW] + " ..."
+        history_lines.append(f"{role.upper()}: {content}")
+
+    history_block = "\n".join(history_lines) if history_lines else "(none)"
+    selection_block = selected_context if selected_context else "(no current selection)"
+    document_block = doc_context if doc_context else "(no document content)"
+
+    system_prompt = (
+        "You are an in-editor AI agent for Markdown documents. "
+        "You must answer clearly and safely. "
+        "When user intent implies a direct editor action, propose exactly one action. "
+        "Allowed actions: none, replace_selection, insert_at_cursor. "
+        "Never propose shell commands, file-system operations, or code execution. "
+        "Prefer replacing selection for commands like 'format this section' and use insertion for generated additions. "
+        "Return strict JSON only."
+    )
+
+    user_prompt = (
+        "Return STRICT JSON with this schema:\n"
+        "{\n"
+        "  \"assistant_message\": \"<string>\",\n"
+        "  \"proposed_action\": {\n"
+        "    \"type\": \"none|replace_selection|insert_at_cursor\",\n"
+        "    \"content\": \"<string>\",\n"
+        "    \"reason\": \"<short string>\"\n"
+        "  }\n"
+        "}\n"
+        "Rules:\n"
+        "1) assistant_message must be plain helpful text for the user.\n"
+        "2) proposed_action.content must be empty when type is none.\n"
+        "3) Preserve Markdown validity in generated content.\n"
+        "4) Keep response concise and editor-focused.\n"
+        "5) If user asks to summarize, assistant_message must include the actual summary text, not meta commentary.\n"
+        "6) Avoid placeholders like 'Here is a summary' without the summary body.\n\n"
+        "Recent conversation:\n"
+        f"{history_block}\n\n"
+        "Current selected text:\n"
+        f"{selection_block}\n\n"
+        "Current document context:\n"
+        f"{document_block}\n\n"
+        "User request:\n"
+        f"{message}"
+    )
+
+    content = ""
+    used_provider = None
+    errors = []
+    for cfg in provider_candidates:
+        try:
+            if cfg["type"] == "openai-compatible":
+                content = _request_translation_openai_compatible(
+                    cfg["base_url"],
+                    cfg["api_key"],
+                    cfg["model"],
+                    system_prompt,
+                    user_prompt,
+                )
+            else:
+                content = _request_translation_anthropic(
+                    cfg["base_url"],
+                    cfg["api_key"],
+                    cfg["model"],
+                    system_prompt,
+                    user_prompt,
+                )
+            used_provider = cfg["name"]
+            break
+        except requests.RequestException as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            errors.append(f"{cfg['name']}: HTTP {status} {exc}")
+            if cfg["name"] == provider_name and status in (401, 403):
+                raise TranslationConfigError(
+                    f"{get_ai_provider_display_name(provider_name)} rejected the configured API key.",
+                    provider_name=provider_name,
+                    env_var=cfg.get("env_var"),
+                    invalid_key=True,
+                ) from exc
+            continue
+        except Exception as exc:
+            errors.append(f"{cfg['name']}: {exc}")
+            continue
+
+    if not content:
+        tried = ", ".join([c["name"] for c in provider_candidates])
+        detail = " | ".join(errors[:3]) if errors else "Unknown AI agent error"
+        raise RuntimeError(
+            "AI agent failed after trying configured providers.\n"
+            f"Tried providers: {tried}\n"
+            f"Details: {detail}"
+        )
+
+    json_text = _extract_json_object(content)
+    if not json_text:
+        return {
+            "assistant_message": content.strip(),
+            "proposed_action": {"type": "none", "content": "", "reason": "non_json_response"},
+            "used_provider": used_provider,
+        }
+
+    try:
+        parsed = json.loads(json_text)
+    except json.JSONDecodeError:
+        return {
+            "assistant_message": content.strip(),
+            "proposed_action": {"type": "none", "content": "", "reason": "json_parse_failed"},
+            "used_provider": used_provider,
+        }
+
+    assistant_message = str(parsed.get("assistant_message", "")).strip() or "(No assistant message)"
+    action = parsed.get("proposed_action", {})
+    if not isinstance(action, dict):
+        action = {}
+
+    action_type = str(action.get("type", "none")).strip().lower()
+    if action_type not in ("none", "replace_selection", "insert_at_cursor"):
+        action_type = "none"
+
+    action_content = str(action.get("content", ""))
+    action_reason = str(action.get("reason", "")).strip()
+    if action_type == "none":
+        action_content = ""
+
+    if action_type != "none" and not action_content.strip():
+        action_type = "none"
+
+    return {
+        "assistant_message": assistant_message,
+        "proposed_action": {
+            "type": action_type,
+            "content": action_content,
+            "reason": action_reason,
+        },
+        "used_provider": used_provider,
+    }
 
 
 def estimate_translation_chunk_count(markdown_text, chunk_lines=20):
