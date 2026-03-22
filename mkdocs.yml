@@ -1,0 +1,9 @@
+site_name: My Docs
+theme:
+  name: material  
+
+nav:
+  - Home: index.md        
+  - Math Rendering Test File: MathRenderingTestFile.md
+  - Prepare For Mac User: PrepareForMacUser.md
+  - Prepare For Windows User: PrepareForWindowsUser.md
