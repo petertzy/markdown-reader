@@ -381,6 +381,9 @@ class MarkdownReader:
 
         self.root.config(menu=menubar)
 
+        #Help menu 
+        menubar.add_cascade(label="Help", command=self.show_help)
+
         # --- Toolbar ---
         style.configure("primary.TFrame")
         toolbar = ttkb.Frame(
@@ -4061,4 +4064,140 @@ Example - Data Table:
                 f"Could not export PDF:\n{exc}\n\nSee console for full traceback.",
             )
             traceback.print_exc()
+
+    def show_help(self):
+        """
+        Displays a help dialog with information about the application features.
+        
+        Opens a new help window containing detailed descriptions of all application menus,
+        menu items, and their functionality. The help window features organized sections
+        for File, View, Edit, Settings, Tools, and Table menus with descriptions and
+        keyboard shortcuts where applicable.
+
+        :return: None. Opens a new window for display but does not return a value.
+        """
+        help_window = tk.Toplevel(self.root)
+        help_window.title("Markdown Reader - Help")
+        help_window.geometry("700x800")
+        help_window.transient(self.root)
+        help_window.resizable(False, False)
+        
+        # Center the help window
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 350
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 400
+        help_window.geometry(f"+{x}+{y}")
+        
+        # Colors
+        bg_color = "#2A2A2A"
+        text_color = "#F5F5F5"
+        
+        # Main container
+        main_container = tk.Frame(help_window, bg=bg_color)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+        
+        # Help text area
+        help_text = ScrolledText(
+            main_container,
+            height=35,
+            width=75,
+            wrap=tk.WORD,
+            font=("Arial", 8),
+            bg=bg_color,
+            fg=text_color,
+            insertbackground=text_color,
+            relief=tk.FLAT,
+            borderwidth=0
+        )
+        help_text.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        
+        # Tags for formatting
+        help_text.tag_configure("bold_item", font=("Arial", 8, "bold"), foreground=text_color)
+        help_text.tag_configure("menu_header", font=("Arial", 9, "bold"), foreground=text_color,justify="left",spacing1=10,spacing3=10)
+        
+        # File Menu
+        help_text.insert("end", "1. File Menu", "menu_header")
+        help_text.insert("end", "\n")
+        
+        help_text.insert("end", "1.1 New", "bold_item")
+        help_text.insert("end", "\n    Creates a new blank Markdown (.md) document for editing.\n\n")
+        
+        help_text.insert("end", "1.2 Open File", "bold_item")
+        help_text.insert("end", "\n    Opens an existing Markdown (.md) file from your system for viewing or editing.\n\n")
+        
+        help_text.insert("end", "1.3 Save File", "bold_item")
+        help_text.insert("end", "\n    Saves the current Markdown document to the selected file location.\n\n")
+        
+        help_text.insert("end", "1.4 Export to HTML", "bold_item")
+        help_text.insert("end", "\n    Converts the current Markdown document into an HTML file for web viewing.\n\n")
+        
+        help_text.insert("end", "1.5 Export to Word", "bold_item")
+        help_text.insert("end", "\n    Exports the current Markdown document as a Microsoft Word (.docx) file.\n\n")
+        
+        help_text.insert("end", "1.6 Export to PDF", "bold_item")
+        help_text.insert("end", "\n    Generates a PDF version of the current Markdown document.\n\n")
+        
+        help_text.insert("end", "1.7 Close", "bold_item")
+        help_text.insert("end", "\n    Closes the currently open Markdown document without exiting the application.\n\n")
+        
+        help_text.insert("end", "1.8 Close All", "bold_item")
+        help_text.insert("end", "\n    Closes all open Markdown documents in the editor.\n\n")
+        
+        help_text.insert("end", "1.9 Exit", "bold_item")
+        help_text.insert("end", "\n    Closes the application completely.\n\n")
+
+        # View Menu
+        help_text.insert("end", "2. View Menu", "menu_header")
+        help_text.insert("end", "\n")
+        
+        help_text.insert("end", "2.1 Toggle Dark Mode", "bold_item")
+        help_text.insert("end", "\n    Switches the interface between light and dark themes for improved readability.\n\n")
+        
+        help_text.insert("end", "2.2 Open Preview in Browser", "bold_item")
+        help_text.insert("end", "\n    Opens the rendered Markdown preview in your default web browser.\n\n")
+        
+        # Edit Menu
+        help_text.insert("end", "3. Edit Menu", "menu_header")
+        help_text.insert("end", "\n")
+        
+        help_text.insert("end", "3.1 Undo", "bold_item")
+        help_text.insert("end", "\n    Reverts the most recent change made in the document.\n\n")
+        
+        help_text.insert("end", "3.2 Redo", "bold_item")
+        help_text.insert("end", "\n    Restores the most recently undone change.\n\n")
+        
+        help_text.insert("end", "3.3 Translate with AI", "bold_item")
+        help_text.insert("end", "\n    Uses AI to translate selected text into another language.\n\n")
+        help_text.insert("end", "    3.3.1 Translate Selected Text with AI", "bold_item")
+        help_text.insert("end", "\n        Translates only the selected portion of text using AI.\n\n")
+        help_text.insert("end", "    3.3.2 Translate Full Document with AI", "bold_item")
+        help_text.insert("end", "\n        Translates the entire document using AI.\n\n")
+        
+        # Settings Menu
+        help_text.insert("end", "4. Settings Menu", "menu_header")
+        help_text.insert("end", "\n")
+        
+        help_text.insert("end", "4.1 AI Provider & API Keys", "bold_item")
+        help_text.insert("end", "\n    Configures AI service providers and API keys used for AI-powered features.\n\n")
+        
+        # Tools Menu
+        help_text.insert("end", "5. Tools Menu", "menu_header")
+        help_text.insert("end", "\n")
+        
+        help_text.insert("end", "5.1 Use Advanced PDF Conversion (Docling)", "bold_item")
+        help_text.insert("end", "\n    Enables enhanced PDF generation using the Docling conversion engine.\n\n")
+        
+        help_text.insert("end", "5.2 PDF Converter Info", "bold_item")
+        help_text.insert("end", "\n    Displays information about the PDF conversion engine used by the application.\n\n")
+        
+        # Table Menu
+        help_text.insert("end", "6. Table Menu", "menu_header")
+        help_text.insert("end", "\n")
+        
+        help_text.insert("end", "6.1 Insert Table", "bold_item")
+        help_text.insert("end", "\n    Provide column names and data in the predefined table format to insert a Markdown-formatted table into the document.\n\n")
+        
+        help_text.insert("end", "6.2 Table Syntax Help", "bold_item")
+        help_text.insert("end", "\n    Provides guidance on writing and formatting tables using Markdown syntax.")
+        
+        help_text.config(state=tk.DISABLED)
 
