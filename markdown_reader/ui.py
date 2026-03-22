@@ -227,8 +227,6 @@ class MarkdownReader:
         self.root.config(menu=menubar)
 
         #Help menu 
-        # helpmenu = tk.Menu(menubar, tearoff=0) 
-        # helpmenu.add_command(label="Help Contents", command=self.show_help)
         menubar.add_cascade(label="Help", command=self.show_help)
 
         # --- Toolbar ---
@@ -2654,90 +2652,92 @@ Example - Data Table:
         
         # Tags for formatting
         help_text.tag_configure("bold_item", font=("Arial", 8, "bold"), foreground=text_color)
-        help_text.tag_configure("menu_header", font=("Arial", 9, "bold"), foreground=text_color,justify="center",spacing1=10,spacing3=10)
+        help_text.tag_configure("menu_header", font=("Arial", 9, "bold"), foreground=text_color,justify="left",spacing1=10,spacing3=10)
         
         # File Menu
-        help_text.insert("end", "File Menu", "menu_header")
-        # help_text.insert("end", "\n" + "─"*80 + "\n", "separator")
-        # help_text.insert("end", "\nView Menu\n", "menu_header")
-        help_text.insert("end", "\n\n")
+        help_text.insert("end", "1. File Menu", "menu_header")
+        help_text.insert("end", "\n")
         
-        help_text.insert("end", "New", "bold_item")
-        help_text.insert("end", "\nCreates a new blank Markdown (.md) document for editing.\n\n")
+        help_text.insert("end", "1.1 New", "bold_item")
+        help_text.insert("end", "\n    Creates a new blank Markdown (.md) document for editing.\n\n")
         
-        help_text.insert("end", "Open File", "bold_item")
-        help_text.insert("end", "\nOpens an existing Markdown (.md) file from your system for viewing or editing.\n\n")
+        help_text.insert("end", "1.2 Open File", "bold_item")
+        help_text.insert("end", "\n    Opens an existing Markdown (.md) file from your system for viewing or editing.\n\n")
         
-        help_text.insert("end", "Save File", "bold_item")
-        help_text.insert("end", "\nSaves the current Markdown document to the selected file location.\n\n")
+        help_text.insert("end", "1.3 Save File", "bold_item")
+        help_text.insert("end", "\n    Saves the current Markdown document to the selected file location.\n\n")
         
-        help_text.insert("end", "Export to HTML", "bold_item")
-        help_text.insert("end", "\nConverts the current Markdown document into an HTML file for web viewing.\n\n")
+        help_text.insert("end", "1.4 Export to HTML", "bold_item")
+        help_text.insert("end", "\n    Converts the current Markdown document into an HTML file for web viewing.\n\n")
         
-        help_text.insert("end", "Export to Word", "bold_item")
-        help_text.insert("end", "\nExports the current Markdown document as a Microsoft Word (.docx) file.\n\n")
+        help_text.insert("end", "1.5 Export to Word", "bold_item")
+        help_text.insert("end", "\n    Exports the current Markdown document as a Microsoft Word (.docx) file.\n\n")
         
-        help_text.insert("end", "Export to PDF", "bold_item")
-        help_text.insert("end", "\nGenerates a PDF version of the current Markdown document.\n\n")
+        help_text.insert("end", "1.6 Export to PDF", "bold_item")
+        help_text.insert("end", "\n    Generates a PDF version of the current Markdown document.\n\n")
         
-        help_text.insert("end", "Close", "bold_item")
-        help_text.insert("end", "\nCloses the currently open Markdown document without exiting the application.\n\n")
+        help_text.insert("end", "1.7 Close", "bold_item")
+        help_text.insert("end", "\n    Closes the currently open Markdown document without exiting the application.\n\n")
         
-        help_text.insert("end", "Close All", "bold_item")
-        help_text.insert("end", "\nCloses all open Markdown documents in the editor.\n\n")
+        help_text.insert("end", "1.8 Close All", "bold_item")
+        help_text.insert("end", "\n    Closes all open Markdown documents in the editor.\n\n")
         
-        help_text.insert("end", "Exit", "bold_item")
-        help_text.insert("end", "\nCloses the application completely.\n\n")
+        help_text.insert("end", "1.9 Exit", "bold_item")
+        help_text.insert("end", "\n    Closes the application completely.\n\n")
 
         # View Menu
-        help_text.insert("end", "View Menu", "menu_header")
-        help_text.insert("end", "\n\n")
+        help_text.insert("end", "2. View Menu", "menu_header")
+        help_text.insert("end", "\n")
         
-        help_text.insert("end", "Toggle Dark Mode", "bold_item")
-        help_text.insert("end", "\nSwitches the interface between light and dark themes for improved readability.\n\n")
+        help_text.insert("end", "2.1 Toggle Dark Mode", "bold_item")
+        help_text.insert("end", "\n    Switches the interface between light and dark themes for improved readability.\n\n")
         
-        help_text.insert("end", "Open Preview in Browser", "bold_item")
-        help_text.insert("end", "\nOpens the rendered Markdown preview in your default web browser.\n\n")
+        help_text.insert("end", "2.2 Open Preview in Browser", "bold_item")
+        help_text.insert("end", "\n    Opens the rendered Markdown preview in your default web browser.\n\n")
         
         # Edit Menu
-        help_text.insert("end", "Edit Menu", "menu_header")
-        help_text.insert("end", "\n\n")
+        help_text.insert("end", "3. Edit Menu", "menu_header")
+        help_text.insert("end", "\n")
         
-        help_text.insert("end", "Undo", "bold_item")
-        help_text.insert("end", "\nReverts the most recent change made in the document.\n\n")
+        help_text.insert("end", "3.1 Undo", "bold_item")
+        help_text.insert("end", "\n    Reverts the most recent change made in the document.\n\n")
         
-        help_text.insert("end", "Redo", "bold_item")
-        help_text.insert("end", "\nRestores the most recently undone change.\n\n")
+        help_text.insert("end", "3.2 Redo", "bold_item")
+        help_text.insert("end", "\n    Restores the most recently undone change.\n\n")
         
-        help_text.insert("end", "Translate with AI", "bold_item")
-        help_text.insert("end", "\nUses AI to translate selected text into another language.\n\n")
+        help_text.insert("end", "3.3 Translate with AI", "bold_item")
+        help_text.insert("end", "\n    Uses AI to translate selected text into another language.\n\n")
+        help_text.insert("end", "    3.3.1 Translate Selected Text with AI", "bold_item")
+        help_text.insert("end", "\n        Translates only the selected portion of text using AI.\n\n")
+        help_text.insert("end", "    3.3.2 Translate Full Document with AI", "bold_item")
+        help_text.insert("end", "\n        Translates the entire document using AI.\n\n")
         
         # Settings Menu
-        help_text.insert("end", "Settings Menu", "menu_header")
-        help_text.insert("end", "\n\n")
+        help_text.insert("end", "4. Settings Menu", "menu_header")
+        help_text.insert("end", "\n")
         
-        help_text.insert("end", "AI Provider & API Keys", "bold_item")
-        help_text.insert("end", "\nConfigures AI service providers and API keys used for AI-powered features.\n\n")
+        help_text.insert("end", "4.1 AI Provider & API Keys", "bold_item")
+        help_text.insert("end", "\n    Configures AI service providers and API keys used for AI-powered features.\n\n")
         
         # Tools Menu
-        help_text.insert("end", "Tools Menu", "menu_header")
-        help_text.insert("end", "\n\n")
+        help_text.insert("end", "5. Tools Menu", "menu_header")
+        help_text.insert("end", "\n")
         
-        help_text.insert("end", "Use Advanced PDF Conversion (Docling)", "bold_item")
-        help_text.insert("end", "\nEnables enhanced PDF generation using the Docling conversion engine.\n\n")
+        help_text.insert("end", "5.1 Use Advanced PDF Conversion (Docling)", "bold_item")
+        help_text.insert("end", "\n    Enables enhanced PDF generation using the Docling conversion engine.\n\n")
         
-        help_text.insert("end", "PDF Converter Info", "bold_item")
-        help_text.insert("end", "\nDisplays information about the PDF conversion engine used by the application.\n\n")
+        help_text.insert("end", "5.2 PDF Converter Info", "bold_item")
+        help_text.insert("end", "\n    Displays information about the PDF conversion engine used by the application.\n\n")
         
         # Table Menu
-        help_text.insert("end", "Table Menu", "menu_header")
-        help_text.insert("end", "\n\n")
+        help_text.insert("end", "6. Table Menu", "menu_header")
+        help_text.insert("end", "\n")
         
-        help_text.insert("end", "Insert Table", "bold_item")
-        help_text.insert("end", "\nInserts a Markdown-formatted table into the document.\n\n")
+        help_text.insert("end", "6.1 Insert Table", "bold_item")
+        help_text.insert("end", "\n    Provide column names and data in the predefined table format to insert a Markdown-formatted table into the document.\n\n")
         
-        help_text.insert("end", "Table Syntax Help", "bold_item")
-        help_text.insert("end", "\nProvides guidance on writing and formatting tables using Markdown syntax.")
+        help_text.insert("end", "6.2 Table Syntax Help", "bold_item")
+        help_text.insert("end", "\n    Provides guidance on writing and formatting tables using Markdown syntax.")
         
         help_text.config(state=tk.DISABLED)
 
