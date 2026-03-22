@@ -2615,6 +2615,13 @@ Example - Data Table:
     def show_help(self):
         """
         Displays a help dialog with information about the application features.
+        
+        Opens a new help window containing detailed descriptions of all application menus,
+        menu items, and their functionality. The help window features organized sections
+        for File, View, Edit, Settings, Tools, and Table menus with descriptions and
+        keyboard shortcuts where applicable.
+
+        :return: None. Opens a new window for display but does not return a value.
         """
         help_window = tk.Toplevel(self.root)
         help_window.title("Markdown Reader - Help")
