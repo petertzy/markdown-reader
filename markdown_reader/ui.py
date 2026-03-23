@@ -82,6 +82,88 @@ class FileChangeHandler(FileSystemEventHandler):
             self.app.root.after(100, lambda: self.app.load_file(self.filepath))
 
 
+class HoverTooltip:
+    """Simple hover tooltip for Tk/ttk widgets."""
+
+    def __init__(self, widget, text, delay=450, max_width=280):
+        self.widget = widget
+        self.text = text
+        self.delay = delay
+        self.max_width = max_width
+        self._after_id = None
+        self._tooltip_window = None
+        self._bind_events()
+
+    def _bind_events(self):
+        self.widget.bind("<Enter>", self._schedule, add="+")
+        self.widget.bind("<Leave>", self._hide, add="+")
+        self.widget.bind("<ButtonPress>", self._hide, add="+")
+        self.widget.bind("<FocusOut>", self._hide, add="+")
+
+    def _schedule(self, _event=None):
+        self._cancel_scheduled()
+        self._after_id = self.widget.after(self.delay, self._show)
+
+    def _cancel_scheduled(self):
+        if self._after_id is not None:
+            self.widget.after_cancel(self._after_id)
+            self._after_id = None
+
+    def _show(self):
+        self._after_id = None
+        if self._tooltip_window is not None or not self.text:
+            return
+
+        x = self.widget.winfo_rootx() + 12
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 8
+
+        self._tooltip_window = tk.Toplevel(self.widget)
+        self._tooltip_window.wm_overrideredirect(True)
+        self._tooltip_window.wm_attributes("-topmost", True)
+
+        outer = tk.Frame(
+            self._tooltip_window,
+            bg="#d8dee8",
+            borderwidth=1,
+            relief="solid",
+        )
+        outer.pack()
+
+        label = tk.Label(
+            outer,
+            text=self.text,
+            justify="left",
+            anchor="w",
+            wraplength=self.max_width,
+            padx=10,
+            pady=6,
+            bg="#ffffff",
+            fg="#1f2937",
+            font=("TkDefaultFont", 10),
+        )
+        label.pack()
+
+        self._tooltip_window.update_idletasks()
+        tip_width = self._tooltip_window.winfo_width()
+        tip_height = self._tooltip_window.winfo_height()
+        screen_w = self._tooltip_window.winfo_screenwidth()
+        screen_h = self._tooltip_window.winfo_screenheight()
+
+        if x + tip_width > screen_w - 10:
+            x = max(10, screen_w - tip_width - 10)
+        if y + tip_height > screen_h - 10:
+            y = self.widget.winfo_rooty() - tip_height - 8
+        y = max(10, y)
+
+        self._tooltip_window.geometry(f"+{x}+{y}")
+
+    def _hide(self, _event=None):
+        self._cancel_scheduled()
+        if self._tooltip_window is not None:
+            self._tooltip_window.destroy()
+            self._tooltip_window = None
+
+
 class MarkdownReader:
     """
     The class that creates the instance of the Markdown reader application.
@@ -126,6 +208,7 @@ class MarkdownReader:
 
         # IME state tracking per widget
         self._ime_states = {}
+        self._tooltips = []
 
         # Translation defaults
         self.translation_source_language = "English"
@@ -399,6 +482,7 @@ class MarkdownReader:
         )
         style_menu.config(width=12)
         style_menu.pack(side=tk.LEFT, padx=2, pady=2)
+        self._tooltips.append(HoverTooltip(style_menu, "Text style (Normal, Heading 1-3)"))
         menu_ = tk.Menu(style_menu, tearoff=0)
         for s in style_options:
             menu_.add_radiobutton(
@@ -416,6 +500,7 @@ class MarkdownReader:
 
         font_menu.config(width=10)
         font_menu.pack(side=tk.LEFT, padx=2)
+        self._tooltips.append(HoverTooltip(font_menu, "Font family"))
 
         menu = tk.Menu(font_menu, tearoff=0)
         for f in fonts[:20]:
@@ -429,29 +514,37 @@ class MarkdownReader:
         uniform_padding = (5, 4)
         # entry config
         style.configure("info.TEntry")
-        ttkb.Button(
+        decrease_size_btn = ttkb.Button(
             toolbar,
             text="-",
             bootstyle=(DANGER, OUTLINE),
             width=button_width,
             padding=uniform_padding,
             command=lambda: self.change_font_size(-1),
-        ).pack(side=tk.LEFT, padx=5)
-        ttkb.Entry(
+        )
+        decrease_size_btn.pack(side=tk.LEFT, padx=5)
+        self._tooltips.append(HoverTooltip(decrease_size_btn, "Decrease font size"))
+
+        font_size_entry = ttkb.Entry(
             toolbar,
             textvariable=self.font_size_var,
             width=3,
             style="info.TEntry",
             justify="center",
-        ).pack(side=tk.LEFT)
-        ttkb.Button(
+        )
+        font_size_entry.pack(side=tk.LEFT)
+        self._tooltips.append(HoverTooltip(font_size_entry, "Font size"))
+
+        increase_size_btn = ttkb.Button(
             toolbar,
             text="+",
             bootstyle=(SUCCESS, OUTLINE),
             width=button_width,
             padding=uniform_padding,
             command=lambda: self.change_font_size(1),
-        ).pack(side=tk.LEFT, padx=5)
+        )
+        increase_size_btn.pack(side=tk.LEFT, padx=5)
+        self._tooltips.append(HoverTooltip(increase_size_btn, "Increase font size"))
 
         # font configuration
 
@@ -478,50 +571,65 @@ class MarkdownReader:
         # highlight
         style.configure("bg.info.TButton", font=("Arial", 9), padding=uniform_padding)
 
-        ttkb.Button(
+        bold_btn = ttkb.Button(
             toolbar,
             text="B",
             style="bold.info.TButton",
             width=button_width,
             command=self.toggle_bold,
-        ).pack(side=tk.LEFT, padx=5)
-        ttkb.Button(
+        )
+        bold_btn.pack(side=tk.LEFT, padx=5)
+        self._tooltips.append(HoverTooltip(bold_btn, "Toggle bold"))
+
+        italic_btn = ttkb.Button(
             toolbar,
             text="I",
             style="italic.info.TButton",
             width=button_width,
             command=self.toggle_italic,
-        ).pack(side=tk.LEFT, padx=5)
-        ttkb.Button(
+        )
+        italic_btn.pack(side=tk.LEFT, padx=5)
+        self._tooltips.append(HoverTooltip(italic_btn, "Toggle italic"))
+
+        underline_btn = ttkb.Button(
             toolbar,
             text="U",
             style="underline.info.TButton",
             width=button_width,
             command=self.toggle_underline,
-        ).pack(side=tk.LEFT, padx=5)
-        ttkb.Button(
+        )
+        underline_btn.pack(side=tk.LEFT, padx=5)
+        self._tooltips.append(HoverTooltip(underline_btn, "Toggle underline"))
+
+        insert_table_btn = ttkb.Button(
             toolbar,
             text="⊞",
             style="insert.info.TButton",
             width=button_width,
             command=self.insert_table,
-        ).pack(side=tk.LEFT, padx=5)
+        )
+        insert_table_btn.pack(side=tk.LEFT, padx=5)
+        self._tooltips.append(HoverTooltip(insert_table_btn, "Insert table"))
         # Text color
-        ttkb.Button(
+        text_color_btn = ttkb.Button(
             toolbar,
             text="A",
             style="fg.info.TButton",
             width=button_width,
             command=self.choose_fg_color,
-        ).pack(side=tk.LEFT, padx=5)
+        )
+        text_color_btn.pack(side=tk.LEFT, padx=5)
+        self._tooltips.append(HoverTooltip(text_color_btn, "Text color"))
         # Highlight color
-        ttkb.Button(
+        highlight_color_btn = ttkb.Button(
             toolbar,
             text="\u0332",
             style="bg.info.TButton",
             width=button_width,
             command=self.choose_bg_color,
-        ).pack(side=tk.LEFT, padx=5)
+        )
+        highlight_color_btn.pack(side=tk.LEFT, padx=5)
+        self._tooltips.append(HoverTooltip(highlight_color_btn, "Highlight color"))
         toolbar.pack(fill=tk.X)
 
         self.translation_progress_frame = ttkb.Frame(self.root, padding=(10, 6))
