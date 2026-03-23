@@ -462,10 +462,11 @@ class MarkdownReader:
             )
         menubar.add_cascade(label="Shortcuts", menu=shortcutsmenu)
 
-        self.root.config(menu=menubar)
+        helpmenu = tk.Menu(menubar, tearoff=0)
+        helpmenu.add_command(label="Help Contents", command=self.show_help)
+        menubar.add_cascade(label="Help", menu=helpmenu)
 
-        #Help menu 
-        menubar.add_cascade(label="Help", command=self.show_help)
+        self.root.config(menu=menubar)
 
         # --- Toolbar ---
         style.configure("primary.TFrame")
@@ -4186,14 +4187,21 @@ Example - Data Table:
         """
         help_window = tk.Toplevel(self.root)
         help_window.title("Markdown Reader - Help")
-        help_window.geometry("700x800")
         help_window.transient(self.root)
         help_window.resizable(False, False)
-        
-        # Center the help window
-        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 350
-        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 400
-        help_window.geometry(f"+{x}+{y}")
+
+        screen_width = help_window.winfo_screenwidth()
+        screen_height = help_window.winfo_screenheight()
+        window_width = min(700, max(520, screen_width - 80))
+        max_window_height = int(screen_height * 0.7)
+        window_height = min(800, max(520, max_window_height))
+
+        # Center the help window while keeping it fully inside the screen.
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (window_width // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (window_height // 2)
+        x = max(20, min(x, screen_width - window_width - 20))
+        y = max(20, min(y, screen_height - window_height - 40))
+        help_window.geometry(f"{window_width}x{window_height}+{x}+{y}")
         
         # Colors
         bg_color = "#2A2A2A"
@@ -4262,6 +4270,9 @@ Example - Data Table:
         
         help_text.insert("end", "2.2 Open Preview in Browser", "bold_item")
         help_text.insert("end", "\n    Opens the rendered Markdown preview in your default web browser.\n\n")
+
+        help_text.insert("end", "2.3 Show AI Agent Panel", "bold_item")
+        help_text.insert("end", "\n    Displays the AI agent interface for interacting with AI-powered features.\n\n")
         
         # Edit Menu
         help_text.insert("end", "3. Edit Menu", "menu_header")
