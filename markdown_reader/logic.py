@@ -27,6 +27,36 @@ except Exception:
 
 AI_CREDENTIAL_SERVICE = "MarkdownReader.AI"
 
+OPENAI_COMPATIBLE_BASE_URL_OPTIONS = {
+    "navidia": "https://integrate.api.nvidia.com/v1",
+    "groq": "https://api.groq.com/openai/v1",
+}
+
+OPENAI_COMPATIBLE_BASE_URL_LABELS = {
+    "navidia": "Navidia",
+    "groq": "Groq",
+}
+
+OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION = {
+    "navidia": [
+        "mistralai/mistral-large-3-675b-instruct-2512",
+        "mistralai/mistral-medium-3-instruct",
+        "mistralai/mistral-small-3.1-24b-instruct-2503",
+    ],
+    "groq": [
+        "openai/gpt-oss-120b",
+        "llama-3.3-70b-versatile",
+        "openai/gpt-oss-20b",
+    ],
+}
+
+AI_PROVIDER_PRIORITY = (
+    "openai_compatible",
+    "openrouter",
+    "openai",
+    "anthropic",
+)
+
 
 def _get_settings_file_path():
     """Return the per-user settings file path for desktop app persistence."""
@@ -48,6 +78,7 @@ AI_AUTOMATION_LOG_FILE_PATH = APP_SETTINGS_FILE_PATH.parent / "ai_automation_log
 
 # Hardcoded provider base URLs so bundled apps work without external env files.
 AI_PROVIDER_BASE_URLS = {
+    "openai_compatible": OPENAI_COMPATIBLE_BASE_URL_OPTIONS["navidia"],
     "openrouter": "https://openrouter.ai/api/v1",
     "openai": "https://api.openai.com/v1",
     "anthropic": "https://api.anthropic.com/v1",
@@ -81,6 +112,7 @@ AI_PROVIDER_DEFAULT_MODELS = {
 
 # Environment-variable name used to persist the user's chosen model per provider.
 AI_PROVIDER_MODEL_ENV = {
+    "openai_compatible": "OPENAI_COMPATIBLE_MODEL",
     "openrouter": "OPENROUTER_MODEL",
     "openai": "OPENAI_MODEL",
     "anthropic": "ANTHROPIC_MODEL",
@@ -697,9 +729,138 @@ def _normalize_provider_name(provider_name):
     normalized = (provider_name or "").strip().lower()
     if normalized == "athropic":
         normalized = "anthropic"
-    if normalized not in ("openrouter", "openai", "anthropic"):
+    if normalized in ("openai-compatible", "openai compatible", "openai_compatible"):
+        normalized = "openai_compatible"
+    if normalized not in AI_PROVIDER_PRIORITY:
         normalized = "openrouter"
     return normalized
+
+
+def get_openai_compatible_base_url_options():
+    """Return available base URL options for the OpenAI Compatible provider."""
+
+    options = []
+    for key, url in OPENAI_COMPATIBLE_BASE_URL_OPTIONS.items():
+        options.append(
+            {
+                "key": key,
+                "label": OPENAI_COMPATIBLE_BASE_URL_LABELS.get(key, key.title()),
+                "url": url,
+            }
+        )
+    return options
+
+
+def get_openai_compatible_base_url_choice():
+    """Return the selected OpenAI Compatible base URL option key."""
+
+    env_choice = (os.getenv("OPENAI_COMPATIBLE_BASE_URL_CHOICE", "") or "").strip().lower()
+    if env_choice in OPENAI_COMPATIBLE_BASE_URL_OPTIONS:
+        return env_choice
+
+    settings = _load_app_settings()
+    saved_choice = (
+        settings.get("openai_compatible_base_url_choice", "")
+        if isinstance(settings, dict)
+        else ""
+    )
+    saved_choice = (saved_choice or "").strip().lower()
+    if saved_choice in OPENAI_COMPATIBLE_BASE_URL_OPTIONS:
+        return saved_choice
+
+    return "navidia"
+
+
+def get_openai_compatible_base_url():
+    """Return the active OpenAI Compatible base URL."""
+
+    env_url = (os.getenv("OPENAI_COMPATIBLE_BASE_URL", "") or "").strip()
+    if env_url:
+        return env_url
+
+    choice = get_openai_compatible_base_url_choice()
+    return OPENAI_COMPATIBLE_BASE_URL_OPTIONS.get(choice, OPENAI_COMPATIBLE_BASE_URL_OPTIONS["navidia"])
+
+
+def get_openai_compatible_storage_key_name(base_url_choice=None):
+    """Return the keyring slot name for the given (or active) OpenAI Compatible endpoint.
+
+    Each endpoint gets its own storage slot so that Navidia and Groq keys are kept separate.
+    E.g. "openai_compatible_navidia", "openai_compatible_groq".
+    """
+    if base_url_choice is None:
+        base_url_choice = get_openai_compatible_base_url_choice()
+    choice = (base_url_choice or "").strip().lower()
+    if choice in OPENAI_COMPATIBLE_BASE_URL_OPTIONS:
+        return f"openai_compatible_{choice}"
+    return "openai_compatible"
+
+
+def get_openai_compatible_env_var(base_url_choice=None):
+    """Return the endpoint-specific OpenAI Compatible API key env var name.
+
+    This keeps Navidia and Groq keys isolated when users provide runtime env vars.
+    """
+    if base_url_choice is None:
+        base_url_choice = get_openai_compatible_base_url_choice()
+    choice = (base_url_choice or "").strip().lower()
+    if choice in OPENAI_COMPATIBLE_BASE_URL_OPTIONS:
+        return f"OPENAI_COMPATIBLE_{choice.upper()}_API_KEY"
+    return "OPENAI_COMPATIBLE_API_KEY"
+
+
+def set_openai_compatible_base_url_choice(choice_key):
+    """Persist and activate the selected OpenAI Compatible base URL option."""
+
+    normalized_choice = (choice_key or "").strip().lower()
+    if normalized_choice not in OPENAI_COMPATIBLE_BASE_URL_OPTIONS:
+        normalized_choice = "navidia"
+
+    selected_url = OPENAI_COMPATIBLE_BASE_URL_OPTIONS[normalized_choice]
+    os.environ["OPENAI_COMPATIBLE_BASE_URL_CHOICE"] = normalized_choice
+    os.environ["OPENAI_COMPATIBLE_BASE_URL"] = selected_url
+
+    settings = _load_app_settings()
+    settings["openai_compatible_base_url_choice"] = normalized_choice
+    _save_app_settings(settings)
+
+    return normalized_choice
+
+
+def get_provider_default_models(provider_name, base_url_override=""):
+    """Return fallback default models for a provider.
+
+    For OpenAI Compatible, defaults depend on the selected base URL option.
+    """
+
+    normalized = _normalize_provider_name(provider_name)
+    if normalized != "openai_compatible":
+        return list(AI_PROVIDER_DEFAULT_MODELS.get(normalized, []))
+
+    override_url = (base_url_override or "").strip()
+    selected_choice = ""
+    if override_url:
+        for option_key, option_url in OPENAI_COMPATIBLE_BASE_URL_OPTIONS.items():
+            if override_url.rstrip("/") == option_url.rstrip("/"):
+                selected_choice = option_key
+                break
+
+    if not selected_choice:
+        selected_choice = get_openai_compatible_base_url_choice()
+
+    return list(
+        OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION.get(
+            selected_choice,
+            OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION.get("navidia", []),
+        )
+    )
+
+
+def _build_provider_order(primary_provider):
+    """Build fallback order with deterministic priority for secondary providers."""
+
+    normalized_primary = _normalize_provider_name(primary_provider)
+    return [normalized_primary] + [name for name in AI_PROVIDER_PRIORITY if name != normalized_primary]
 
 
 def load_persisted_ai_settings():
@@ -708,8 +869,9 @@ def load_persisted_ai_settings():
     settings = _load_app_settings()
     if not settings:
         settings = {
-            "ai_provider": "openrouter",
+            "ai_provider": AI_PROVIDER_PRIORITY[0],
             "ai_models": {},
+            "openai_compatible_base_url_choice": "navidia",
         }
         _save_app_settings(settings)
 
@@ -719,7 +881,7 @@ def load_persisted_ai_settings():
 
     saved_models = settings.get("ai_models", {})
     if not isinstance(saved_models, dict):
-        return
+        saved_models = {}
 
     for provider_name, env_key in AI_PROVIDER_MODEL_ENV.items():
         if os.environ.get(env_key, "").strip():
@@ -727,6 +889,19 @@ def load_persisted_ai_settings():
         model_name = (saved_models.get(provider_name, "") or "").strip()
         if model_name:
             os.environ[env_key] = model_name
+
+    if not os.environ.get("OPENAI_COMPATIBLE_BASE_URL_CHOICE", "").strip():
+        saved_choice = (settings.get("openai_compatible_base_url_choice", "") or "").strip().lower()
+        if saved_choice not in OPENAI_COMPATIBLE_BASE_URL_OPTIONS:
+            saved_choice = "navidia"
+        os.environ["OPENAI_COMPATIBLE_BASE_URL_CHOICE"] = saved_choice
+
+    if not os.environ.get("OPENAI_COMPATIBLE_BASE_URL", "").strip():
+        selected_choice = get_openai_compatible_base_url_choice()
+        os.environ["OPENAI_COMPATIBLE_BASE_URL"] = OPENAI_COMPATIBLE_BASE_URL_OPTIONS.get(
+            selected_choice,
+            OPENAI_COMPATIBLE_BASE_URL_OPTIONS["navidia"],
+        )
 
 
 def set_current_ai_provider(provider_name):
@@ -746,8 +921,11 @@ def get_ai_provider_env_var(provider_name):
     normalized = (provider_name or "").strip().lower()
     if normalized == "athropic":
         normalized = "anthropic"
+    if normalized in ("openai-compatible", "openai compatible"):
+        normalized = "openai_compatible"
 
     return {
+        "openai_compatible": "OPENAI_COMPATIBLE_API_KEY",
         "openrouter": "OPENROUTER_API_KEY",
         "openai": "OPENAI_API_KEY",
         "anthropic": "ANTHROPIC_API_KEY",
@@ -758,6 +936,12 @@ def get_ai_provider_display_name(provider_name):
     """Return a human-friendly provider name."""
 
     normalized = (provider_name or "").strip().lower()
+    if normalized == "athropic":
+        normalized = "anthropic"
+    if normalized in ("openai-compatible", "openai compatible"):
+        normalized = "openai_compatible"
+    if normalized == "openai_compatible":
+        return "OpenAI Compatible"
     if normalized == "openrouter":
         return "OpenRouter"
     if normalized == "openai":
@@ -773,6 +957,23 @@ def is_secure_key_storage_available():
     return keyring is not None
 
 
+def _normalize_key_slot_name(provider_or_slot_name):
+    """Normalize key storage slot names while preserving endpoint-specific slots.
+
+    Examples:
+    - "openai_compatible_groq" stays as-is
+    - "openai compatible" -> "openai_compatible"
+    - unknown values fall back via provider normalization rules
+    """
+
+    raw = (provider_or_slot_name or "").strip().lower()
+    if raw.startswith("openai_compatible_"):
+        suffix = raw[len("openai_compatible_") :]
+        if suffix in OPENAI_COMPATIBLE_BASE_URL_OPTIONS:
+            return raw
+    return _normalize_provider_name(provider_or_slot_name)
+
+
 def get_secure_ai_api_key(provider_name):
     """Read a provider API key from keyring.
 
@@ -780,7 +981,7 @@ def get_secure_ai_api_key(provider_name):
     legacy JSON ``api_keys`` field if present.
     """
 
-    normalized = _normalize_provider_name(provider_name)
+    normalized = _normalize_key_slot_name(provider_name)
 
     if keyring is not None:
         try:
@@ -814,7 +1015,7 @@ def get_secure_ai_api_key(provider_name):
 def set_secure_ai_api_key(provider_name, api_key):
     """Persist a provider API key in keyring."""
 
-    normalized = _normalize_provider_name(provider_name)
+    normalized = _normalize_key_slot_name(provider_name)
     cleaned_key = (api_key or "").strip()
     if not cleaned_key:
         raise RuntimeError("API key cannot be empty.")
@@ -840,7 +1041,7 @@ def set_secure_ai_api_key(provider_name, api_key):
 def delete_secure_ai_api_key(provider_name):
     """Remove a provider API key from keyring."""
 
-    normalized = _normalize_provider_name(provider_name)
+    normalized = _normalize_key_slot_name(provider_name)
     if keyring is not None:
         try:
             keyring.delete_password(AI_CREDENTIAL_SERVICE, normalized)
@@ -867,9 +1068,7 @@ def get_ai_provider_model(provider_name):
     3. legacy keyring value (backward compatibility)
     4. built-in default  (first entry in AI_PROVIDER_DEFAULT_MODELS)
     """
-    normalized = (provider_name or "").strip().lower()
-    if normalized == "athropic":
-        normalized = "anthropic"
+    normalized = _normalize_provider_name(provider_name)
     env_key = AI_PROVIDER_MODEL_ENV.get(normalized)
 
     # 1. Runtime environment (explicit process override)
@@ -898,7 +1097,7 @@ def get_ai_provider_model(provider_name):
             pass
 
     # 4. Built-in default
-    defaults = AI_PROVIDER_DEFAULT_MODELS.get(normalized, [])
+    defaults = get_provider_default_models(normalized)
     return defaults[0] if defaults else ""
 
 
@@ -922,15 +1121,21 @@ def set_ai_provider_model(provider_name, model_name):
     _save_app_settings(settings)
 
 
-def fetch_available_models(provider_name, api_key, timeout=8):
+def fetch_available_models(provider_name, api_key, timeout=8, base_url_override=""):
     """Fetch the model list from the provider API and return a sorted list of model IDs.
 
     Falls back to the built-in default list on any error so the dialog always
     has something to show.
     """
-    normalized = (provider_name or "").strip().lower()
+    normalized = _normalize_provider_name(provider_name)
     base_url = AI_PROVIDER_BASE_URLS.get(normalized, "")
-    defaults = list(AI_PROVIDER_DEFAULT_MODELS.get(normalized, []))
+    defaults = get_provider_default_models(normalized, base_url_override=base_url_override)
+
+    override_url = (base_url_override or "").strip()
+    if override_url:
+        base_url = override_url
+    elif normalized == "openai_compatible":
+        base_url = get_openai_compatible_base_url()
 
     if not api_key or not base_url:
         return defaults
@@ -1228,23 +1433,32 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
     if source_language.lower() == target_language.lower():
         return markdown_text, ["Source and target language are identical; no translation applied."]
 
-    provider_name = os.getenv("AI_PROVIDER", "openrouter").strip().lower()
+    provider_name = _normalize_provider_name(os.getenv("AI_PROVIDER", "openrouter"))
 
-    if provider_name == "athropic":
-        provider_name = "anthropic"
-
-    if provider_name not in ("openrouter", "openai", "anthropic"):
+    if provider_name not in AI_PROVIDER_PRIORITY:
         raise TranslationConfigError(
-            f"Unsupported AI provider '{provider_name}'. Use openrouter, openai, or anthropic in AI_PROVIDER",
+            f"Unsupported AI provider '{provider_name}'. Use openai_compatible, openrouter, openai, or anthropic in AI_PROVIDER",
             provider_name=provider_name,
         )
 
     def _provider_cfg(name):
-        stored_key = get_secure_ai_api_key(name)
         # Use hardcoded base URLs so bundled apps work without external env files.
         # Explicit process env vars still override when present.
         base_url = AI_PROVIDER_BASE_URLS.get(name, "")
         model = get_ai_provider_model(name)
+        if name == "openai_compatible":
+            slot = get_openai_compatible_storage_key_name()
+            stored_key = get_secure_ai_api_key(slot)
+            env_var = get_openai_compatible_env_var()
+            return {
+                "name": "openai_compatible",
+                "api_key": os.getenv(env_var, "").strip() or stored_key,
+                "base_url": os.getenv("OPENAI_COMPATIBLE_BASE_URL", get_openai_compatible_base_url()).strip(),
+                "model": model,
+                "type": "openai-compatible",
+                "env_var": env_var,
+            }
+        stored_key = get_secure_ai_api_key(name)
         if name == "openrouter":
             return {
                 "name": "openrouter",
@@ -1272,7 +1486,7 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
             "env_var": "ANTHROPIC_API_KEY",
         }
 
-    provider_order = [provider_name] + [name for name in ("openrouter", "openai", "anthropic") if name != provider_name]
+    provider_order = _build_provider_order(provider_name)
     provider_candidates = []
     for name in provider_order:
         cfg = _provider_cfg(name)
@@ -1450,19 +1664,29 @@ def request_ai_agent_response(user_message, document_text="", selected_text="", 
     if fallback_result:
         return fallback_result
 
-    provider_name = os.getenv("AI_PROVIDER", "openrouter").strip().lower()
-    if provider_name == "athropic":
-        provider_name = "anthropic"
-    if provider_name not in ("openrouter", "openai", "anthropic"):
+    provider_name = _normalize_provider_name(os.getenv("AI_PROVIDER", "openrouter"))
+    if provider_name not in AI_PROVIDER_PRIORITY:
         raise TranslationConfigError(
-            f"Unsupported AI provider '{provider_name}'. Use openrouter, openai, or anthropic in AI_PROVIDER",
+            f"Unsupported AI provider '{provider_name}'. Use openai_compatible, openrouter, openai, or anthropic in AI_PROVIDER",
             provider_name=provider_name,
         )
 
     def _provider_cfg(name):
-        stored_key = get_secure_ai_api_key(name)
         base_url = AI_PROVIDER_BASE_URLS.get(name, "")
         model = get_ai_provider_model(name)
+        if name == "openai_compatible":
+            slot = get_openai_compatible_storage_key_name()
+            stored_key = get_secure_ai_api_key(slot)
+            env_var = get_openai_compatible_env_var()
+            return {
+                "name": "openai_compatible",
+                "api_key": os.getenv(env_var, "").strip() or stored_key,
+                "base_url": os.getenv("OPENAI_COMPATIBLE_BASE_URL", get_openai_compatible_base_url()).strip(),
+                "model": model,
+                "type": "openai-compatible",
+                "env_var": env_var,
+            }
+        stored_key = get_secure_ai_api_key(name)
         if name == "openrouter":
             return {
                 "name": "openrouter",
@@ -1490,9 +1714,7 @@ def request_ai_agent_response(user_message, document_text="", selected_text="", 
             "env_var": "ANTHROPIC_API_KEY",
         }
 
-    provider_order = [provider_name] + [
-        name for name in ("openrouter", "openai", "anthropic") if name != provider_name
-    ]
+    provider_order = _build_provider_order(provider_name)
     provider_candidates = []
     for name in provider_order:
         cfg = _provider_cfg(name)

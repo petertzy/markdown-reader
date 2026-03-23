@@ -19,8 +19,8 @@ from watchdog.observers import Observer
 from markdown_reader.file_handler import drop_file, load_file
 from markdown_reader.logic import (
     APP_SETTINGS_FILE_PATH,
-    AI_PROVIDER_DEFAULT_MODELS,
     AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES,
+    AI_PROVIDER_PRIORITY,
     TranslationConfigError,
     append_ai_automation_log,
     convert_html_to_markdown,
@@ -35,6 +35,11 @@ from markdown_reader.logic import (
     get_ai_provider_display_name,
     get_ai_provider_env_var,
     get_ai_provider_model,
+    get_provider_default_models,
+    get_openai_compatible_base_url_choice,
+    get_openai_compatible_base_url_options,
+    get_openai_compatible_env_var,
+    get_openai_compatible_storage_key_name,
     get_secure_ai_api_key,
     is_secure_key_storage_available,
     load_ai_chat_histories,
@@ -45,6 +50,7 @@ from markdown_reader.logic import (
     load_ai_automation_logs,
     set_current_ai_provider,
     set_ai_provider_model,
+    set_openai_compatible_base_url_choice,
     set_secure_ai_api_key,
     split_markdown_for_translation,
     translate_markdown_with_ai,
@@ -236,7 +242,7 @@ class MarkdownReader:
             "Chinese (Traditional)",
         ]
         self.ai_provider_var = tk.StringVar(
-            value=os.getenv("AI_PROVIDER", "openrouter").strip().lower() or "openrouter"
+            value=os.getenv("AI_PROVIDER", AI_PROVIDER_PRIORITY[0]).strip().lower() or AI_PROVIDER_PRIORITY[0]
         )
         self.ai_chat_panel_visible_var = tk.BooleanVar(value=False)
         self.ai_chat_context_mode_var = tk.StringVar(value="selection")
@@ -2966,11 +2972,12 @@ class MarkdownReader:
     def _get_current_ai_provider(self):
         """Return the current runtime AI provider."""
 
+        _default = AI_PROVIDER_PRIORITY[0]
         return (
-            (self.ai_provider_var.get() or os.getenv("AI_PROVIDER", "openrouter"))
+            (self.ai_provider_var.get() or os.getenv("AI_PROVIDER", _default))
             .strip()
             .lower()
-            or "openrouter"
+            or _default
         )
 
     def _request_translation_cancel(self):
@@ -3017,7 +3024,7 @@ class MarkdownReader:
     ):
         """Prompt the user for an API key and optional secure persistence."""
 
-        provider_options = ["openrouter", "openai", "anthropic"]
+        provider_options = ["openai_compatible", "openrouter", "openai", "anthropic"]
         initial_provider = (provider_name or self._get_current_ai_provider()).strip().lower()
         if initial_provider not in provider_options:
             initial_provider = "openrouter"
@@ -3192,8 +3199,13 @@ class MarkdownReader:
     def open_ai_provider_config(self):
         """Open the unified AI Provider & API Keys dialog."""
 
-        providers = ["openrouter", "openai", "anthropic"]
-        provider_labels = {"openrouter": "OpenRouter", "openai": "OpenAI", "anthropic": "Anthropic"}
+        providers = ["openai_compatible", "openrouter", "openai", "anthropic"]
+        provider_labels = {
+            "openai_compatible": "OpenAI Compatible",
+            "openrouter": "OpenRouter",
+            "openai": "OpenAI",
+            "anthropic": "Anthropic",
+        }
 
         dialog = tk.Toplevel(self.root)
         dialog.title("AI Provider & API Keys")
@@ -3219,11 +3231,36 @@ class MarkdownReader:
             width=30,
         )
         # Show display label in the combo
-        provider_combo.set(provider_labels.get(provider_var.get(), "OpenRouter"))
+        provider_combo.set(provider_labels.get(provider_var.get(), provider_labels[AI_PROVIDER_PRIORITY[0]]))
         provider_combo.pack(anchor="w", pady=(4, 12))
 
+        # --- OpenAI Compatible base URL ---
+        base_url_frame = ttk.Frame(container)
+        base_url_label = ttk.Label(base_url_frame, text="Base URL:")
+        base_url_label.pack(anchor="w")
+
+        base_url_options = get_openai_compatible_base_url_options()
+        base_url_label_to_key = {item["label"]: item["key"] for item in base_url_options}
+        base_url_key_to_label = {item["key"]: item["label"] for item in base_url_options}
+        base_url_key_to_url = {item["key"]: item["url"] for item in base_url_options}
+        base_url_var = tk.StringVar(value=get_openai_compatible_base_url_choice())
+        base_url_combo = ttk.Combobox(
+            base_url_frame,
+            state="readonly",
+            width=28,
+            values=[item["label"] for item in base_url_options],
+        )
+        base_url_combo.pack(anchor="w", pady=(4, 0))
+
+        current_base_choice = base_url_var.get().strip().lower()
+        if current_base_choice not in base_url_key_to_label:
+            current_base_choice = "navidia"
+            base_url_var.set(current_base_choice)
+        base_url_combo.set(base_url_key_to_label.get(current_base_choice, "Navidia"))
+
         # --- Model selection ---
-        ttk.Label(container, text="Model:").pack(anchor="w")
+        model_label = ttk.Label(container, text="Model:")
+        model_label.pack(anchor="w")
         model_var = tk.StringVar()
         model_combo = ttk.Combobox(container, textvariable=model_var, width=50)
         model_combo.pack(anchor="w", pady=(4, 4))
@@ -3268,41 +3305,108 @@ class MarkdownReader:
             for p, lbl in provider_labels.items():
                 if lbl == label:
                     return p
-            return label.lower()
+            lowered = label.lower().strip().replace(" ", "_").replace("-", "_")
+            if lowered == "openai_compatible":
+                return "openai_compatible"
+            return lowered
+
+        def _effective_key_name():
+            """Return the keyring slot name to use for the currently selected provider/endpoint."""
+            pname = _get_normalized_provider()
+            if pname == "openai_compatible":
+                selected_label = base_url_combo.get().strip()
+                selected_key = base_url_label_to_key.get(
+                    selected_label,
+                    (base_url_var.get().strip().lower() or "navidia"),
+                )
+                base_url_var.set(selected_key)
+                return get_openai_compatible_storage_key_name(selected_key)
+            return pname
+
+        def _effective_env_var_name():
+            """Return the runtime env var name for the currently selected provider/endpoint."""
+            pname = _get_normalized_provider()
+            if pname == "openai_compatible":
+                selected_label = base_url_combo.get().strip()
+                selected_key = base_url_label_to_key.get(
+                    selected_label,
+                    (base_url_var.get().strip().lower() or "navidia"),
+                )
+                base_url_var.set(selected_key)
+                return get_openai_compatible_env_var(selected_key)
+            return get_ai_provider_env_var(pname)
+
+        def _sync_openai_compatible_base_choice(*_):
+            selected_label = base_url_combo.get().strip()
+            selected_key = base_url_label_to_key.get(selected_label, "navidia")
+            base_url_var.set(selected_key)
+            # Refresh model list and clear stale key entry for the new endpoint
+            _refresh_ui()
+
+        base_url_combo.bind("<<ComboboxSelected>>", _sync_openai_compatible_base_choice)
 
         def _refresh_ui(*_):
             pname = _get_normalized_provider()
-            # Keep the persisted model visible even when it is not in the curated defaults.
-            defaults = list(AI_PROVIDER_DEFAULT_MODELS.get(pname, []))
+
+            if pname == "openai_compatible":
+                if not base_url_frame.winfo_manager():
+                    base_url_frame.pack(anchor="w", pady=(0, 8), before=model_label)
+            else:
+                if base_url_frame.winfo_manager():
+                    base_url_frame.pack_forget()
+
+            # For regular providers, keep a persisted custom model visible even when
+            # it is not in curated defaults. For openai_compatible, models are
+            # endpoint-specific (e.g., Navidia vs Groq), so do not inject cross-endpoint models.
+            selected_base_url = ""
+            if pname == "openai_compatible":
+                selected_base_url = base_url_key_to_url.get(base_url_var.get().strip().lower(), "")
+            defaults = get_provider_default_models(pname, base_url_override=selected_base_url)
             current_model = (get_ai_provider_model(pname) or "").strip()
             model_values = list(defaults)
-            if current_model and current_model not in model_values:
+            if pname != "openai_compatible" and current_model and current_model not in model_values:
                 model_values.insert(0, current_model)
 
             model_combo["values"] = model_values
-            if current_model:
+            if current_model and (pname != "openai_compatible" or current_model in model_values):
                 model_var.set(current_model)
             else:
                 model_var.set(model_values[0] if model_values else "")
             api_key_entry.delete(0, tk.END)
-            stored_key_status_var.set(
-                "Stored key status is checked only when needed to avoid system prompts."
+            env_var = _effective_env_var_name()
+            existing_key = (os.environ.get(env_var, "").strip() if env_var else "") or get_secure_ai_api_key(
+                _effective_key_name()
             )
+            if existing_key:
+                stored_key_status_var.set("A key is already configured for the current provider/endpoint.")
+                fetch_status_var.set("")
+            else:
+                stored_key_status_var.set("No key configured for the current provider/endpoint. Please enter an API key.")
+                fetch_status_var.set("This endpoint has no API key yet. Please enter one.")
             hint_var.set(
                 "Keys are stored in the system credential store. A prompt may appear when a key is accessed."
             )
 
         def _fetch_models_async(*_):
             pname = _get_normalized_provider()
-            key = api_key_entry.get().strip() or get_secure_ai_api_key(pname)
+            key = api_key_entry.get().strip() or get_secure_ai_api_key(_effective_key_name())
             if not key:
                 fetch_status_var.set("Enter an API key to fetch the live model list.")
                 return
+
+            selected_base_url = ""
+            if pname == "openai_compatible":
+                selected_base_url = base_url_key_to_url.get(base_url_var.get().strip().lower(), "")
+
             fetch_status_var.set("Fetching model list…")
             model_combo.config(state="disabled")
 
             def worker():
-                models = fetch_available_models(pname, key)
+                models = fetch_available_models(
+                    pname,
+                    key,
+                    base_url_override=selected_base_url,
+                )
                 def update():
                     model_combo.config(state="normal")
                     model_combo["values"] = models
@@ -3319,13 +3423,30 @@ class MarkdownReader:
             new_key = api_key_entry.get().strip()
             chosen_model = model_var.get().strip()
 
+            if pname == "openai_compatible":
+                set_openai_compatible_base_url_choice(base_url_var.get())
+
+            # Ensure a key exists for this provider/endpoint before saving.
+            if not new_key:
+                env_var = _effective_env_var_name()
+                existing_key = (os.environ.get(env_var, "").strip() if env_var else "") or get_secure_ai_api_key(
+                    _effective_key_name()
+                )
+                if not existing_key:
+                    dialogs.Messagebox.show_error(
+                        "API Key Required",
+                        f"No API key is stored for this endpoint.\nPlease enter a key in the API Key field.",
+                    )
+                    api_key_entry.focus_set()
+                    return
+
             # Key handling
             if new_key:
-                env_var = get_ai_provider_env_var(pname)
+                env_var = _effective_env_var_name()
                 if env_var:
                     os.environ[env_var] = new_key
                 try:
-                    set_secure_ai_api_key(pname, new_key)
+                    set_secure_ai_api_key(_effective_key_name(), new_key)
                 except Exception as exc:
                     dialogs.Messagebox.show_error("Key Storage", f"Could not save key: {exc}")
                     return
@@ -3347,10 +3468,10 @@ class MarkdownReader:
         def on_delete_key():
             pname = _get_normalized_provider()
             try:
-                delete_secure_ai_api_key(pname)
+                delete_secure_ai_api_key(_effective_key_name())
             except Exception:
                 pass
-            env_var = get_ai_provider_env_var(pname)
+            env_var = _effective_env_var_name()
             if env_var and env_var in os.environ:
                 del os.environ[env_var]
             api_key_entry.delete(0, tk.END)
@@ -3395,12 +3516,22 @@ class MarkdownReader:
 
         # Return a synthetic "confirmed" dict so the translation worker retries.
         env_var = get_ai_provider_env_var(provider_name)
+        key_slot = provider_name
+        if provider_name == "openai_compatible":
+            choice = get_openai_compatible_base_url_choice()
+            env_var = get_openai_compatible_env_var(choice)
+            key_slot = get_openai_compatible_storage_key_name(choice)
         has_key = bool(
             (env_var and os.environ.get(env_var, "").strip())
-            or get_secure_ai_api_key(provider_name)
+            or get_secure_ai_api_key(key_slot)
         )
         if has_key:
             return {"confirmed": True, "provider_name": provider_name}
+        dialogs.Messagebox.show_error(
+            "Missing API Key",
+            f"{get_ai_provider_display_name(provider_name)} is not configured for the current endpoint.\n"
+            "Please enter an API key and save settings.",
+        )
         return None
 
     def _prepare_translation_session(
