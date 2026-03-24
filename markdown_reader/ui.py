@@ -2996,7 +2996,12 @@ class MarkdownReader:
         self.translation_status_var.set(message)
         self._translation_cancel_btn.configure(state="normal")
         if not self.translation_progress_frame.winfo_manager():
-            self.translation_progress_frame.pack(fill=tk.X, before=self.notebook)
+            # Keep the progress row directly above the main editor area.
+            pack_before = getattr(self, "editor_split_pane", None)
+            if pack_before and pack_before.winfo_parent() == str(self.root):
+                self.translation_progress_frame.pack(fill=tk.X, before=pack_before)
+            else:
+                self.translation_progress_frame.pack(fill=tk.X)
 
     def _update_translation_progress(self, current_step, total_steps, message):
         """Update the translation progress UI."""
