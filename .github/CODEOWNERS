@@ -4,6 +4,11 @@
 # Files in markdown_reader folder should be reviewed by petertzy and Xavi
 markdown_reader/ @petertzy @Xavi1
 
+# Documentation files should be reviewed by petertzy and lwu1822
+docs/ @petertzy @lwu1822
+mkdocs.yml @petertzy @lwu1822
+.github/workflows/deploy-docs.yml @petertzy @lwu1822
+
 # Markdown and workflow files should be reviewed by petertzy
 *.md or *.MD @petertzy
 *.yml @petertzy

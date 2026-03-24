@@ -203,3 +203,9 @@ All contributions are welcome, including:
 
 Please see our [CONTRIBUTING](CONTRIBUTING.md) guide for more details on how to get started, submit changes, or report issues.
 
+---
+
+## Contributors
+
+We are grateful to all our contributors! See [CONTRIBUTORS.md](CONTRIBUTORS.md) for the full list of amazing people who have contributed to this project.
+
