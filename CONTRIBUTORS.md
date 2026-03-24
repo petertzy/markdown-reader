@@ -10,6 +10,7 @@ Thank you to all the contributors who have helped make Markdown Reader better!
 - [@lwu1822](https://github.com/lwu1822) - MkDocs documentation site setup and GitHub Actions deployment (#153)
 - [@PMaruthiPrasad](https://github.com/PMaruthiPrasad) - Help menu feature (#150)
 - [@CarlosHCS001](https://github.com/CarlosHCS001) - Documentation improvements (#148)
+- [@larikardoso](https://github.com/larikardoso) - Background color dialog fix (#88) and documentation improvements (#92)
 
 ## How to Contribute
 
