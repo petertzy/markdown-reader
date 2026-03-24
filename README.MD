@@ -207,5 +207,30 @@ Please see our [CONTRIBUTING](CONTRIBUTING.md) guide for more details on how to 
 
 ## Contributors
 
-We are grateful to all our contributors! See [CONTRIBUTORS.md](CONTRIBUTORS.md) for the full list of amazing people who have contributed to this project.
+We are grateful to all our contributors who have made this project better! Special thanks to:
+
+**Major Contributors:**
+- [@MatthewEmer](https://github.com/MatthewEmer) - 22 commits
+- [@Dazaa1](https://github.com/Dazaa1) - 10 commits
+- [@PMaruthiPrasad](https://github.com/PMaruthiPrasad) - Help menu feature
+- [@lwu1822](https://github.com/lwu1822) - MkDocs documentation setup
+
+**All Contributors:**
+See [CONTRIBUTORS.md](CONTRIBUTORS.md) for the complete list of all contributors including:
+- [@larikardoso](https://github.com/larikardoso)
+- [@metergames](https://github.com/metergames)
+- [@gustavo-szesz](https://github.com/gustavo-szesz)
+- [@ferrandj](https://github.com/ferrandj)
+- [@nwankwolinus](https://github.com/nwankwolinus)
+- [@Xavi1](https://github.com/Xavi1)
+- [@CarlosHCS001](https://github.com/CarlosHCS001)
+- [@jonaebel](https://github.com/jonaebel)
+- [@Poorna-Raj](https://github.com/Poorna-Raj)
+- [@NalinKaushik](https://github.com/NalinKaushik)
+- [@apoorvdarshan](https://github.com/apoorvdarshan)
+- [@raza-khan0108](https://github.com/raza-khan0108)
+- [@O-sama12](https://github.com/O-sama12)
+- And many more!
+
+For a detailed breakdown, please visit [CONTRIBUTORS.md](CONTRIBUTORS.md).
 
