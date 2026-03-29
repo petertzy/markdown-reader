@@ -56,7 +56,8 @@ def drop_file(event, app):
         file_paths = _extract_paths_from_drop_data(raw_data, splitlist)
 
         # Process each file
-        processed = False
+        processed_count = 0
+        skipped_count = 0
         for file_path in file_paths:
             file_path = os.path.abspath(file_path.strip())
             if not file_path:
@@ -65,15 +66,13 @@ def drop_file(event, app):
             # Check if file exists
             if not os.path.isfile(file_path):
                 print(f"Skipping missing dropped path: {file_path}")
+                skipped_count += 1
                 continue
 
             # Check file extension
             if not file_path.lower().endswith(('.md', '.markdown', '.html', '.htm', '.pdf')):
                 print(f"Skipping unsupported dropped file type: {file_path}")
-                messagebox.showwarning(
-                    "Warning",
-                    "Only .md, .markdown, .html, .htm, and .pdf files are supported",
-                )
+                skipped_count += 1
                 continue
 
             # Create a new tab and load the file
@@ -81,12 +80,15 @@ def drop_file(event, app):
 
             # Use app.load_file() which handles HTML to Markdown conversion
             app.load_file(file_path)
-            processed = True
+            processed_count += 1
 
-            # Only process the first valid file
-            break
+        if skipped_count > 0:
+            messagebox.showwarning(
+                "Warning",
+                "Only .md, .markdown, .html, .htm, and .pdf files are supported",
+            )
 
-        if not processed:
+        if processed_count == 0:
             messagebox.showwarning("Warning", "No valid files found in drop data")
 
     except Exception as e:
