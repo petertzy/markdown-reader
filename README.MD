@@ -17,6 +17,7 @@ Markdown Reader is a clean and intuitive Markdown editor/reader with real-time p
 * Dark mode toggle.
 * **Advanced Table Editor**: Interactive table insertion with customizable rows and columns.
 * **Dual PDF Conversion**: Fast PyMuPDF mode or advanced [Docling](https://github.com/docling-project/docling) mode for complex documents.
+* **Drag and Drop File Open**: Drag supported files directly into the app window to open them in a new tab.
 * Built with pure Python, Tkinter, and ttkbootstrap — cross-platform.
 * Can be bundled as a macOS app using `py2app`.
 * Opens preview automatically and avoids multiple browser tabs for a smoother experience.
@@ -74,6 +75,7 @@ python app.py
 ### How to Use
 
 * **Open File**: Choose `.md`, `.markdown`, `.html`, `.htm`, or `.pdf` from the "File → Open File" menu.
+* **Drag and Drop**: Drag and drop files into the application window. Supported file types: `.md`, `.markdown`, `.html`, `.htm`, and `.pdf`.
 * **Open with Double-Click**: Double-clicking a `.md` file opens it directly with the app and displays the document with a real-time preview.
 * **Editor-Only Mode**: To open a `.md` file in the editor without automatically generating a web preview, configure the double-click behavior via "Settings → Open Behavior → Editor Only".
 * **Dark Mode**: Toggle via "View → Toggle Dark Mode".

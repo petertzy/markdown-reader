@@ -258,6 +258,7 @@ class MarkdownReader:
         self._chat_busy = False
         self._untitled_counter = 0
         self.tab_document_ids = []
+        self._registered_drop_targets = set()
         self._translation_session_counter = 0
         self._translation_cancel_requested = False
         self._last_search_query = ""
@@ -692,6 +693,8 @@ class MarkdownReader:
             self.show_tab_context_menu,
         )
         self.notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed)
+        self._register_drop_target(self.root)
+        self._register_drop_target(self.notebook)
 
         self._set_ai_chat_panel_visible(self.ai_chat_panel_visible_var.get())
 
@@ -1530,6 +1533,36 @@ class MarkdownReader:
         except Exception as exc:
             dialogs.Messagebox.show_error("AI Data Folder", f"Failed to open folder: {exc}")
 
+    def _register_drop_target(self, widget):
+        """
+        Register a widget as a file drop target when TkDnD support is enabled.
+
+        :param tk.Widget widget: The Tk-compatible widget to register for `<<Drop>>` events.
+
+        :return: A None value after attempting registration. Returns early when DnD is unavailable, unsupported on the widget, or already registered.
+
+        :raises AttributeError: If the MarkdownReader instance does not have an initialized `root` attribute.
+        """
+
+        dnd_files_type = getattr(self.root, "_dnd_files_type", None)
+        if not dnd_files_type:
+            return
+
+        if not hasattr(widget, "drop_target_register") or not hasattr(widget, "dnd_bind"):
+            return
+
+        widget_id = str(widget)
+        if widget_id in self._registered_drop_targets:
+            return
+
+        try:
+            widget.drop_target_register(dnd_files_type)
+            widget.dnd_bind("<<Drop>>", self._on_drop_files)
+            self._registered_drop_targets.add(widget_id)
+        except Exception:
+            # Keep app usable even if drop target registration fails on a platform.
+            pass
+
     def _on_drop_files(self, event):
         """
         Handles file drop events.
@@ -1539,10 +1572,6 @@ class MarkdownReader:
         :raises RuntimeError: If the error handling drop fails.
         """
 
-        print(f"🔍 Drop event triggered")
-        print(f"   Event data type: {type(event.data)}")
-        print(f"   Event data: {event.data}")
-
         try:
             drop_file(event, self)
         except Exception as e:
@@ -1550,6 +1579,8 @@ class MarkdownReader:
             import traceback
 
             traceback.print_exc()
+
+        return "break"
 
     def new_file(self):
         """
@@ -1662,6 +1693,7 @@ class MarkdownReader:
 
         # Bind KeyPress DIRECTLY with priority
         text_area.bind("<KeyPress>", intercept_key, add=False)
+        self._register_drop_target(text_area)
 
         # Other bindings come after
         self.notebook.add(frame, text="")

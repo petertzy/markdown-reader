@@ -6,6 +6,12 @@ import tkinter as tk
 import ttkbootstrap as ttkb
 from ttkbootstrap.constants import *
 
+try:
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+except Exception:
+    DND_FILES = None
+    TkinterDnD = None
+
 from markdown_reader.ui import MarkdownReader
 
 
@@ -185,9 +191,33 @@ def _install_sigint_handler(root, app):
     return previous_handler
 
 
-if __name__ == "__main__":
-    # Use ttkbootstrap window directly for stable styling across Python/Tk versions.
+def _create_root_window():
+    """
+    Create the application root window and attach drag-and-drop capability metadata.
+
+    When `tkinterdnd2` is available, this function creates a `TkinterDnD.Tk` root and
+    stores the DnD file token on the root object. Otherwise, it creates a
+    `ttkbootstrap.Window` root and disables DnD metadata.
+
+    :return: A Tk-compatible root window instance configured with the darkly theme and a `_dnd_files_type` attribute.
+
+    :raises tk.TclError: If the underlying Tk root window or theme initialization fails.
+    """
+
+    if TkinterDnD is not None:
+        root = TkinterDnD.Tk()
+        ttkb.Style(theme="darkly")
+        root._dnd_files_type = DND_FILES
+        return root
+
+    # Use ttkbootstrap window directly for stable styling when TkDnD is unavailable.
     root = ttkb.Window(themename="darkly")
+    root._dnd_files_type = None
+    return root
+
+
+if __name__ == "__main__":
+    root = _create_root_window()
     _set_macos_app_icon(root)
 
     # Ensure window is resizable

@@ -1,4 +1,5 @@
 import os
+import re
 from tkinter import messagebox
 
 
@@ -42,67 +43,90 @@ def drop_file(event, app):
     """
 
     try:
-        # Parse the event data - handle various formats
-        raw_data = str(event.data)
-        
-        print(f"🔍 Parsing drop data: {raw_data[:100]}")
-        
-        # Remove curly braces if present (common in tkinterdnd2)
-        raw_data = raw_data.strip('{}')
-        
-        # Split by whitespace to handle multiple files
-        # But be careful with paths that have spaces
-        file_paths = []
-        
-        if '{' in raw_data or '}' in raw_data:
-            # macOS format might use braces for each file
-            import re
-            paths = re.findall(r'\{([^}]+)\}', raw_data)
-            file_paths = paths if paths else [raw_data]
-        else:
-            # Try to split by common path separators
-            # This is a simplified approach - works for most cases
-            file_paths = [raw_data]
-        
-        print(f"   Extracted {len(file_paths)} file path(s)")
-        
+        raw_data = str(getattr(event, "data", "") or "").strip()
+        if not raw_data:
+            messagebox.showwarning("Warning", "No files were dropped")
+            return
+
+        splitlist = None
+        tk_app = getattr(getattr(app, "root", None), "tk", None)
+        if tk_app is not None and hasattr(tk_app, "splitlist"):
+            splitlist = tk_app.splitlist
+
+        file_paths = _extract_paths_from_drop_data(raw_data, splitlist)
+
         # Process each file
         processed = False
         for file_path in file_paths:
-            file_path = file_path.strip()
+            file_path = os.path.abspath(file_path.strip())
             if not file_path:
                 continue
-            
-            print(f"   Processing: {file_path}")
-            
+
             # Check if file exists
             if not os.path.isfile(file_path):
-                print(f"   ⚠️  File not found: {file_path}")
+                print(f"Skipping missing dropped path: {file_path}")
                 continue
-            
+
             # Check file extension
             if not file_path.lower().endswith(('.md', '.markdown', '.html', '.htm', '.pdf')):
-                print(f"   ⚠️  Unsupported file type: {file_path}")
-                messagebox.showwarning("Warning", f"Only .md, .html, and .pdf files are supported")
+                print(f"Skipping unsupported dropped file type: {file_path}")
+                messagebox.showwarning(
+                    "Warning",
+                    "Only .md, .markdown, .html, .htm, and .pdf files are supported",
+                )
                 continue
-            
+
             # Create a new tab and load the file
-            print(f"   ✅ Loading file: {file_path}")
             app.new_file()
-            idx = app.notebook.index(app.notebook.select())
-            
+
             # Use app.load_file() which handles HTML to Markdown conversion
             app.load_file(file_path)
             processed = True
-            
+
             # Only process the first valid file
             break
-        
+
         if not processed:
             messagebox.showwarning("Warning", "No valid files found in drop data")
-            
+
     except Exception as e:
         print(f"❌ Error in drop_file: {e}")
         import traceback
         traceback.print_exc()
         messagebox.showerror("Error", f"Failed to process dropped file: {e}")
+
+
+def _extract_paths_from_drop_data(raw_data, splitlist=None):
+    """
+    Extract one or more file-system paths from a TkDnD drop payload.
+
+    :param str raw_data: The raw drop payload string received from the drag-and-drop event.
+    :param callable splitlist: Optional Tk splitlist callable used to parse Tcl-style list payloads.
+
+    :return: A list of parsed path strings. If parsing yields no tokens, returns a single-item list containing the original payload.
+
+    :raises TypeError: If raw_data is not a string and cannot be processed by the regex fallback parser.
+    """
+
+    if callable(splitlist):
+        try:
+            parsed = [part.strip() for part in splitlist(raw_data) if str(part).strip()]
+            if parsed:
+                return parsed
+        except Exception:
+            pass
+
+    # Fallback parser for raw payloads with braces, quotes, or plain whitespace.
+    pattern = r"\{([^}]*)\}|\"([^\"]*)\"|(\S+)"
+    matches = re.findall(pattern, raw_data)
+    paths = []
+    for brace_path, quoted_path, plain_path in matches:
+        candidate = brace_path or quoted_path or plain_path
+        candidate = candidate.strip()
+        if candidate:
+            paths.append(candidate)
+
+    if paths:
+        return paths
+
+    return [raw_data]
