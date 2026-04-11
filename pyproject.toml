@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "markdown-reader"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "markdown>=3.5.0",
+    "markdown2>=2.4.0",
+    "py2app>=0.28; sys_platform == 'darwin'",
+    "watchdog",
+    "html2text>=2020.1.16",
+    "python-docx>=1.1.0",
+    "pygments",
+    "ttkbootstrap",
+    "pypdf>=4.0.0",
+    "PyMuPDF>=1.23.0",
+    "weasyprint>=62.0",
+    "requests>=2.28.0",
+    "keyring>=25.0.0",
+    "docling",
+    "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
+]
+
+[project.optional-dependencies]
+docs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.7.6",
+]
+dev = [
+    "ruff>=0.9",
+    "ty",
+]
+
+[tool.uv]
+# This is an application, not an installable library.
+package = false
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+# E/W: pycodestyle  F: pyflakes  I: isort  UP: pyupgrade
+select = ["E", "F", "I", "UP", "W"]
+ignore = [
+    "E501",  # line too long — handled by formatter
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["markdown_reader"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ty]
+# ty is Astral's type checker (https://github.com/astral-sh/ty).
+# Configuration will grow as the project adopts type annotations.
