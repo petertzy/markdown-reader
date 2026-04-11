@@ -1,20 +1,20 @@
-import markdown2
+import json
 import os
+import re
 import subprocess
 import sys
-import webbrowser
-import re
-import json
-from datetime import datetime, timezone
-from pathlib import Path
-import html2text
-from html import escape as html_escape
-from tkinter import messagebox
-from docx import Document
-from docx.shared import Pt, RGBColor, Inches
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 import traceback
+import webbrowser
+from html import escape as html_escape
+from pathlib import Path
+from tkinter import messagebox
+
+import html2text
+import markdown2
 import requests
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Inches, Pt, RGBColor
 
 try:
     import keyring
@@ -24,6 +24,7 @@ except Exception:
 
     class KeyringError(Exception):
         pass
+
 
 AI_CREDENTIAL_SERVICE = "MarkdownReader.AI"
 
@@ -65,7 +66,11 @@ def _get_settings_file_path():
         base_dir = Path.home() / "Library" / "Application Support" / "MarkdownReader"
     elif sys.platform.startswith("win"):
         appdata = os.environ.get("APPDATA", "").strip()
-        base_dir = Path(appdata) / "MarkdownReader" if appdata else Path.home() / "AppData" / "Roaming" / "MarkdownReader"
+        base_dir = (
+            Path(appdata) / "MarkdownReader"
+            if appdata
+            else Path.home() / "AppData" / "Roaming" / "MarkdownReader"
+        )
     else:
         base_dir = Path.home() / ".config" / "markdown-reader"
 
@@ -177,7 +182,7 @@ def load_ai_automation_logs(limit=AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES):
         return []
 
     try:
-        with open(AI_AUTOMATION_LOG_FILE_PATH, "r", encoding="utf-8") as file_obj:
+        with open(AI_AUTOMATION_LOG_FILE_PATH, encoding="utf-8") as file_obj:
             data = json.load(file_obj)
     except Exception:
         return []
@@ -329,12 +334,16 @@ def _format_and_fix_code_blocks(markdown_text):
                 continue
 
             if in_fence and marker.startswith(fence_marker[0]):
-                if out_lines and re.match(r"^\s*(```+|~~~+)\s*$", out_lines[-(len(block_lines) + 1)]):
+                if out_lines and re.match(
+                    r"^\s*(```+|~~~+)\s*$", out_lines[-(len(block_lines) + 1)]
+                ):
                     opening = out_lines[-(len(block_lines) + 1)]
                     if opening.strip() in ("```", "~~~"):
                         guessed = _guess_code_language("\n".join(block_lines))
                         if guessed:
-                            out_lines[-(len(block_lines) + 1)] = f"{opening.strip()}{guessed}"
+                            out_lines[-(len(block_lines) + 1)] = (
+                                f"{opening.strip()}{guessed}"
+                            )
 
                 out_lines.append(fence_marker)
                 in_fence = False
@@ -346,7 +355,9 @@ def _format_and_fix_code_blocks(markdown_text):
             block_lines.append(line)
 
     if in_fence:
-        if out_lines and re.match(r"^\s*(```+|~~~+)\s*$", out_lines[-(len(block_lines) + 1)]):
+        if out_lines and re.match(
+            r"^\s*(```+|~~~+)\s*$", out_lines[-(len(block_lines) + 1)]
+        ):
             opening = out_lines[-(len(block_lines) + 1)]
             guessed = _guess_code_language("\n".join(block_lines))
             if guessed and opening.strip() in ("```", "~~~"):
@@ -459,13 +470,21 @@ def build_ai_automation_fallback(user_message, document_text="", selected_text="
     if not msg:
         return None
 
-    if any(keyword in lowered for keyword in ("template", "task template", "automation template")):
+    if any(
+        keyword in lowered
+        for keyword in ("template", "task template", "automation template")
+    ):
         template_lines = []
         for template in get_ai_automation_task_templates():
-            selection_hint = " (selection required)" if template["requires_selection"] else ""
-            template_lines.append(f"- {template['id']}: {template['title']}{selection_hint}")
+            selection_hint = (
+                " (selection required)" if template["requires_selection"] else ""
+            )
+            template_lines.append(
+                f"- {template['id']}: {template['title']}{selection_hint}"
+            )
         return {
-            "assistant_message": "Available automation templates:\n" + "\n".join(template_lines),
+            "assistant_message": "Available automation templates:\n"
+            + "\n".join(template_lines),
             "proposed_action": {
                 "type": "none",
                 "content": "",
@@ -605,7 +624,7 @@ def load_ai_chat_histories():
         return {}
 
     try:
-        with open(AI_CHAT_HISTORY_FILE_PATH, "r", encoding="utf-8") as file_obj:
+        with open(AI_CHAT_HISTORY_FILE_PATH, encoding="utf-8") as file_obj:
             data = json.load(file_obj)
     except Exception:
         return {}
@@ -698,7 +717,7 @@ def _load_app_settings():
         return {}
 
     try:
-        with open(APP_SETTINGS_FILE_PATH, "r", encoding="utf-8") as file_obj:
+        with open(APP_SETTINGS_FILE_PATH, encoding="utf-8") as file_obj:
             data = json.load(file_obj)
             return data if isinstance(data, dict) else {}
     except Exception:
@@ -718,6 +737,7 @@ def _save_app_settings(settings):
         # Restrict to owner-only read/write to reduce exposure of local settings.
         if sys.platform != "win32":
             import stat as _stat
+
             APP_SETTINGS_FILE_PATH.chmod(_stat.S_IRUSR | _stat.S_IWUSR)
     except Exception:
         return
@@ -754,7 +774,9 @@ def get_openai_compatible_base_url_options():
 def get_openai_compatible_base_url_choice():
     """Return the selected OpenAI Compatible base URL option key."""
 
-    env_choice = (os.getenv("OPENAI_COMPATIBLE_BASE_URL_CHOICE", "") or "").strip().lower()
+    env_choice = (
+        (os.getenv("OPENAI_COMPATIBLE_BASE_URL_CHOICE", "") or "").strip().lower()
+    )
     if env_choice in OPENAI_COMPATIBLE_BASE_URL_OPTIONS:
         return env_choice
 
@@ -779,7 +801,9 @@ def get_openai_compatible_base_url():
         return env_url
 
     choice = get_openai_compatible_base_url_choice()
-    return OPENAI_COMPATIBLE_BASE_URL_OPTIONS.get(choice, OPENAI_COMPATIBLE_BASE_URL_OPTIONS["navidia"])
+    return OPENAI_COMPATIBLE_BASE_URL_OPTIONS.get(
+        choice, OPENAI_COMPATIBLE_BASE_URL_OPTIONS["navidia"]
+    )
 
 
 def get_openai_compatible_storage_key_name(base_url_choice=None):
@@ -860,7 +884,9 @@ def _build_provider_order(primary_provider):
     """Build fallback order with deterministic priority for secondary providers."""
 
     normalized_primary = _normalize_provider_name(primary_provider)
-    return [normalized_primary] + [name for name in AI_PROVIDER_PRIORITY if name != normalized_primary]
+    return [normalized_primary] + [
+        name for name in AI_PROVIDER_PRIORITY if name != normalized_primary
+    ]
 
 
 def load_persisted_ai_settings():
@@ -891,16 +917,22 @@ def load_persisted_ai_settings():
             os.environ[env_key] = model_name
 
     if not os.environ.get("OPENAI_COMPATIBLE_BASE_URL_CHOICE", "").strip():
-        saved_choice = (settings.get("openai_compatible_base_url_choice", "") or "").strip().lower()
+        saved_choice = (
+            (settings.get("openai_compatible_base_url_choice", "") or "")
+            .strip()
+            .lower()
+        )
         if saved_choice not in OPENAI_COMPATIBLE_BASE_URL_OPTIONS:
             saved_choice = "navidia"
         os.environ["OPENAI_COMPATIBLE_BASE_URL_CHOICE"] = saved_choice
 
     if not os.environ.get("OPENAI_COMPATIBLE_BASE_URL", "").strip():
         selected_choice = get_openai_compatible_base_url_choice()
-        os.environ["OPENAI_COMPATIBLE_BASE_URL"] = OPENAI_COMPATIBLE_BASE_URL_OPTIONS.get(
-            selected_choice,
-            OPENAI_COMPATIBLE_BASE_URL_OPTIONS["navidia"],
+        os.environ["OPENAI_COMPATIBLE_BASE_URL"] = (
+            OPENAI_COMPATIBLE_BASE_URL_OPTIONS.get(
+                selected_choice,
+                OPENAI_COMPATIBLE_BASE_URL_OPTIONS["navidia"],
+            )
         )
 
 
@@ -1088,9 +1120,7 @@ def get_ai_provider_model(provider_name):
     # 3. Legacy keyring-persisted choice (for migration compatibility)
     if keyring is not None:
         try:
-            stored = keyring.get_password(
-                AI_CREDENTIAL_SERVICE, f"model:{normalized}"
-            )
+            stored = keyring.get_password(AI_CREDENTIAL_SERVICE, f"model:{normalized}")
             if stored and stored.strip():
                 return stored.strip()
         except Exception:
@@ -1129,7 +1159,9 @@ def fetch_available_models(provider_name, api_key, timeout=8, base_url_override=
     """
     normalized = _normalize_provider_name(provider_name)
     base_url = AI_PROVIDER_BASE_URLS.get(normalized, "")
-    defaults = get_provider_default_models(normalized, base_url_override=base_url_override)
+    defaults = get_provider_default_models(
+        normalized, base_url_override=base_url_override
+    )
 
     override_url = (base_url_override or "").strip()
     if override_url:
@@ -1154,7 +1186,11 @@ def fetch_available_models(provider_name, api_key, timeout=8, base_url_override=
             )
             resp.raise_for_status()
             data = resp.json()
-            models = [m["id"] for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
+            models = [
+                m["id"]
+                for m in data.get("data", [])
+                if isinstance(m, dict) and m.get("id")
+            ]
         else:
             # OpenAI-compatible endpoint (OpenRouter and OpenAI both support /models)
             headers = {"Authorization": f"Bearer {api_key}"}
@@ -1165,7 +1201,11 @@ def fetch_available_models(provider_name, api_key, timeout=8, base_url_override=
             )
             resp.raise_for_status()
             data = resp.json()
-            models = [m["id"] for m in data.get("data", []) if isinstance(m, dict) and m.get("id")]
+            models = [
+                m["id"]
+                for m in data.get("data", [])
+                if isinstance(m, dict) and m.get("id")
+            ]
 
         if models:
             # Put defaults first so the most useful ones surface at the top,
@@ -1232,7 +1272,9 @@ def _restore_chunk_outer_whitespace(original_text, translated_text):
     if not isinstance(original_text, str):
         return translated_text
 
-    translated = translated_text if isinstance(translated_text, str) else str(translated_text)
+    translated = (
+        translated_text if isinstance(translated_text, str) else str(translated_text)
+    )
     leading_match = re.match(r"^\s*", original_text)
     trailing_match = re.search(r"\s*$", original_text)
     leading = leading_match.group(0) if leading_match else ""
@@ -1242,7 +1284,9 @@ def _restore_chunk_outer_whitespace(original_text, translated_text):
     return f"{leading}{core}{trailing}"
 
 
-def _request_translation_openai_compatible(base_url, api_key, model, system_prompt, user_prompt):
+def _request_translation_openai_compatible(
+    base_url, api_key, model, system_prompt, user_prompt
+):
     """
     Sends translation request to OpenAI-compatible chat endpoint.
     """
@@ -1299,7 +1343,11 @@ def _request_translation_openai_compatible(base_url, api_key, model, system_prom
         raise RuntimeError(f"No choices in AI response: {data}")
 
     first_choice = choices[0] if isinstance(choices[0], dict) else {}
-    message = first_choice.get("message", {}) if isinstance(first_choice.get("message", {}), dict) else {}
+    message = (
+        first_choice.get("message", {})
+        if isinstance(first_choice.get("message", {}), dict)
+        else {}
+    )
     content = message.get("content", "")
 
     if isinstance(content, list):
@@ -1321,7 +1369,9 @@ def _request_translation_openai_compatible(base_url, api_key, model, system_prom
     return content
 
 
-def _request_translation_anthropic(base_url, api_key, model, system_prompt, user_prompt):
+def _request_translation_anthropic(
+    base_url, api_key, model, system_prompt, user_prompt
+):
     """
     Sends translation request to Anthropic messages endpoint.
     """
@@ -1373,7 +1423,11 @@ def _request_translation_anthropic(base_url, api_key, model, system_prompt, user
 
     data = response.json()
     blocks = data.get("content", [])
-    text_blocks = [block.get("text", "") for block in blocks if isinstance(block, dict) and block.get("type") == "text"]
+    text_blocks = [
+        block.get("text", "")
+        for block in blocks
+        if isinstance(block, dict) and block.get("type") == "text"
+    ]
     content = "\n".join([part for part in text_blocks if part])
     if not content.strip():
         raise RuntimeError(f"Empty content in Anthropic response: {data}")
@@ -1393,14 +1447,16 @@ def _extract_json_object(raw_text):
 
     text = raw_text.strip()
 
-    fenced_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', text, re.IGNORECASE)
+    fenced_match = re.search(
+        r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text, re.IGNORECASE
+    )
     if fenced_match:
         return fenced_match.group(1).strip()
 
     start = text.find("{")
     end = text.rfind("}")
     if start != -1 and end != -1 and end > start:
-        return text[start:end + 1]
+        return text[start : end + 1]
 
     return None
 
@@ -1431,7 +1487,9 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
         raise RuntimeError("Source and target language are required.")
 
     if source_language.lower() == target_language.lower():
-        return markdown_text, ["Source and target language are identical; no translation applied."]
+        return markdown_text, [
+            "Source and target language are identical; no translation applied."
+        ]
 
     provider_name = _normalize_provider_name(os.getenv("AI_PROVIDER", "openrouter"))
 
@@ -1453,7 +1511,9 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
             return {
                 "name": "openai_compatible",
                 "api_key": os.getenv(env_var, "").strip() or stored_key,
-                "base_url": os.getenv("OPENAI_COMPATIBLE_BASE_URL", get_openai_compatible_base_url()).strip(),
+                "base_url": os.getenv(
+                    "OPENAI_COMPATIBLE_BASE_URL", get_openai_compatible_base_url()
+                ).strip(),
                 "model": model,
                 "type": "openai-compatible",
                 "env_var": env_var,
@@ -1512,8 +1572,8 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
         f"Translate the following Markdown from {source_language} to {target_language}.\n"
         "Return STRICT JSON with this schema:\n"
         "{\n"
-        "  \"translated_markdown\": \"<string>\",\n"
-        "  \"ambiguity_notes\": [\"<note1>\", \"<note2>\"]\n"
+        '  "translated_markdown": "<string>",\n'
+        '  "ambiguity_notes": ["<note1>", "<note2>"]\n'
         "}\n"
         "Rules:\n"
         "1) Keep all Markdown syntax and structure intact.\n"
@@ -1574,9 +1634,14 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
             lowered = err.lower()
             if "not a chat model" in lowered or "v1/chat/completions" in lowered:
                 bad_provider = (err.split(":", 1)[0] or "").strip().lower()
-                bad_cfg = next((c for c in provider_candidates if c.get("name") == bad_provider), None)
+                bad_cfg = next(
+                    (c for c in provider_candidates if c.get("name") == bad_provider),
+                    None,
+                )
                 bad_model = (bad_cfg or {}).get("model", "")
-                provider_label = get_ai_provider_display_name(bad_provider or provider_name)
+                provider_label = get_ai_provider_display_name(
+                    bad_provider or provider_name
+                )
 
                 message = (
                     "AI translation could not continue because the selected model is not chat-compatible.\n\n"
@@ -1598,12 +1663,16 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
 
     json_text = _extract_json_object(content)
     if not json_text:
-        return _restore_chunk_outer_whitespace(markdown_text, content), ["AI response was not strict JSON; fallback text was used."]
+        return _restore_chunk_outer_whitespace(markdown_text, content), [
+            "AI response was not strict JSON; fallback text was used."
+        ]
 
     try:
         parsed = json.loads(json_text)
     except json.JSONDecodeError:
-        return _restore_chunk_outer_whitespace(markdown_text, content), ["AI response JSON parsing failed; fallback text was used."]
+        return _restore_chunk_outer_whitespace(markdown_text, content), [
+            "AI response JSON parsing failed; fallback text was used."
+        ]
 
     translated_markdown = parsed.get("translated_markdown", "")
     ambiguity_notes = parsed.get("ambiguity_notes", [])
@@ -1614,13 +1683,26 @@ def translate_markdown_with_ai(markdown_text, source_language, target_language):
     if not isinstance(ambiguity_notes, list):
         ambiguity_notes = [str(ambiguity_notes)] if ambiguity_notes else []
 
-    ambiguity_notes = [str(note).strip() for note in ambiguity_notes if str(note).strip()]
+    ambiguity_notes = [
+        str(note).strip() for note in ambiguity_notes if str(note).strip()
+    ]
     if used_provider and used_provider != provider_name:
-        ambiguity_notes.insert(0, f"Primary provider '{provider_name}' failed; fallback provider '{used_provider}' was used.")
-    return _restore_chunk_outer_whitespace(markdown_text, translated_markdown), ambiguity_notes
+        ambiguity_notes.insert(
+            0,
+            f"Primary provider '{provider_name}' failed; fallback provider '{used_provider}' was used.",
+        )
+    return _restore_chunk_outer_whitespace(
+        markdown_text, translated_markdown
+    ), ambiguity_notes
 
 
-def translate_markdown_in_chunks(markdown_text, source_language, target_language, chunk_lines=20, progress_callback=None):
+def translate_markdown_in_chunks(
+    markdown_text,
+    source_language,
+    target_language,
+    chunk_lines=20,
+    progress_callback=None,
+):
     """Translate markdown in smaller chunks and emit progress updates."""
 
     if not isinstance(markdown_text, str) or not markdown_text.strip():
@@ -1643,12 +1725,16 @@ def translate_markdown_in_chunks(markdown_text, source_language, target_language
         translated_chunks.append(translated_chunk)
         all_notes.extend(ambiguity_notes)
         if progress_callback:
-            progress_callback(index, total_chunks, f"Translated chunk {index}/{total_chunks}")
+            progress_callback(
+                index, total_chunks, f"Translated chunk {index}/{total_chunks}"
+            )
 
     return translated_chunks, all_notes
 
 
-def request_ai_agent_response(user_message, document_text="", selected_text="", chat_history=None):
+def request_ai_agent_response(
+    user_message, document_text="", selected_text="", chat_history=None
+):
     """Request a structured AI agent response for editor chat workflows."""
 
     message = (user_message or "").strip()
@@ -1681,7 +1767,9 @@ def request_ai_agent_response(user_message, document_text="", selected_text="", 
             return {
                 "name": "openai_compatible",
                 "api_key": os.getenv(env_var, "").strip() or stored_key,
-                "base_url": os.getenv("OPENAI_COMPATIBLE_BASE_URL", get_openai_compatible_base_url()).strip(),
+                "base_url": os.getenv(
+                    "OPENAI_COMPATIBLE_BASE_URL", get_openai_compatible_base_url()
+                ).strip(),
                 "model": model,
                 "type": "openai-compatible",
                 "env_var": env_var,
@@ -1732,9 +1820,14 @@ def request_ai_agent_response(user_message, document_text="", selected_text="", 
     doc_context = (document_text or "").strip()
     selected_context = (selected_text or "").strip()
     if len(doc_context) > AI_AGENT_MAX_DOC_CONTEXT:
-        doc_context = doc_context[:AI_AGENT_MAX_DOC_CONTEXT] + "\n\n[Document context truncated]"
+        doc_context = (
+            doc_context[:AI_AGENT_MAX_DOC_CONTEXT] + "\n\n[Document context truncated]"
+        )
     if len(selected_context) > AI_AGENT_MAX_SELECTION_CONTEXT:
-        selected_context = selected_context[:AI_AGENT_MAX_SELECTION_CONTEXT] + "\n\n[Selection context truncated]"
+        selected_context = (
+            selected_context[:AI_AGENT_MAX_SELECTION_CONTEXT]
+            + "\n\n[Selection context truncated]"
+        )
 
     history_lines = []
     safe_history = chat_history if isinstance(chat_history, list) else []
@@ -1769,11 +1862,11 @@ def request_ai_agent_response(user_message, document_text="", selected_text="", 
     user_prompt = (
         "Return STRICT JSON with this schema:\n"
         "{\n"
-        "  \"assistant_message\": \"<string>\",\n"
-        "  \"proposed_action\": {\n"
-        "    \"type\": \"none|replace_selection\",\n"
-        "    \"content\": \"<string>\",\n"
-        "    \"reason\": \"<short string>\"\n"
+        '  "assistant_message": "<string>",\n'
+        '  "proposed_action": {\n'
+        '    "type": "none|replace_selection",\n'
+        '    "content": "<string>",\n'
+        '    "reason": "<short string>"\n'
         "  }\n"
         "}\n"
         "Rules:\n"
@@ -1846,7 +1939,11 @@ def request_ai_agent_response(user_message, document_text="", selected_text="", 
     if not json_text:
         return {
             "assistant_message": content.strip(),
-            "proposed_action": {"type": "none", "content": "", "reason": "non_json_response"},
+            "proposed_action": {
+                "type": "none",
+                "content": "",
+                "reason": "non_json_response",
+            },
             "used_provider": used_provider,
         }
 
@@ -1855,11 +1952,17 @@ def request_ai_agent_response(user_message, document_text="", selected_text="", 
     except json.JSONDecodeError:
         return {
             "assistant_message": content.strip(),
-            "proposed_action": {"type": "none", "content": "", "reason": "json_parse_failed"},
+            "proposed_action": {
+                "type": "none",
+                "content": "",
+                "reason": "json_parse_failed",
+            },
             "used_provider": used_provider,
         }
 
-    assistant_message = str(parsed.get("assistant_message", "")).strip() or "(No assistant message)"
+    assistant_message = (
+        str(parsed.get("assistant_message", "")).strip() or "(No assistant message)"
+    )
     action = parsed.get("proposed_action", {})
     if not isinstance(action, dict):
         action = {}
@@ -1913,74 +2016,99 @@ def _normalize_math_content(content):
         return content
 
     normalized = content
-    
+
     # === UNICODE SUPERSCRIPTS/SUBSCRIPTS CONVERSION ===
     # Convert Unicode superscripts to TeX: x² -> x^2, x³ -> x^3, xⁿ -> x^n
     superscript_map = {
-        '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
-        '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
-        'ⁿ': 'n'
+        "⁰": "0",
+        "¹": "1",
+        "²": "2",
+        "³": "3",
+        "⁴": "4",
+        "⁵": "5",
+        "⁶": "6",
+        "⁷": "7",
+        "⁸": "8",
+        "⁹": "9",
+        "ⁿ": "n",
     }
-    
+
     subscript_map = {
-        '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4',
-        '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
-        'ᵢ': 'i', 'ⱼ': 'j', 'ₖ': 'k'
+        "₀": "0",
+        "₁": "1",
+        "₂": "2",
+        "₃": "3",
+        "₄": "4",
+        "₅": "5",
+        "₆": "6",
+        "₇": "7",
+        "₈": "8",
+        "₉": "9",
+        "ᵢ": "i",
+        "ⱼ": "j",
+        "ₖ": "k",
     }
-    
+
     # Replace Unicode superscripts: x² -> x^{2}
     for unicode_char, tex_char in superscript_map.items():
         # Match letter followed by superscript
-        normalized = re.sub(f'([a-zA-Z]){re.escape(unicode_char)}',
-                           lambda m: f"{m.group(1)}^{{{tex_char}}}", normalized)
-    
+        normalized = re.sub(
+            f"([a-zA-Z]){re.escape(unicode_char)}",
+            lambda m: f"{m.group(1)}^{{{tex_char}}}",
+            normalized,
+        )
+
     # Replace Unicode subscripts: x₁ -> x_{1}
     for unicode_char, tex_char in subscript_map.items():
         # Match letter followed by subscript
-        normalized = re.sub(f'([a-zA-Z]){re.escape(unicode_char)}',
-                           lambda m: f"{m.group(1)}_{{{tex_char}}}", normalized)
-    
+        normalized = re.sub(
+            f"([a-zA-Z]){re.escape(unicode_char)}",
+            lambda m: f"{m.group(1)}_{{{tex_char}}}",
+            normalized,
+        )
+
     # === UNICODE REPLACEMENTS ===
-    normalized = normalized.replace('−', '-')
-    normalized = normalized.replace('–', '-')
-    normalized = normalized.replace('—', '-')
-    normalized = normalized.replace('≤', r'\le ')
-    normalized = normalized.replace('≥', r'\ge ')
-    normalized = normalized.replace('∑', r'\sum ')
-    normalized = normalized.replace('×', r'\times ')
-    normalized = normalized.replace('÷', r'\div ')
-    normalized = normalized.replace('·', r'\cdot ')
-    normalized = normalized.replace('…', r'\ldots ')
+    normalized = normalized.replace("−", "-")
+    normalized = normalized.replace("–", "-")
+    normalized = normalized.replace("—", "-")
+    normalized = normalized.replace("≤", r"\le ")
+    normalized = normalized.replace("≥", r"\ge ")
+    normalized = normalized.replace("∑", r"\sum ")
+    normalized = normalized.replace("×", r"\times ")
+    normalized = normalized.replace("÷", r"\div ")
+    normalized = normalized.replace("·", r"\cdot ")
+    normalized = normalized.replace("…", r"\ldots ")
 
-    normalized = re.sub(r'([A-Za-z0-9Α-Ωα-ωπΠ])\s*¯', r'\\bar{\1}', normalized)
+    normalized = re.sub(r"([A-Za-z0-9Α-Ωα-ωπΠ])\s*¯", r"\\bar{\1}", normalized)
 
-    normalized = normalized.replace('ϕ', r'\phi ')
-    normalized = normalized.replace('φ', r'\phi ')
-    normalized = normalized.replace('β', r'\beta ')
-    normalized = normalized.replace('π', r'\pi ')
-    normalized = normalized.replace('Π', r'\Pi ')
+    normalized = normalized.replace("ϕ", r"\phi ")
+    normalized = normalized.replace("φ", r"\phi ")
+    normalized = normalized.replace("β", r"\beta ")
+    normalized = normalized.replace("π", r"\pi ")
+    normalized = normalized.replace("Π", r"\Pi ")
 
-    normalized = re.sub(r'\bPr\(', r'\\Pr(', normalized)
-    
+    normalized = re.sub(r"\bPr\(", r"\\Pr(", normalized)
+
     # === SUBSCRIPT NOTATION FIXES (CONSERVATIVE) ===
     # Only fix patterns we're very confident about:
-    
+
     # Pattern 1: Letter(s) followed by comma-subscript (B-spline: Bi,1 -> B_{i,1})
     # This is very safe because commas are rarely used otherwise in math
-    normalized = re.sub(r'([A-Za-z])([a-z]+),(\d+)', r'\1_{\2,\3}', normalized)
-    
+    normalized = re.sub(r"([A-Za-z])([a-z]+),(\d+)", r"\1_{\2,\3}", normalized)
+
     # Pattern 2: Specific known subscript patterns with operators immediately following
     # ti+ -> t_{i}+, ti- -> t_{i}-, ti) -> t_{i}), etc.
     # Only for lowercase single letters followed by single letter then operator
-    normalized = re.sub(r'(?<![\\a-zA-Z])([tTxXaAbBiI])([a-z])([+\-\)<>\]]\b)', 
-                       r'\1_{\2}\3', normalized)
+    normalized = re.sub(
+        r"(?<![\\a-zA-Z])([tTxXaAbBiI])([a-z])([+\-\)<>\]]\b)", r"\1_{\2}\3", normalized
+    )
 
     # === SYNTAX ERROR FIXES ===
-    normalized = normalized.replace('^)', ')')
-    normalized = normalized.replace('^]', ']')
-    normalized = re.sub(r'(\)|\])([0-9]+)', r'\1^\2', normalized)
+    normalized = normalized.replace("^)", ")")
+    normalized = normalized.replace("^]", "]")
+    normalized = re.sub(r"(\)|\])([0-9]+)", r"\1^\2", normalized)
 
-    normalized = re.sub(r'\s{2,}', ' ', normalized).strip()
+    normalized = re.sub(r"\s{2,}", " ", normalized).strip()
     return normalized
 
 
@@ -1998,20 +2126,32 @@ def _is_probably_math_line(line):
         return False
 
     word_count = len(stripped.split())
-    if word_count >= 6 and re.match(r'^(where|let|the|this|that|and|or)\b', stripped, re.IGNORECASE):
+    if word_count >= 6 and re.match(
+        r"^(where|let|the|this|that|and|or)\b", stripped, re.IGNORECASE
+    ):
         return False
 
-    if stripped.startswith(('#', '>', '-', '*', '`', '|')):
+    if stripped.startswith(("#", ">", "-", "*", "`", "|")):
         return False
 
-    if 'http://' in stripped or 'https://' in stripped:
+    if "http://" in stripped or "https://" in stripped:
         return False
 
-    if '$' in stripped or '\\[' in stripped or '\\]' in stripped or '\\(' in stripped or '\\)' in stripped:
+    if (
+        "$" in stripped
+        or "\\[" in stripped
+        or "\\]" in stripped
+        or "\\(" in stripped
+        or "\\)" in stripped
+    ):
         return False
 
-    has_core_math = '=' in stripped and any(sym in stripped for sym in ('^', 'π', 'Π', '¯', '−', '-', '(', ')', '[', ']'))
-    has_tex_command = bool(re.search(r'\\(frac|sqrt|sum|int|bar|alpha|beta|gamma|pi)\b', stripped))
+    has_core_math = "=" in stripped and any(
+        sym in stripped for sym in ("^", "π", "Π", "¯", "−", "-", "(", ")", "[", "]")
+    )
+    has_tex_command = bool(
+        re.search(r"\\(frac|sqrt|sum|int|bar|alpha|beta|gamma|pi)\b", stripped)
+    )
 
     return has_core_math or has_tex_command
 
@@ -2043,7 +2183,7 @@ def _auto_wrap_bare_math_lines(markdown_text):
         else:
             wrapped_lines.append(line)
 
-    return '\n'.join(wrapped_lines)
+    return "\n".join(wrapped_lines)
 
 
 def _is_probably_math_token(token):
@@ -2062,62 +2202,95 @@ def _is_probably_math_token(token):
     core = core.strip("'\".,;:!?")
 
     # Never treat inline-code fragments as math.
-    if '`' in core:
+    if "`" in core:
         return False
 
     if _looks_like_url_or_path(core):
         return False
-    
+
     # === EARLY CHECKS FOR OBVIOUS MATH PATTERNS ===
-    
+
     # Check for Unicode superscripts/subscripts (x², x³, xⁿ, x₁, etc.)
     # Includes: superscript numbers (²³⁴⁵⁶⁷⁸⁹), common superscript letters (ⁿ), subscript numbers
-    if any(c in core for c in '⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ₀₁₂₃₄₅₆₇₈₉ᵢⱼₖ'):
+    if any(c in core for c in "⁰¹²³⁴⁵⁶⁷⁸⁹ⁿ₀₁₂₃₄₅₆₇₈₉ᵢⱼₖ"):
         return True
-    
+
     # Check for simple exponents: x^2, y^n, etc. (letter + ^ + something)
-    if re.search(r'^[a-zA-Z]\^[\w\{\}]', core):
+    if re.search(r"^[a-zA-Z]\^[\w\{\}]", core):
         return True
-    
+
     # === SUBSCRIPT/SUPERSCRIPT PATTERNS ===
-    
+
     # Pattern checks for math variables:
     # 1. Double letters: kk, ii, tt
     # 2. Underscore subscript: t_i, x_n, B_i
     # 3. Digit subscript: t1, x2, B3
     # 4. Comma subscript: Bi,1 (B-spline notation), ti,k, etc.
-    
-    is_double_letter = bool(re.fullmatch(r'([a-zA-Z])\1', core))
-    has_underscore_subscript = bool(re.search(r'[a-zA-Z]_[a-zA-Z0-9]', core))
-    has_digit_subscript = bool(re.search(r'[a-zA-Z]\d', core))
-    has_comma_subscript = bool(re.search(r'[a-zA-Z]+,[a-zA-Z0-9+\-]+', core))
-    
-    if core.startswith(('http://', 'https://', 'www.', 'file://')):
+
+    is_double_letter = bool(re.fullmatch(r"([a-zA-Z])\1", core))
+    has_underscore_subscript = bool(re.search(r"[a-zA-Z]_[a-zA-Z0-9]", core))
+    has_digit_subscript = bool(re.search(r"[a-zA-Z]\d", core))
+    has_comma_subscript = bool(re.search(r"[a-zA-Z]+,[a-zA-Z0-9+\-]+", core))
+
+    if core.startswith(("http://", "https://", "www.", "file://")):
         return False
 
-    if '$' in core or '\\(' in core or '\\)' in core or '\\[' in core or '\\]' in core:
+    if "$" in core or "\\(" in core or "\\)" in core or "\\[" in core or "\\]" in core:
         return False
 
     # Reject pure lowercase English words (at least 3 chars), but allow math vars
-    if re.fullmatch(r'[a-z]+', core) and len(core) >= 3:
+    if re.fullmatch(r"[a-z]+", core) and len(core) >= 3:
         return False
 
     # Accept short multichar tokens with numbers or uppercase (common math vars like ti, Bi, xi, pi)
-    if re.match(r'^[a-zA-Z]{1,2}\d*[a-zA-Z]?$', core):
-        if len(core) < 3 and (any(c.isupper() for c in core) or has_digit_subscript or has_underscore_subscript or has_comma_subscript):
+    if re.match(r"^[a-zA-Z]{1,2}\d*[a-zA-Z]?$", core):
+        if len(core) < 3 and (
+            any(c.isupper() for c in core)
+            or has_digit_subscript
+            or has_underscore_subscript
+            or has_comma_subscript
+        ):
             return True
         if len(core) >= 3:
             return True
 
-    contains_strong_marker = any(sym in core for sym in (
-        '=', '^', '∑', '≤', '≥', '|', '¯', '−', 'π', 'Π', 'β', 'ϕ', 'φ', '_', '…'
-    ))
-    has_bracket_shape = ('(' in core and ')' in core) or ('[' in core and ']' in core) or ('{' in core and '}' in core)
-    has_greek_symbol = any(sym in core for sym in ('π', 'Π', 'β', 'ϕ', 'φ'))
+    contains_strong_marker = any(
+        sym in core
+        for sym in (
+            "=",
+            "^",
+            "∑",
+            "≤",
+            "≥",
+            "|",
+            "¯",
+            "−",
+            "π",
+            "Π",
+            "β",
+            "ϕ",
+            "φ",
+            "_",
+            "…",
+        )
+    )
+    has_bracket_shape = (
+        ("(" in core and ")" in core)
+        or ("[" in core and "]" in core)
+        or ("{" in core and "}" in core)
+    )
+    has_greek_symbol = any(sym in core for sym in ("π", "Π", "β", "ϕ", "φ"))
 
     return (
-        contains_strong_marker and (has_bracket_shape or len(core) >= 6 or has_greek_symbol)
-    ) or is_double_letter or has_underscore_subscript or has_digit_subscript or has_comma_subscript
+        (
+            contains_strong_marker
+            and (has_bracket_shape or len(core) >= 6 or has_greek_symbol)
+        )
+        or is_double_letter
+        or has_underscore_subscript
+        or has_digit_subscript
+        or has_comma_subscript
+    )
 
 
 def _looks_like_url_or_path(text):
@@ -2135,7 +2308,9 @@ def _looks_like_url_or_path(text):
     if "/" in text or "\\" in text:
         return True
 
-    if re.search(r'\.(png|jpg|jpeg|gif|webp|svg|bmp|pdf|md|txt|py|js|ts|json|yml|yaml)$', lowered):
+    if re.search(
+        r"\.(png|jpg|jpeg|gif|webp|svg|bmp|pdf|md|txt|py|js|ts|json|yml|yaml)$", lowered
+    ):
         return True
 
     return False
@@ -2149,10 +2324,10 @@ def _is_markdown_media_line(stripped_line):
     if not stripped_line:
         return False
 
-    if re.match(r'^!\[[^\]]*\]\([^)]+\)$', stripped_line):
+    if re.match(r"^!\[[^\]]*\]\([^)]+\)$", stripped_line):
         return True
 
-    if re.match(r'^\[[^\]]+\]\([^)]+\)$', stripped_line):
+    if re.match(r"^\[[^\]]+\]\([^)]+\)$", stripped_line):
         return True
 
     if "<img" in stripped_line.lower():
@@ -2173,7 +2348,7 @@ def _auto_wrap_bare_math_spans(markdown_text):
 
     replacements = {}
     counter = [0]
-    
+
     def make_placeholder(content):
         """Create a placeholder for wrapped math formula."""
         key = f"AUTOBAREMATH{counter[0]}X"
@@ -2183,33 +2358,33 @@ def _auto_wrap_bare_math_spans(markdown_text):
 
     def wrap_token(token):
         # Skip tokens that are already placeholders
-        if 'MATHPLACEHOLDER' in token or 'AUTOBAREMATH' in token:
+        if "MATHPLACEHOLDER" in token or "AUTOBAREMATH" in token:
             return token
-        
+
         # Skip URLs / file paths / markdown image-link token bodies
-        if _looks_like_url_or_path(token) or token.startswith('![') or '](' in token:
+        if _looks_like_url_or_path(token) or token.startswith("![") or "](" in token:
             return token
 
         # Skip markdown formatting syntax (bold/italic markers)
         # Complete patterns: _italic_ or __bold__ or *italic* or **bold**
-        if re.match(r'^[_*]{1,2}\w+[_*]{1,2}$', token):
+        if re.match(r"^[_*]{1,2}\w+[_*]{1,2}$", token):
             return token
-        
+
         # Skip incomplete markdown markers (part of multi-token markdown)
         # _Italic or *bold (starts with marker but no closing on same token)
-        if re.match(r'^[_*]{1,2}[a-zA-Z]', token) and not re.search(r'[_*]$', token):
+        if re.match(r"^[_*]{1,2}[a-zA-Z]", token) and not re.search(r"[_*]$", token):
             return token
         # text_ or text) (ends with marker but no opening on same token)
-        if re.search(r'^[a-zA-Z].*[_*]{1,2}$', token) and not re.match(r'^[_*]', token):
+        if re.search(r"^[a-zA-Z].*[_*]{1,2}$", token) and not re.match(r"^[_*]", token):
             return token
-            
-        match = re.match(r'^(.*?)([.,;:!?]+)$', token)
+
+        match = re.match(r"^(.*?)([.,;:!?]+)$", token)
         if match:
             core = match.group(1)
             suffix = match.group(2)
         else:
             core = token
-            suffix = ''
+            suffix = ""
 
         if not _is_probably_math_token(core):
             return token
@@ -2226,19 +2401,25 @@ def _auto_wrap_bare_math_spans(markdown_text):
             output_lines.append(line)
             continue
 
-        if stripped.startswith('```'):
+        if stripped.startswith("```"):
             in_fenced_code = not in_fenced_code
             output_lines.append(line)
             continue
 
-        is_markdown_table_row = bool(re.match(r'^\s*\|.*\|\s*$', stripped))
-        is_markdown_table_separator = bool(re.match(r'^\s*\|?[\s:-]+\|[\s|:-]*$', stripped))
+        is_markdown_table_row = bool(re.match(r"^\s*\|.*\|\s*$", stripped))
+        is_markdown_table_separator = bool(
+            re.match(r"^\s*\|?[\s:-]+\|[\s|:-]*$", stripped)
+        )
 
         if in_fenced_code or _is_markdown_media_line(stripped):
             output_lines.append(line)
             continue
 
-        if stripped.startswith(('#', '>')) or is_markdown_table_row or is_markdown_table_separator:
+        if (
+            stripped.startswith(("#", ">"))
+            or is_markdown_table_row
+            or is_markdown_table_separator
+        ):
             output_lines.append(line)
             continue
 
@@ -2246,11 +2427,11 @@ def _auto_wrap_bare_math_spans(markdown_text):
             output_lines.append(line)
             continue
 
-        tokens = line.split(' ')
+        tokens = line.split(" ")
         wrapped_tokens = [wrap_token(token) for token in tokens]
-        output_lines.append(' '.join(wrapped_tokens))
+        output_lines.append(" ".join(wrapped_tokens))
 
-    result_text = '\n'.join(output_lines)
+    result_text = "\n".join(output_lines)
     return result_text, replacements
 
 
@@ -2260,7 +2441,7 @@ def _protect_math(markdown_text):
 
     :param string markdown_text: The Markdown text to check for math.
 
-    :return: A string text containing the Markdown text with the maths swapped for placeholders and 
+    :return: A string text containing the Markdown text with the maths swapped for placeholders and
     a dictionary containing the math divs with placeholder text keys.
     """
 
@@ -2272,9 +2453,13 @@ def _protect_math(markdown_text):
         counter[0] += 1
         normalized_content = _normalize_math_content(content)
         if display:
-            replacements[key] = f'<div class="math-display">\\[{normalized_content}\\]</div>'
+            replacements[key] = (
+                f'<div class="math-display">\\[{normalized_content}\\]</div>'
+            )
         else:
-            replacements[key] = f'<span class="math-inline">\\({normalized_content}\\)</span>'
+            replacements[key] = (
+                f'<span class="math-inline">\\({normalized_content}\\)</span>'
+            )
         return key
 
     def replace_block(m):
@@ -2294,16 +2479,16 @@ def _protect_math(markdown_text):
     # IMPORTANT ORDER:
     # 1. Protect explicit math delimiters FIRST ($$...$$, \[...\], $...$, \(...\))
     # 2. Then apply auto-wrapping for bare math (uses placeholders to avoid markdown2 escaping)
-    
-    text = re.sub(r'\$\$([\s\S]+?)\$\$', replace_block, markdown_text)
-    text = re.sub(r'\\\[([\s\S]+?)\\\]', replace_block, text)
-    text = re.sub(r'(?<!\$)\$(?!\$)([^\$\n]+?)(?<!\$)\$(?!\$)', replace_inline, text)
-    text = re.sub(r'\\\((.+?)\\\)', replace_inline, text)
-    
+
+    text = re.sub(r"\$\$([\s\S]+?)\$\$", replace_block, markdown_text)
+    text = re.sub(r"\\\[([\s\S]+?)\\\]", replace_block, text)
+    text = re.sub(r"(?<!\$)\$(?!\$)([^\$\n]+?)(?<!\$)\$(?!\$)", replace_inline, text)
+    text = re.sub(r"\\\((.+?)\\\)", replace_inline, text)
+
     # Auto-wrap bare math tokens (returns placeholders + dict)
     text, auto_wrapped = _auto_wrap_bare_math_spans(text)
     replacements.update(auto_wrapped)  # Merge auto-wrapped formulas
-    
+
     text = _auto_wrap_bare_math_lines(text)
 
     return text, replacements
@@ -2321,7 +2506,7 @@ def _restore_math(html_content, replacements):
 
     for key, value in replacements.items():
         html_content = html_content.replace(key, value)
-        html_content = html_content.replace(f'<p>{key}</p>', value)
+        html_content = html_content.replace(f"<p>{key}</p>", value)
     return html_content
 
 
@@ -2402,30 +2587,34 @@ def update_preview(app):
         idx = app.notebook.index(app.notebook.select())
         text_area = app.editors[idx]
         # Use override content if present (from per-selection color logic)
-        markdown_text = getattr(app, '_preview_content_override', None)
+        markdown_text = getattr(app, "_preview_content_override", None)
         if markdown_text is None:
             markdown_text = text_area.get("1.0", "end-1c")
 
         # Attempt to fix image paths when a file is open
 
-        if hasattr(app, 'file_paths') and app.file_paths:
+        if hasattr(app, "file_paths") and app.file_paths:
             try:
                 idx = app.notebook.index(app.notebook.select())
                 current_path = app.file_paths[idx]
                 if current_path is not None:
                     base_dir = os.path.dirname(current_path)
                     markdown_text = fix_image_paths(markdown_text, base_dir)
-            except Exception:                
+            except Exception:
                 # Non-fatal: continue without fixed image paths
                 pass
-# If the editor appears empty in the packaged app, try to read
+        # If the editor appears empty in the packaged app, try to read
         # the file contents directly from disk (handles race conditions
         # where the GUI editor hasn't populated yet).
         try:
-            if (not isinstance(markdown_text, str) or not markdown_text.strip()) and hasattr(app, 'file_paths') and app.file_paths:
+            if (
+                (not isinstance(markdown_text, str) or not markdown_text.strip())
+                and hasattr(app, "file_paths")
+                and app.file_paths
+            ):
                 current_path = app.file_paths[idx]
                 if current_path and os.path.isfile(current_path):
-                    with open(current_path, 'r', encoding='utf-8', errors='replace') as fh:
+                    with open(current_path, encoding="utf-8", errors="replace") as fh:
                         disk_text = fh.read()
                     if isinstance(disk_text, str) and disk_text.strip():
                         markdown_text = disk_text
@@ -2438,7 +2627,12 @@ def update_preview(app):
 
             html_content = markdown2.markdown(
                 protected_text,
-                extras=["fenced-code-blocks", "code-friendly", "tables", "break-on-newline"]
+                extras=[
+                    "fenced-code-blocks",
+                    "code-friendly",
+                    "tables",
+                    "break-on-newline",
+                ],
             )
 
             # Restore math expressions AFTER markdown2
@@ -2447,26 +2641,36 @@ def update_preview(app):
         except Exception as e:
             tb = traceback.format_exc()
             print(f"markdown2 conversion error: {e}\n{tb}")
-                        # Produce an HTML page containing the full traceback for easier debugging
+            # Produce an HTML page containing the full traceback for easier debugging
 
-            html_content = f"<h2>Error generating preview</h2><pre>{html_escape(tb)}</pre>"
+            html_content = (
+                f"<h2>Error generating preview</h2><pre>{html_escape(tb)}</pre>"
+            )
     except Exception as e:
         tb = traceback.format_exc()
         print(f"update_preview unexpected error: {e}\n{tb}")
-        html_content = f"<h2>Unexpected error generating preview</h2><pre>{html_escape(tb)}</pre>"
+        html_content = (
+            f"<h2>Unexpected error generating preview</h2><pre>{html_escape(tb)}</pre>"
+        )
 
     # Get style from app (with fallback)
 
-    font_family = getattr(app, 'current_font_family', 'Consolas')
-    font_size = getattr(app, 'current_font_size', 14)
-    fg_color = getattr(app, 'current_fg_color', '#000000')
-    bg_color = getattr(app, 'current_bg_color', 'white')
-    if getattr(app, 'dark_mode', False):
-        bg_color = '#1e1e1e'
-        fg_color = '#dcdcdc'
+    font_family = getattr(app, "current_font_family", "Consolas")
+    font_size = getattr(app, "current_font_size", 14)
+    fg_color = getattr(app, "current_fg_color", "#000000")
+    bg_color = getattr(app, "current_bg_color", "white")
+    if getattr(app, "dark_mode", False):
+        bg_color = "#1e1e1e"
+        fg_color = "#dcdcdc"
 
     web_font_family = font_family
-    if font_family.lower() in ["arial", "helvetica", "verdana", "tahoma", "trebuchet ms"]:
+    if font_family.lower() in [
+        "arial",
+        "helvetica",
+        "verdana",
+        "tahoma",
+        "trebuchet ms",
+    ]:
         web_font_family += ", sans-serif"
     elif font_family.lower() in ["times new roman", "georgia", "garamond", "serif"]:
         web_font_family += ", serif"
@@ -2484,20 +2688,20 @@ def update_preview(app):
     base = font_size + 2
 
     try:
-        debug_snippet = ''
         try:
-            debug_snippet = markdown_text[:1000].replace('--', '- -')
+            markdown_text[:1000].replace("--", "- -")
         except Exception:
-            debug_snippet = '<unable to read markdown snippet>'
+            pass
 
-        debug_path = ''
         try:
-            debug_path = getattr(app, 'file_paths', [None])[idx] if hasattr(app, 'file_paths') else ''
+            getattr(app, "file_paths", [None])[idx] if hasattr(
+                app, "file_paths"
+            ) else ""
         except Exception:
-            debug_path = ''
-        debug_comment = f""
+            pass
+        debug_comment = ""
 
-        with open(app.preview_file, 'w', encoding='utf-8') as f:
+        with open(app.preview_file, "w", encoding="utf-8") as f:
             f.write(f"""
             <html>
             {debug_comment}
@@ -2680,7 +2884,7 @@ def update_preview(app):
 
 def open_preview_in_browser(preview_file, app):
     """
-    Opens a preview of the Markdown file into the browser. 
+    Opens a preview of the Markdown file into the browser.
 
     :param string preview_file: The file path for the preview of the Markdown file.
     :param MarkdownReader app: The MarkdownReader application instance.
@@ -2701,31 +2905,31 @@ def fix_image_paths(markdown_text, base_path):
     """
     Takes Markdown code containing images and fixes the file paths of the images.
 
-    :param string markdown_text: The Markdown file containing some images. 
+    :param string markdown_text: The Markdown file containing some images.
     :param string base_path: The file path for the base directory of the images.
 
     :return: A string containing the corrected Markdown file with updated image file paths.
     """
-    
-    def repl(m): # Callable used to replace the regex pattern with a new one. 
+
+    def repl(m):  # Callable used to replace the regex pattern with a new one.
         alt = m.group(1)
         src = m.group(2)
-        if src.startswith(('http://', 'https://', 'file://', '/')):
+        if src.startswith(("http://", "https://", "file://", "/")):
             return m.group(0)
         abs_path = os.path.abspath(os.path.join(base_path, src))
-        abs_url = 'file://' + abs_path.replace('\\', '/')
-        return f'![{alt}]({abs_url})'
+        abs_url = "file://" + abs_path.replace("\\", "/")
+        return f"![{alt}]({abs_url})"
 
-    return re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', repl, markdown_text)
+    return re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", repl, markdown_text)
 
 
 def export_to_html(app, output_path):
     """
     Exports the current markdown document to an HTML file.
-    
+
     :param MarkdownReader app: The MarkdownReader application instance.
     :param string output_path: The path where the HTML file should be saved.
-    
+
     :return: A boolean value set to true if the file is successfully exported and false if not.
 
     :raises RuntimeError: If the image paths cannot be processed.
@@ -2735,58 +2939,73 @@ def export_to_html(app, output_path):
     if not app.editors:
         messagebox.showinfo("Info", "No document to export.")
         return False
-    
+
     try:
         idx = app.notebook.index(app.notebook.select())
         text_area = app.editors[idx]
         markdown_text = text_area.get("1.0", "end-1c")
-        
+
         # Fix image paths if a file is currently open
-        if hasattr(app, 'file_paths') and app.file_paths:
+        if hasattr(app, "file_paths") and app.file_paths:
             try:
                 current_path = app.file_paths[idx]
                 if current_path is not None:
                     base_dir = os.path.dirname(current_path)
+
                     # Convert file:// paths to relative paths for export
                     def convert_file_url_to_relative(text, base_dir):
                         def repl(m):
                             alt = m.group(1)
                             src = m.group(2)
-                            if src.startswith('file://'):
+                            if src.startswith("file://"):
                                 # Convert file:// URL back to relative path
-                                file_path = src.replace('file://', '')
+                                file_path = src.replace("file://", "")
                                 try:
                                     rel_path = os.path.relpath(file_path, base_dir)
-                                    return f'![{alt}]({rel_path})'
+                                    return f"![{alt}]({rel_path})"
                                 except (ValueError, OSError):
                                     return m.group(0)
                             return m.group(0)
-                        return re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', repl, text)
-                    
-                    markdown_text = convert_file_url_to_relative(markdown_text, base_dir)
+
+                        return re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", repl, text)
+
+                    markdown_text = convert_file_url_to_relative(
+                        markdown_text, base_dir
+                    )
             except Exception as e:
                 print(f"Warning: Could not process image paths: {e}")
-        
+
         # Convert markdown to HTML
         # FIX APPLIED: Added "break-on-newline" to extras here as well
         html_content = markdown2.markdown(
-            markdown_text, 
-            extras=["fenced-code-blocks", "code-friendly", "tables", "break-on-newline"]
+            markdown_text,
+            extras=[
+                "fenced-code-blocks",
+                "code-friendly",
+                "tables",
+                "break-on-newline",
+            ],
         )
-        
+
         # Get style from app (with fallback)
-        font_family = getattr(app, 'current_font_family', 'Consolas')
-        font_size = getattr(app, 'current_font_size', 14)
-        fg_color = getattr(app, 'current_fg_color', '#000000')
-        bg_color = getattr(app, 'current_bg_color', 'white')
-        
-        if getattr(app, 'dark_mode', False):
-            bg_color = '#1e1e1e'
-            fg_color = '#dcdcdc'
-        
+        font_family = getattr(app, "current_font_family", "Consolas")
+        font_size = getattr(app, "current_font_size", 14)
+        fg_color = getattr(app, "current_fg_color", "#000000")
+        bg_color = getattr(app, "current_bg_color", "white")
+
+        if getattr(app, "dark_mode", False):
+            bg_color = "#1e1e1e"
+            fg_color = "#dcdcdc"
+
         # For web, use a generic fallback for common fonts
         web_font_family = font_family
-        if font_family.lower() in ["arial", "helvetica", "verdana", "tahoma", "trebuchet ms"]:
+        if font_family.lower() in [
+            "arial",
+            "helvetica",
+            "verdana",
+            "tahoma",
+            "trebuchet ms",
+        ]:
             web_font_family += ", sans-serif"
         elif font_family.lower() in ["times new roman", "georgia", "garamond", "serif"]:
             web_font_family += ", serif"
@@ -2794,7 +3013,7 @@ def export_to_html(app, output_path):
             web_font_family += ", monospace"
         else:
             web_font_family += ", sans-serif"
-        
+
         # Heading sizes relative to base font size
         h1 = font_size + 18
         h2 = font_size + 12
@@ -2803,7 +3022,7 @@ def export_to_html(app, output_path):
         h5 = font_size + 2
         h6 = font_size + 1
         base = font_size + 2
-        
+
         # Generate complete HTML document
         html_document = f"""<!DOCTYPE html>
 <html>
@@ -2909,14 +3128,14 @@ def export_to_html(app, output_path):
 {html_content}
 </body>
 </html>"""
-        
+
         # Write to file
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             f.write(html_document)
-        
+
         messagebox.showinfo("Success", f"HTML exported successfully to:\n{output_path}")
         return True
-        
+
     except Exception as e:
         messagebox.showerror("Error", f"Failed to export HTML: {e}")
         return False
@@ -2925,9 +3144,9 @@ def export_to_html(app, output_path):
 def convert_html_to_markdown(html_content):
     """
     Converts the HTML content of a file to Markdown format.
-    
+
     :param string html_content: The HTML code to be converted.
-    
+
     :return: A string containing Markdown code representing the converted HTML.
 
     :raises ConversionError: If the HTML could not be converted to Markdown.
@@ -2936,7 +3155,7 @@ def convert_html_to_markdown(html_content):
     try:
         # Create html2text converter instance
         h = html2text.HTML2Text()
-        
+
         # Configure converter options for better output
         h.ignore_links = False  # Keep links
         h.ignore_images = False  # Keep images
@@ -2948,17 +3167,19 @@ def convert_html_to_markdown(html_content):
         h.images_to_alt = False  # Don't replace images with alt text
         h.single_line_break = False  # Use proper line breaks
         h.mark_code = True  # Mark code blocks
-        
+
         # Convert HTML to Markdown
         markdown_text = h.handle(html_content)
-        
+
         # Clean up excessive blank lines
-        markdown_text = re.sub(r'\n{3,}', '\n\n', markdown_text)
-        
+        markdown_text = re.sub(r"\n{3,}", "\n\n", markdown_text)
+
         return markdown_text.strip()
-        
+
     except Exception as e:
-        messagebox.showerror("Conversion Error", f"Failed to convert HTML to Markdown: {e}")
+        messagebox.showerror(
+            "Conversion Error", f"Failed to convert HTML to Markdown: {e}"
+        )
         return html_content  # Return original HTML if conversion fails
 
 
@@ -2967,9 +3188,9 @@ def convert_pdf_to_markdown(pdf_path):
     Converts a PDF file's content to Markdown format with high-fidelity formatting preservation.
     Uses PyMuPDF (fitz) to extract detailed formatting information including font sizes,
     bold/italic text, and document structure.
-    
+
     :param string pdf_path: The file path for the PDF file.
-    
+
     :return: A string containing Markdown code representing the converted PDF file.
 
     :raises ImportError: If the required libraries are not installed.
@@ -3041,12 +3262,14 @@ def convert_pdf_to_markdown(pdf_path):
                         # Skip images smaller than 50x50 pixels (likely emojis/icons)
                         if width < 50 or height < 50:
                             continue
-                    
+
                     image_bytes = block.get("image")
                     image_ext = block.get("ext") or "png"
                     if image_bytes:
                         image_counter += 1
-                        image_filename = f"page_{page_num + 1}_img_{image_counter}.{image_ext}"
+                        image_filename = (
+                            f"page_{page_num + 1}_img_{image_counter}.{image_ext}"
+                        )
                         image_path = os.path.join(asset_dir, image_filename)
                         with open(image_path, "wb") as image_file:
                             image_file.write(image_bytes)
@@ -3055,7 +3278,9 @@ def convert_pdf_to_markdown(pdf_path):
                             output_lines.append("```")
                             output_lines.append("")
                             in_code_block = False
-                        output_lines.append(f"![page-{page_num + 1}-image-{image_counter}]({image_uri})")
+                        output_lines.append(
+                            f"![page-{page_num + 1}-image-{image_counter}]({image_uri})"
+                        )
                         output_lines.append("")
                     continue
 
@@ -3082,7 +3307,11 @@ def convert_pdf_to_markdown(pdf_path):
 
                         is_bold = (font_flags & 2**4) != 0 or "bold" in font_name
                         is_italic = (font_flags & 2**1) != 0 or "italic" in font_name
-                        is_mono = ("mono" in font_name) or ("courier" in font_name) or ("consolas" in font_name)
+                        is_mono = (
+                            ("mono" in font_name)
+                            or ("courier" in font_name)
+                            or ("consolas" in font_name)
+                        )
 
                         if is_bold and is_italic:
                             text = f"***{text}***"
@@ -3105,7 +3334,11 @@ def convert_pdf_to_markdown(pdf_path):
                         continue
 
                     is_code_line = _is_pdf_code_line(line_text, has_monospace)
-                    if not is_code_line and in_code_block and _is_pdf_code_continuation_line(line_text):
+                    if (
+                        not is_code_line
+                        and in_code_block
+                        and _is_pdf_code_continuation_line(line_text)
+                    ):
                         is_code_line = True
                     if is_code_line:
                         if not in_code_block:
@@ -3132,7 +3365,9 @@ def convert_pdf_to_markdown(pdf_path):
                     clean_line = line_text.replace("**", "").replace("*", "").strip()
                     # Recover common PDF-rendered markdown subheadings like "2. Create ..."
                     # that may otherwise degrade into bold paragraph text.
-                    if re.match(r'^\d+\.\s+\S+', clean_line) and (line_text.startswith("**") and line_text.endswith("**")):
+                    if re.match(r"^\d+\.\s+\S+", clean_line) and (
+                        line_text.startswith("**") and line_text.endswith("**")
+                    ):
                         output_lines.append(f"#### {clean_line}")
                         output_lines.append("")
                         continue
@@ -3163,21 +3398,25 @@ def convert_pdf_to_markdown(pdf_path):
         doc.close()
 
         markdown_text = "\n".join(output_lines)
-        markdown_text = re.sub(r'\n{4,}', '\n\n\n', markdown_text)
+        markdown_text = re.sub(r"\n{4,}", "\n\n\n", markdown_text)
         return markdown_text.strip()
-        
-    except ImportError as e:
+
+    except ImportError:
         # Fallback to pypdf if PyMuPDF is not available
         try:
             return _convert_pdf_to_markdown_fallback(pdf_path)
-        except:
-            messagebox.showerror("Import Error", 
+        except Exception:
+            messagebox.showerror(
+                "Import Error",
                 "PyMuPDF library is not installed for advanced PDF conversion.\n"
                 "Please install it using: pip install PyMuPDF\n\n"
-                "Falling back to basic conversion, but formatting may be lost.")
+                "Falling back to basic conversion, but formatting may be lost.",
+            )
             return _convert_pdf_to_markdown_fallback(pdf_path)
     except Exception as e:
-        messagebox.showerror("Conversion Error", f"Failed to convert PDF to Markdown: {e}")
+        messagebox.showerror(
+            "Conversion Error", f"Failed to convert PDF to Markdown: {e}"
+        )
         return ""
 
 
@@ -3185,13 +3424,13 @@ def _convert_pdf_to_markdown_fallback(pdf_path):
     """
     Fallback PDF conversion using pypdf when PyMuPDF is not available.
     This provides basic conversion without formatting preservation.
-    
+
     :param string pdf_path: The file path for the PDF file.
     :return: A string containing basic Markdown conversion.
     """
-    
+
     from pypdf import PdfReader
-    
+
     reader = PdfReader(pdf_path)
     markdown_text = ""
     in_code_block = False
@@ -3206,7 +3445,7 @@ def _convert_pdf_to_markdown_fallback(pdf_path):
                     in_code_block = False
                 markdown_text += "---\n\n"
 
-            lines = text.split('\n')
+            lines = text.split("\n")
             for line in lines:
                 line = line.rstrip()
                 if not line.strip():
@@ -3265,25 +3504,25 @@ def _is_pdf_code_line(line, has_monospace_font=False):
     if not stripped:
         return False
 
-    if re.match(r'^\*{0,2}\d+[\.)]\s+.+\*{0,2}$', stripped):
+    if re.match(r"^\*{0,2}\d+[\.)]\s+.+\*{0,2}$", stripped):
         return False
-    if re.match(r'^#+\s+', stripped):
+    if re.match(r"^#+\s+", stripped):
         return False
-    if stripped.startswith(('![', '[', '>')):
+    if stripped.startswith(("![", "[", ">")):
         return False
 
     if has_monospace_font:
         return True
 
-    if line.startswith('    ') or line.startswith('\t'):
+    if line.startswith("    ") or line.startswith("\t"):
         return True
 
     code_patterns = [
-        r'^\$\s+\S+',
-        r'^(sudo|pip|python|python3|npm|node|git|cd|ls|mkdir|rm|cp|mv|source)\b',
-        r'^(if|for|while|def|class|return|import|from|try|except|else|elif)\b',
-        r'\b(function|const|let|var|echo|export|chmod|chown|brew|apt|yum|conda)\b',
-        r'`[^`]+`'
+        r"^\$\s+\S+",
+        r"^(sudo|pip|python|python3|npm|node|git|cd|ls|mkdir|rm|cp|mv|source)\b",
+        r"^(if|for|while|def|class|return|import|from|try|except|else|elif)\b",
+        r"\b(function|const|let|var|echo|export|chmod|chown|brew|apt|yum|conda)\b",
+        r"`[^`]+`",
     ]
 
     for pattern in code_patterns:
@@ -3309,13 +3548,15 @@ def _is_pdf_code_continuation_line(line):
         return True
 
     continuation_patterns = [
-        r'^(source|export|set|unset|alias|PATH=)\b',
-        r'^(\./|\.\\|\.\./|\.\.\\)',
-        r'(^|\s)(venv|scripts|bin|powershell|cmd|activate)(\s|$)',
-        r'[/\\].*(activate|python|pip)',
+        r"^(source|export|set|unset|alias|PATH=)\b",
+        r"^(\./|\.\\|\.\./|\.\.\\)",
+        r"(^|\s)(venv|scripts|bin|powershell|cmd|activate)(\s|$)",
+        r"[/\\].*(activate|python|pip)",
     ]
 
-    return any(re.search(pattern, stripped, re.IGNORECASE) for pattern in continuation_patterns)
+    return any(
+        re.search(pattern, stripped, re.IGNORECASE) for pattern in continuation_patterns
+    )
 
 
 def _is_standalone_list_marker(line):
@@ -3328,11 +3569,11 @@ def _is_standalone_list_marker(line):
     if not stripped:
         return False
 
-    bullet_markers = {'•', '●', '○', '▪', '▫', '■', '□', '✓', '✔', '*', '-', '–', '—'}
+    bullet_markers = {"•", "●", "○", "▪", "▫", "■", "□", "✓", "✔", "*", "-", "–", "—"}
     if stripped in bullet_markers:
         return True
 
-    if re.fullmatch(r'(\d+|[a-zA-Z]|[ivxIVX]+)[\.)]', stripped):
+    if re.fullmatch(r"(\d+|[a-zA-Z]|[ivxIVX]+)[\.)]", stripped):
         return True
 
     return False
@@ -3341,53 +3582,53 @@ def _is_standalone_list_marker(line):
 def _is_list_item(line):
     """
     Determines if a line is a list item.
-    
+
     :param string line: The line to check.
-    
+
     :return: Boolean indicating if the line is a list item.
     """
-    
+
     # Check for common list patterns
     patterns = [
-        r'^\s*[•●○▪▫■□✓✔]\s*\S+',  # Bullet points
-        r'^\s*[-–—]\s*\S+',          # Dashes
-        r'^\s*\d+[\.)]\s+',       # Numbered (1. or 1))
-        r'^\s*[a-z][\.)]\s+',     # Lettered (a. or a))
-        r'^\s*[ivxIVX]+[\.)]\s+', # Roman numerals
+        r"^\s*[•●○▪▫■□✓✔]\s*\S+",  # Bullet points
+        r"^\s*[-–—]\s*\S+",  # Dashes
+        r"^\s*\d+[\.)]\s+",  # Numbered (1. or 1))
+        r"^\s*[a-z][\.)]\s+",  # Lettered (a. or a))
+        r"^\s*[ivxIVX]+[\.)]\s+",  # Roman numerals
     ]
-    
+
     for pattern in patterns:
         if re.match(pattern, line):
             return True
-    
+
     return False
 
 
 def _clean_list_item(line):
     """
     Removes list markers from a line.
-    
+
     :param string line: The line to clean.
-    
+
     :return: Cleaned line text.
     """
-    
+
     # Remove common list markers
-    cleaned = re.sub(r'^\s*[•●○▪▫■□✓✔\-–—]\s+', '', line)
-    cleaned = re.sub(r'^\s*\d+[\.)]\s+', '', cleaned)
-    cleaned = re.sub(r'^\s*[a-z][\.)]\s+', '', cleaned)
-    cleaned = re.sub(r'^\s*[ivxIVX]+[\.)]\s+', '', cleaned)
-    
+    cleaned = re.sub(r"^\s*[•●○▪▫■□✓✔\-–—]\s+", "", line)
+    cleaned = re.sub(r"^\s*\d+[\.)]\s+", "", cleaned)
+    cleaned = re.sub(r"^\s*[a-z][\.)]\s+", "", cleaned)
+    cleaned = re.sub(r"^\s*[ivxIVX]+[\.)]\s+", "", cleaned)
+
     return cleaned.strip()
 
 
 def export_to_docx(app, output_path):
     """
     Exports the current Markdown document to a Word (.docx) file.
-    
+
     :param MarkdownReader app: The MarkdownReader application instance.
     :param string output_path: The path where the .docx file should be saved.
-    
+
     :return: A boolean set to true if the Markdown is successfully converted, and false otherwise.
 
     :raises RuntimeError: If the document could not be exported to Word.
@@ -3396,10 +3637,11 @@ def export_to_docx(app, output_path):
     if not app.editors:
         messagebox.showinfo("Info", "No document to export.")
         return False
-    
+
     try:
-        import requests
         from io import BytesIO
+
+        import requests
 
         idx = app.notebook.index(app.notebook.select())
         text_area = app.editors[idx]
@@ -3407,7 +3649,7 @@ def export_to_docx(app, output_path):
 
         current_path = None
         base_dir = None
-        if hasattr(app, 'file_paths') and app.file_paths and idx < len(app.file_paths):
+        if hasattr(app, "file_paths") and app.file_paths and idx < len(app.file_paths):
             current_path = app.file_paths[idx]
             if current_path:
                 base_dir = os.path.dirname(current_path)
@@ -3420,24 +3662,26 @@ def export_to_docx(app, output_path):
 
             :return: Two strings, one indicating whether the image stored locally or online, and another with the path required to access the image.
             """
-            
-            src = src.strip().strip('<>')
-            if (src.startswith('"') and src.endswith('"')) or (src.startswith("'") and src.endswith("'")):
+
+            src = src.strip().strip("<>")
+            if (src.startswith('"') and src.endswith('"')) or (
+                src.startswith("'") and src.endswith("'")
+            ):
                 src = src[1:-1]
 
-            if src.startswith('file://'):
+            if src.startswith("file://"):
                 src = src[7:]
 
-            if re.match(r'^https?://', src, re.IGNORECASE):
-                return 'remote', src
+            if re.match(r"^https?://", src, re.IGNORECASE):
+                return "remote", src
 
             if os.path.isabs(src):
-                return 'local', src
+                return "local", src
 
             if base_dir:
-                return 'local', os.path.abspath(os.path.join(base_dir, src))
+                return "local", os.path.abspath(os.path.join(base_dir, src))
 
-            return 'local', os.path.abspath(src)
+            return "local", os.path.abspath(src)
 
         def insert_image(doc_obj, src):
             """
@@ -3448,10 +3692,10 @@ def export_to_docx(app, output_path):
 
             :return: A boolean containing true if the operation succeeds, and false if not.
             """
-            
+
             kind, value = resolve_image_source(src)
             try:
-                if kind == 'remote':
+                if kind == "remote":
                     response = requests.get(value, timeout=15, allow_redirects=True)
                     response.raise_for_status()
                     doc_obj.add_picture(BytesIO(response.content), width=Inches(6.2))
@@ -3464,22 +3708,21 @@ def export_to_docx(app, output_path):
                 return True
             except Exception:
                 return False
-        
+
         # Create a new Word document
         doc = Document()
-        
+
         # Parse and convert markdown to Word
-        lines = markdown_text.split('\n')
+        lines = markdown_text.split("\n")
         i = 0
         in_code_block = False
         code_block_lines = []
-        in_list = False
-        
+
         while i < len(lines):
             line = lines[i]
-            
+
             # Handle code blocks
-            if line.strip().startswith('```'):
+            if line.strip().startswith("```"):
                 if not in_code_block:
                     in_code_block = True
                     code_block_lines = []
@@ -3487,28 +3730,28 @@ def export_to_docx(app, output_path):
                     # End of code block
                     in_code_block = False
                     if code_block_lines:
-                        code_text = '\n'.join(code_block_lines)
+                        code_text = "\n".join(code_block_lines)
                         p = doc.add_paragraph(code_text)
-                        p.style = 'Intense Quote'
+                        p.style = "Intense Quote"
                         for run in p.runs:
-                            run.font.name = 'Courier New'
+                            run.font.name = "Courier New"
                             run.font.size = Pt(10)
                     code_block_lines = []
                 i += 1
                 continue
-            
+
             if in_code_block:
                 code_block_lines.append(line)
                 i += 1
                 continue
-            
+
             # Skip empty lines
             if not line.strip():
                 i += 1
                 continue
 
             # Markdown image: ![alt](src)
-            md_image_match = re.match(r'^\s*!\[([^\]]*)\]\(([^)]+)\)\s*$', line)
+            md_image_match = re.match(r"^\s*!\[([^\]]*)\]\(([^)]+)\)\s*$", line)
             if md_image_match:
                 alt_text = md_image_match.group(1).strip()
                 src = md_image_match.group(2).strip()
@@ -3518,20 +3761,24 @@ def export_to_docx(app, output_path):
                 continue
 
             # HTML image: <img ... src="..." ...>
-            html_image_match = re.match(r'^\s*<img\b[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>\s*$', line, re.IGNORECASE)
+            html_image_match = re.match(
+                r'^\s*<img\b[^>]*\bsrc=["\']([^"\']+)["\'][^>]*>\s*$',
+                line,
+                re.IGNORECASE,
+            )
             if html_image_match:
                 src = html_image_match.group(1).strip()
                 alt_match = re.search(r'\balt=["\']([^"\']*)["\']', line, re.IGNORECASE)
-                alt_text = alt_match.group(1).strip() if alt_match else ''
+                alt_text = alt_match.group(1).strip() if alt_match else ""
                 if not insert_image(doc, src):
                     doc.add_paragraph(alt_text if alt_text else src)
                 i += 1
                 continue
-            
+
             # Headings
-            if line.startswith('#'):
-                level = len(line) - len(line.lstrip('#'))
-                text = line.lstrip('#').strip()
+            if line.startswith("#"):
+                level = len(line) - len(line.lstrip("#"))
+                text = line.lstrip("#").strip()
                 if level == 1:
                     doc.add_heading(text, level=1)
                 elif level == 2:
@@ -3540,53 +3787,55 @@ def export_to_docx(app, output_path):
                     doc.add_heading(text, level=3)
                 else:
                     doc.add_heading(text, level=4)
-            
+
             # Horizontal rule
-            elif line.strip() in ['---', '***', '___']:
-                doc.add_paragraph('_' * 50)
-            
+            elif line.strip() in ["---", "***", "___"]:
+                doc.add_paragraph("_" * 50)
+
             # Unordered list
-            elif re.match(r'^\s*[-*+]\s+', line):
-                text = re.sub(r'^\s*[-*+]\s+', '', line)
+            elif re.match(r"^\s*[-*+]\s+", line):
+                text = re.sub(r"^\s*[-*+]\s+", "", line)
                 text = process_inline_formatting(text)
-                p = doc.add_paragraph(text, style='List Bullet')
+                p = doc.add_paragraph(text, style="List Bullet")
                 apply_inline_formatting(p, text)
-            
+
             # Ordered list
-            elif re.match(r'^\s*\d+\.\s+', line):
-                text = re.sub(r'^\s*\d+\.\s+', '', line)
+            elif re.match(r"^\s*\d+\.\s+", line):
+                text = re.sub(r"^\s*\d+\.\s+", "", line)
                 text = process_inline_formatting(text)
-                p = doc.add_paragraph(text, style='List Number')
+                p = doc.add_paragraph(text, style="List Number")
                 apply_inline_formatting(p, text)
-            
+
             # Blockquote
-            elif line.strip().startswith('>'):
-                text = line.strip().lstrip('>').strip()
+            elif line.strip().startswith(">"):
+                text = line.strip().lstrip(">").strip()
                 text = process_inline_formatting(text)
-                p = doc.add_paragraph(text, style='Intense Quote')
+                p = doc.add_paragraph(text, style="Intense Quote")
                 apply_inline_formatting(p, text)
-            
+
             # Table detection (simple)
-            elif '|' in line and line.strip().startswith('|'):
+            elif "|" in line and line.strip().startswith("|"):
                 table_lines = [line]
                 i += 1
                 # Collect table rows
-                while i < len(lines) and '|' in lines[i]:
+                while i < len(lines) and "|" in lines[i]:
                     table_lines.append(lines[i])
                     i += 1
-                
+
                 # Parse and create table
                 if len(table_lines) > 2:  # Header + separator + at least one row
                     rows_data = []
                     for tline in table_lines:
-                        if not re.match(r'^\s*\|[\s:-]+\|', tline):  # Skip separator
-                            cells = [c.strip() for c in tline.split('|')[1:-1]]
+                        if not re.match(r"^\s*\|[\s:-]+\|", tline):  # Skip separator
+                            cells = [c.strip() for c in tline.split("|")[1:-1]]
                             rows_data.append(cells)
-                    
+
                     if rows_data:
-                        table = doc.add_table(rows=len(rows_data), cols=len(rows_data[0]))
-                        table.style = 'Light Grid Accent 1'
-                        
+                        table = doc.add_table(
+                            rows=len(rows_data), cols=len(rows_data[0])
+                        )
+                        table.style = "Light Grid Accent 1"
+
                         for row_idx, row_data in enumerate(rows_data):
                             for col_idx, cell_text in enumerate(row_data):
                                 cell = table.rows[row_idx].cells[col_idx]
@@ -3596,23 +3845,26 @@ def export_to_docx(app, output_path):
                                         for run in paragraph.runs:
                                             run.font.bold = True
                 continue
-            
+
             # Regular paragraph
             else:
                 text = process_inline_formatting(line)
                 p = doc.add_paragraph()
                 apply_inline_formatting(p, line)
-            
+
             i += 1
-        
+
         # Save the document
         doc.save(output_path)
-        messagebox.showinfo("Success", f"Document exported successfully to:\n{output_path}")
+        messagebox.showinfo(
+            "Success", f"Document exported successfully to:\n{output_path}"
+        )
         return True
-        
+
     except Exception as e:
         messagebox.showerror("Error", f"Failed to export to Word: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -3623,10 +3875,10 @@ def export_to_pdf(app, output_path):
     - Since PDF generation libraries have complex dependencies,
       this creates a print-friendly HTML file and opens it in the browser
       for the user to print to PDF using the browser's built-in functionality.
-    
+
     :param MarkdownReader app: The MarkdownReader application instance.
     :param string output_path: The path where the PDF file should be saved (used as suggestion).
-    
+
     :return: A boolean set to true if successfully exported and false otherwise.
 
     :raises RuntimeError: If the image paths could not be processed.
@@ -3636,22 +3888,22 @@ def export_to_pdf(app, output_path):
     if not app.editors:
         messagebox.showinfo("Info", "No document to export.")
         return False
-    
+
     try:
         import tempfile
-        import webbrowser
-        
+
         idx = app.notebook.index(app.notebook.select())
         text_area = app.editors[idx]
         markdown_text = text_area.get("1.0", "end-1c")
-        
+
         # Fix image paths if a file is currently open
         base_dir = None
-        if hasattr(app, 'file_paths') and app.file_paths:
+        if hasattr(app, "file_paths") and app.file_paths:
             try:
                 current_path = app.file_paths[idx]
                 if current_path is not None:
                     base_dir = os.path.dirname(current_path)
+
                     def convert_file_url_to_absolute(text, base_dir):
                         """
                         Converts file:// paths and relative paths to absolute file URLs for PDF export.
@@ -3661,49 +3913,66 @@ def export_to_pdf(app, output_path):
 
                         :return: The formatted URL ready for PDF export.
                         """
-                        
+
                         def repl(m):
                             alt = m.group(1)
                             src = m.group(2)
-                            if src.startswith('file://'):
+                            if src.startswith("file://"):
                                 # Already absolute file URL
-                                return f'![{alt}]({src})'
-                            elif src.startswith('/') or (len(src) > 1 and src[1] == ':'):
+                                return f"![{alt}]({src})"
+                            elif src.startswith("/") or (
+                                len(src) > 1 and src[1] == ":"
+                            ):
                                 # Already absolute path
-                                return f'![{alt}](file://{src})'
+                                return f"![{alt}](file://{src})"
                             else:
                                 # Relative path - convert to absolute file URL
                                 try:
-                                    abs_path = os.path.abspath(os.path.join(base_dir, src))
-                                    file_url = 'file://' + abs_path
-                                    return f'![{alt}]({file_url})'
+                                    abs_path = os.path.abspath(
+                                        os.path.join(base_dir, src)
+                                    )
+                                    file_url = "file://" + abs_path
+                                    return f"![{alt}]({file_url})"
                                 except (ValueError, OSError):
                                     return m.group(0)
-                        return re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', repl, text)
-                    
-                    markdown_text = convert_file_url_to_absolute(markdown_text, base_dir)
+
+                        return re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", repl, text)
+
+                    markdown_text = convert_file_url_to_absolute(
+                        markdown_text, base_dir
+                    )
             except Exception as e:
                 print(f"Warning: Could not process image paths: {e}")
-        
+
         # Convert markdown to HTML
         html_content = markdown2.markdown(
-            markdown_text, 
-            extras=["fenced-code-blocks", "code-friendly", "tables", "break-on-newline"]
+            markdown_text,
+            extras=[
+                "fenced-code-blocks",
+                "code-friendly",
+                "tables",
+                "break-on-newline",
+            ],
         )
-        
+
         # Get style from app (with fallback)
-        font_family = getattr(app, 'current_font_family', 'Consolas')
-        font_size = getattr(app, 'current_font_size', 14)
-        fg_color = getattr(app, 'current_fg_color', '#000000')
-        bg_color = getattr(app, 'current_bg_color', 'white')
-        
-        if getattr(app, 'dark_mode', False):
-            bg_color = '#1e1e1e'
-            fg_color = '#dcdcdc'
-        
+        font_family = getattr(app, "current_font_family", "Consolas")
+        font_size = getattr(app, "current_font_size", 14)
+        getattr(app, "current_fg_color", "#000000")
+        getattr(app, "current_bg_color", "white")
+
+        if getattr(app, "dark_mode", False):
+            pass
+
         # For PDF, use generic font fallbacks
         web_font_family = font_family
-        if font_family.lower() in ["arial", "helvetica", "verdana", "tahoma", "trebuchet ms"]:
+        if font_family.lower() in [
+            "arial",
+            "helvetica",
+            "verdana",
+            "tahoma",
+            "trebuchet ms",
+        ]:
             web_font_family += ", sans-serif"
         elif font_family.lower() in ["times new roman", "georgia", "garamond", "serif"]:
             web_font_family += ", serif"
@@ -3711,10 +3980,9 @@ def export_to_pdf(app, output_path):
             web_font_family += ", monospace"
         else:
             web_font_family += ", sans-serif"
-        
+
         # Code blocks should always use monospace fonts
-        code_font_family = "Consolas, 'Courier New', monospace"
-        
+
         # Heading sizes relative to base font size
         h1 = font_size + 18
         h2 = font_size + 12
@@ -3723,14 +3991,14 @@ def export_to_pdf(app, output_path):
         h5 = font_size + 2
         h6 = font_size + 1
         base = font_size + 2
-        
+
         # Generate complete HTML document for PDF printing
         # Optimized for print media with @media print styles
         base_tag = ""
         if base_dir:
             # Add base tag to help resolve relative image paths
             base_tag = f'<base href="file://{base_dir}/">'
-        
+
         html_document = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -3745,23 +4013,23 @@ def export_to_pdf(app, output_path):
                 margin: 0;
                 padding: 20px;
             }}
-            
+
             /* Hide print button when actually printing */
             .print-instructions {{
                 display: none;
             }}
-            
+
             /* Page break control */
             h1, h2, h3, h4, h5, h6 {{
                 page-break-after: avoid;
                 page-break-inside: avoid;
             }}
-            
+
             pre, code, table, img {{
                 page-break-inside: avoid;
             }}
         }}
-        
+
         @media screen {{
             body {{
                 max-width: 800px;
@@ -3770,7 +4038,7 @@ def export_to_pdf(app, output_path):
                 background-color: white;
                 box-shadow: 0 0 10px rgba(0,0,0,0.1);
             }}
-            
+
             /* Show print instructions on screen */
             .print-instructions {{
                 background-color: #e3f2fd;
@@ -3780,7 +4048,7 @@ def export_to_pdf(app, output_path):
                 margin: 20px 0;
                 text-align: center;
             }}
-            
+
             .print-button {{
                 background-color: #2196F3;
                 color: white;
@@ -3791,12 +4059,12 @@ def export_to_pdf(app, output_path):
                 cursor: pointer;
                 margin: 10px;
             }}
-            
+
             .print-button:hover {{
                 background-color: #1976D2;
             }}
         }}
-        
+
         /* Common styles for both screen and print */
         body {{
             font-family: {web_font_family};
@@ -3804,18 +4072,18 @@ def export_to_pdf(app, output_path):
             line-height: 1.6;
             color: #333;
         }}
-        
+
         h1 {{ font-size: {h1}pt; margin-top: 1.5em; margin-bottom: 0.5em; font-weight: bold; }}
         h2 {{ font-size: {h2}pt; margin-top: 1.2em; margin-bottom: 0.4em; font-weight: bold; }}
         h3 {{ font-size: {h3}pt; margin-top: 1em; margin-bottom: 0.3em; font-weight: bold; }}
         h4 {{ font-size: {h4}pt; margin-top: 0.8em; margin-bottom: 0.25em; font-weight: bold; }}
         h5 {{ font-size: {h5}pt; margin-top: 0.6em; margin-bottom: 0.2em; font-weight: bold; }}
         h6 {{ font-size: {h6}pt; margin-top: 0.5em; margin-bottom: 0.2em; font-weight: bold; }}
-        
+
         b, strong {{ font-weight: bold; }}
         i, em {{ font-style: italic; }}
         u {{ text-decoration: underline; }}
-        
+
         pre {{
             background-color: #f5f5f5;
             color: #000;
@@ -3825,14 +4093,14 @@ def export_to_pdf(app, output_path):
             margin: 10pt 0;
             overflow-x: auto;
         }}
-        
+
         pre code {{
             font-family: Consolas, 'Courier New', monospace;
             font-size: {max(font_size - 2, 10)}pt;
             white-space: pre;
             display: block;
         }}
-        
+
         code {{
             background-color: #f5f5f5;
             color: #c7254e;
@@ -3842,37 +4110,37 @@ def export_to_pdf(app, output_path):
             border-radius: 3px;
             border: 1pt solid #e1e1e8;
         }}
-        
+
         img {{
             max-width: 100%;
             height: auto;
             display: block;
             margin: 15pt auto;
         }}
-        
+
         table {{
             border-collapse: collapse;
             width: 100%;
             margin: 15pt 0;
         }}
-        
+
         th, td {{
             text-align: left;
             border: 1pt solid #ddd;
             padding: 8pt 12pt;
             vertical-align: top;
         }}
-        
+
         th {{
             background-color: #f5f5f5;
             color: #333;
             font-weight: bold;
         }}
-        
+
         tr:nth-child(even) {{
             background-color: #fafafa;
         }}
-        
+
         blockquote {{
             border-left: 4pt solid #ddd;
             padding-left: 15pt;
@@ -3880,21 +4148,21 @@ def export_to_pdf(app, output_path):
             margin: 15pt 0;
             font-style: italic;
         }}
-        
+
         a {{
             color: #0066cc;
             text-decoration: underline;
         }}
-        
+
         ul, ol {{
             margin: 8pt 0;
             padding-left: 30pt;
         }}
-        
+
         li {{
             margin: 4pt 0;
         }}
-        
+
         p {{
             margin: 8pt 0;
         }}
@@ -3911,7 +4179,7 @@ def export_to_pdf(app, output_path):
             <p><em>Select "Save as PDF" as the printer in the print dialog</em></p>
         </div>
     </div>
-    
+
 {html_content}
 
     <script>
@@ -3923,8 +4191,10 @@ def export_to_pdf(app, output_path):
 </html>"""
 
         # Create a temporary HTML file optimized for printing
-        base_name = os.path.splitext(os.path.basename(output_path))[0]
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as tmp_file:
+        os.path.splitext(os.path.basename(output_path))[0]
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".html", delete=False, encoding="utf-8"
+        ) as tmp_file:
             tmp_file.write(html_document)
             tmp_html_path = tmp_file.name
 
@@ -3932,14 +4202,14 @@ def export_to_pdf(app, output_path):
         _open_file_in_browser(tmp_html_path)
 
         # Show instructions to the user
-        result = messagebox.showinfo(
+        messagebox.showinfo(
             "Export PDF",
             f"A print-friendly HTML page has been opened in your browser.\n\n"
             f"Please follow these steps to export as PDF:\n\n"
             f"1. Press Cmd+P (macOS) or Ctrl+P (Windows) in your browser\n"
             f"2. Select 'Save as PDF' as the printer\n"
             f"3. Choose the save location and name it: {os.path.basename(output_path)}\n\n"
-            f"Or click the 'Print' button on the page."
+            f"Or click the 'Print' button on the page.",
         )
 
         return True
@@ -3947,6 +4217,7 @@ def export_to_pdf(app, output_path):
     except Exception as e:
         messagebox.showerror("Error", f"Failed to export PDF: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -3961,15 +4232,15 @@ def process_inline_formatting(text):
     """
 
     # Remove bold
-    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
-    text = re.sub(r'__(.+?)__', r'\1', text)
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"__(.+?)__", r"\1", text)
     # Remove italic
-    text = re.sub(r'\*(.+?)\*', r'\1', text)
-    text = re.sub(r'_(.+?)_', r'\1', text)
+    text = re.sub(r"\*(.+?)\*", r"\1", text)
+    text = re.sub(r"_(.+?)_", r"\1", text)
     # Remove inline code
-    text = re.sub(r'`(.+?)`', r'\1', text)
+    text = re.sub(r"`(.+?)`", r"\1", text)
     # Remove links but keep text
-    text = re.sub(r'\[(.+?)\]\((.+?)\)', r'\1', text)
+    text = re.sub(r"\[(.+?)\]\((.+?)\)", r"\1", text)
     return text
 
 
@@ -3983,22 +4254,20 @@ def apply_inline_formatting(paragraph, text):
 
     # Clear existing runs
     paragraph.clear()
-    
+
     # Pattern to match markdown inline formatting
     # This is a simplified version - handles bold, italic, code, and links
-    parts = []
-    current_pos = 0
-    
+
     # Find all formatting markers
     patterns = [
-        (r'\*\*(.+?)\*\*', 'bold'),      # Bold with **
-        (r'__(.+?)__', 'bold'),          # Bold with __
-        (r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', 'italic'),  # Italic with *
-        (r'(?<!_)_(?!_)(.+?)(?<!_)_(?!_)', 'italic'),        # Italic with _
-        (r'`(.+?)`', 'code'),            # Inline code
-        (r'\[(.+?)\]\((.+?)\)', 'link'), # Links
+        (r"\*\*(.+?)\*\*", "bold"),  # Bold with **
+        (r"__(.+?)__", "bold"),  # Bold with __
+        (r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", "italic"),  # Italic with *
+        (r"(?<!_)_(?!_)(.+?)(?<!_)_(?!_)", "italic"),  # Italic with _
+        (r"`(.+?)`", "code"),  # Inline code
+        (r"\[(.+?)\]\((.+?)\)", "link"),  # Links
     ]
-    
+
     segments = []
     i = 0
     while i < len(text):
@@ -4006,14 +4275,14 @@ def apply_inline_formatting(paragraph, text):
         for pattern, style in patterns:
             match = re.match(pattern, text[i:])
             if match:
-                if style == 'link':
-                    segments.append(('normal', match.group(1)))
+                if style == "link":
+                    segments.append(("normal", match.group(1)))
                 else:
                     segments.append((style, match.group(1)))
                 i += match.end()
                 matched = True
                 break
-        
+
         if not matched:
             # Find next formatting marker
             next_marker = len(text)
@@ -4021,25 +4290,25 @@ def apply_inline_formatting(paragraph, text):
                 match = re.search(pattern, text[i:])
                 if match:
                     next_marker = min(next_marker, i + match.start())
-            
+
             if next_marker > i:
-                segments.append(('normal', text[i:next_marker]))
+                segments.append(("normal", text[i:next_marker]))
                 i = next_marker
             else:
                 i += 1
-    
+
     # If no formatting found, just add the text
     if not segments:
         paragraph.add_run(text)
     else:
         for style, content in segments:
             run = paragraph.add_run(content)
-            if style == 'bold':
+            if style == "bold":
                 run.font.bold = True
-            elif style == 'italic':
+            elif style == "italic":
                 run.font.italic = True
-            elif style == 'code':
-                run.font.name = 'Courier New'
+            elif style == "code":
+                run.font.name = "Courier New"
                 run.font.size = Pt(10)
                 run.font.color.rgb = RGBColor(212, 73, 80)
 
@@ -4047,26 +4316,27 @@ def apply_inline_formatting(paragraph, text):
 def convert_pdf_to_markdown_docling(pdf_path):
     """
     Converts a PDF file to Markdown format using Docling with advanced ML-based analysis.
-    
+
     Docling uses deep learning models to better understand document structure,
     including tables, multi-column layouts, and complex formatting.
-    
+
     Extracts and saves embedded images to an asset directory with proper file:// URIs
     for display in browser previews.
-    
+
     :param string pdf_path: The file path for the PDF file.
     :return: A string containing Markdown code representing the converted PDF file.
     :raises ImportError: If Docling is not installed.
     :raises Exception: If the PDF cannot be converted to Markdown.
     """
-    
+
     converter = None
 
     try:
-        from docling.document_converter import DocumentConverter
-        import re
         import html
+        import re
         import shutil
+
+        from docling.document_converter import DocumentConverter
 
         def _cleanup_docling_object(obj, seen=None):
             if obj is None:
@@ -4080,7 +4350,14 @@ def convert_pdf_to_markdown_docling(pdf_path):
                 return
             seen.add(obj_id)
 
-            for method_name in ("cleanup", "close", "shutdown", "terminate", "stop", "unload"):
+            for method_name in (
+                "cleanup",
+                "close",
+                "shutdown",
+                "terminate",
+                "stop",
+                "unload",
+            ):
                 method = getattr(obj, method_name, None)
                 if callable(method):
                     try:
@@ -4107,8 +4384,12 @@ def convert_pdf_to_markdown_docling(pdf_path):
             for attr_name, value in obj_dict.items():
                 if attr_name.startswith("__"):
                     continue
-                value_module = getattr(getattr(value, "__class__", None), "__module__", "")
-                if isinstance(value, (dict, list, tuple, set)) or value_module.startswith(("docling", "docling_core")):
+                value_module = getattr(
+                    getattr(value, "__class__", None), "__module__", ""
+                )
+                if isinstance(
+                    value, (dict, list, tuple, set)
+                ) or value_module.startswith(("docling", "docling_core")):
                     _cleanup_docling_object(value, seen)
 
         def _cleanup_docling_converter(doc_converter):
@@ -4117,22 +4398,22 @@ def convert_pdf_to_markdown_docling(pdf_path):
                 for pipeline in list(initialized.values()):
                     _cleanup_docling_object(pipeline)
                 initialized.clear()
-        
+
         pdf_abs_path = os.path.abspath(pdf_path)
         pdf_base_dir = os.path.dirname(pdf_abs_path)
         pdf_stem = os.path.splitext(os.path.basename(pdf_abs_path))[0]
         asset_dir = os.path.join(pdf_base_dir, f"{pdf_stem}_assets")
         os.makedirs(asset_dir, exist_ok=True)
-        
+
         if not os.path.exists(pdf_abs_path):
             raise FileNotFoundError(f"PDF file not found: {pdf_abs_path}")
-        
+
         # Initialize converter
         converter = DocumentConverter()
-        
+
         # Convert PDF
         result = converter.convert(pdf_abs_path)
-        
+
         # Export to Markdown
         markdown_text = result.document.export_to_markdown()
 
@@ -4160,18 +4441,32 @@ def convert_pdf_to_markdown_docling(pdf_path):
             if hasattr(picture, "save") and callable(getattr(picture, "save")):
                 try:
                     picture.save(target_path)
-                    return os.path.exists(target_path) and os.path.getsize(target_path) > 0
+                    return (
+                        os.path.exists(target_path) and os.path.getsize(target_path) > 0
+                    )
                 except Exception:
                     pass
 
-            if hasattr(picture, "export_to_file") and callable(getattr(picture, "export_to_file")):
+            if hasattr(picture, "export_to_file") and callable(
+                getattr(picture, "export_to_file")
+            ):
                 try:
                     picture.export_to_file(target_path)
-                    return os.path.exists(target_path) and os.path.getsize(target_path) > 0
+                    return (
+                        os.path.exists(target_path) and os.path.getsize(target_path) > 0
+                    )
                 except Exception:
                     pass
 
-            candidate_attrs = ["get_image", "image", "pil_image", "data", "bytes", "blob", "content"]
+            candidate_attrs = [
+                "get_image",
+                "image",
+                "pil_image",
+                "data",
+                "bytes",
+                "blob",
+                "content",
+            ]
             for attr in candidate_attrs:
                 if not hasattr(picture, attr):
                     continue
@@ -4187,16 +4482,23 @@ def convert_pdf_to_markdown_docling(pdf_path):
 
                 if isinstance(value, (bytes, bytearray)):
                     _write_bytes_file(bytes(value), target_path)
-                    return os.path.exists(target_path) and os.path.getsize(target_path) > 0
+                    return (
+                        os.path.exists(target_path) and os.path.getsize(target_path) > 0
+                    )
 
                 if isinstance(value, str) and os.path.exists(value):
                     shutil.copyfile(value, target_path)
-                    return os.path.exists(target_path) and os.path.getsize(target_path) > 0
+                    return (
+                        os.path.exists(target_path) and os.path.getsize(target_path) > 0
+                    )
 
                 if hasattr(value, "save") and callable(getattr(value, "save")):
                     try:
                         value.save(target_path)
-                        return os.path.exists(target_path) and os.path.getsize(target_path) > 0
+                        return (
+                            os.path.exists(target_path)
+                            and os.path.getsize(target_path) > 0
+                        )
                     except Exception:
                         continue
 
@@ -4243,7 +4545,9 @@ def convert_pdf_to_markdown_docling(pdf_path):
                         bbox = block.get("bbox") or [0, 0, 0, 0]
                         x_top = float(bbox[0]) if len(bbox) > 0 else 0.0
                         y_top = float(bbox[1]) if len(bbox) > 1 else 0.0
-                        image_records.append((page_num, y_top, x_top, Path(path).as_uri()))
+                        image_records.append(
+                            (page_num, y_top, x_top, Path(path).as_uri())
+                        )
 
                 # Sort by reading order: page -> y(top) -> x(left)
                 image_records.sort(key=lambda item: (item[0], item[1], item[2]))
@@ -4287,9 +4591,18 @@ def convert_pdf_to_markdown_docling(pdf_path):
                 except Exception:
                     continue
 
-        has_image_placeholder = re.search(r'^\s*<!--\s*image\s*-->\s*$', markdown_text, flags=re.IGNORECASE | re.MULTILINE) is not None
+        has_image_placeholder = (
+            re.search(
+                r"^\s*<!--\s*image\s*-->\s*$",
+                markdown_text,
+                flags=re.IGNORECASE | re.MULTILINE,
+            )
+            is not None
+        )
         if not image_uris or has_image_placeholder:
-            fallback_uris = _extract_images_with_pymupdf_fallback(start_index=len(image_uris))
+            fallback_uris = _extract_images_with_pymupdf_fallback(
+                start_index=len(image_uris)
+            )
             if fallback_uris:
                 if has_image_placeholder:
                     # Placeholder order should follow page reading order from PDF blocks.
@@ -4299,9 +4612,11 @@ def convert_pdf_to_markdown_docling(pdf_path):
                     image_uris.extend(fallback_uris)
 
         # Convert escaped HTML image tags such as &lt;img ...&gt; and < img ... >
-        markdown_text = re.sub(r'&lt;\s*img\b([^&]*)&gt;', r'<img\1>', markdown_text, flags=re.IGNORECASE)
-        markdown_text = re.sub(r'<\s+img\b', '<img', markdown_text, flags=re.IGNORECASE)
-        markdown_text = re.sub(r'\s+/\s*>', ' />', markdown_text)
+        markdown_text = re.sub(
+            r"&lt;\s*img\b([^&]*)&gt;", r"<img\1>", markdown_text, flags=re.IGNORECASE
+        )
+        markdown_text = re.sub(r"<\s+img\b", "<img", markdown_text, flags=re.IGNORECASE)
+        markdown_text = re.sub(r"\s+/\s*>", " />", markdown_text)
 
         def _html_img_to_md(match):
             full_tag = match.group(0)
@@ -4310,19 +4625,35 @@ def convert_pdf_to_markdown_docling(pdf_path):
                 return full_tag
             src = html.unescape(src_match.group(1).strip())
             alt_match = re.search(r'\balt=["\']([^"\']*)["\']', full_tag, re.IGNORECASE)
-            alt = html.unescape(alt_match.group(1).strip()) if alt_match else ''
+            alt = html.unescape(alt_match.group(1).strip()) if alt_match else ""
             return f"![{alt}]({src})"
 
-        markdown_text = re.sub(r'<img\b[^>]*>', _html_img_to_md, markdown_text, flags=re.IGNORECASE)
+        markdown_text = re.sub(
+            r"<img\b[^>]*>", _html_img_to_md, markdown_text, flags=re.IGNORECASE
+        )
 
         # Basic cleanup for common OCR/round-trip artifacts
         markdown_text = html.unescape(markdown_text)
-        markdown_text = re.sub(r"^'''([a-zA-Z0-9_-]+)\s*$", r"```\1", markdown_text, flags=re.MULTILINE)
-        markdown_text = re.sub(r"^'''([a-zA-Z0-9_-]+)\s+(.+)$", r"```\1\n\2", markdown_text, flags=re.MULTILINE)
+        markdown_text = re.sub(
+            r"^'''([a-zA-Z0-9_-]+)\s*$", r"```\1", markdown_text, flags=re.MULTILINE
+        )
+        markdown_text = re.sub(
+            r"^'''([a-zA-Z0-9_-]+)\s+(.+)$",
+            r"```\1\n\2",
+            markdown_text,
+            flags=re.MULTILINE,
+        )
         markdown_text = re.sub(r"^'''\s*$", "```", markdown_text, flags=re.MULTILINE)
-        markdown_text = re.sub(r"^[ \t]*«[ \t]+", "* ", markdown_text, flags=re.MULTILINE)
-        markdown_text = re.sub(r'^\s*["“”]*\s*(Normal text|Consolas)\s*["“”]*\s*\n', '', markdown_text, flags=re.IGNORECASE | re.MULTILINE)
-        markdown_text = re.sub(r'\n{3,}', '\n\n', markdown_text)
+        markdown_text = re.sub(
+            r"^[ \t]*«[ \t]+", "* ", markdown_text, flags=re.MULTILINE
+        )
+        markdown_text = re.sub(
+            r'^\s*["“”]*\s*(Normal text|Consolas)\s*["“”]*\s*\n',
+            "",
+            markdown_text,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+        markdown_text = re.sub(r"\n{3,}", "\n\n", markdown_text)
 
         # Replace markdown image paths to absolute file:// URIs when possible
         def _replace_md_image_path(match):
@@ -4337,15 +4668,19 @@ def convert_pdf_to_markdown_docling(pdf_path):
                     return f"![{alt_text}]({uri})"
 
             local_candidates = []
-            local_candidates.append(os.path.abspath(os.path.join(pdf_base_dir, image_src)))
+            local_candidates.append(
+                os.path.abspath(os.path.join(pdf_base_dir, image_src))
+            )
             local_candidates.append(os.path.abspath(os.path.join(asset_dir, image_src)))
 
             for candidate in local_candidates:
                 if os.path.exists(candidate):
                     return f"![{alt_text}]({Path(candidate).as_uri()})"
 
-            if image_uris and re.search(r'(image|picture|fig|figure)', image_src, re.IGNORECASE):
-                num_match = re.search(r'(\d+)', image_src)
+            if image_uris and re.search(
+                r"(image|picture|fig|figure)", image_src, re.IGNORECASE
+            ):
+                num_match = re.search(r"(\d+)", image_src)
                 if num_match:
                     image_idx = int(num_match.group(1))
                     if 1 <= image_idx <= len(image_uris):
@@ -4353,7 +4688,9 @@ def convert_pdf_to_markdown_docling(pdf_path):
 
             return match.group(0)
 
-        markdown_text = re.sub(r'!\[([^\]]*)\]\(([^)]+)\)', _replace_md_image_path, markdown_text)
+        markdown_text = re.sub(
+            r"!\[([^\]]*)\]\(([^)]+)\)", _replace_md_image_path, markdown_text
+        )
 
         # Replace Docling image placeholders: <!-- image -->
         if image_uris:
@@ -4367,14 +4704,19 @@ def convert_pdf_to_markdown_docling(pdf_path):
                 return ""
 
             markdown_text = re.sub(
-                r'^\s*<!--\s*image\s*-->\s*$',
+                r"^\s*<!--\s*image\s*-->\s*$",
                 _replace_image_placeholder,
                 markdown_text,
                 flags=re.IGNORECASE | re.MULTILINE,
             )
 
         # Remove any unreplaced image placeholders
-        markdown_text = re.sub(r'^\s*<!--\s*image\s*-->\s*$', '', markdown_text, flags=re.IGNORECASE | re.MULTILINE)
+        markdown_text = re.sub(
+            r"^\s*<!--\s*image\s*-->\s*$",
+            "",
+            markdown_text,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
 
         def _fix_malformed_code_fences(text):
             lines = text.splitlines()
@@ -4403,15 +4745,19 @@ def convert_pdf_to_markdown_docling(pdf_path):
                         code_line_count += 1
 
                     looks_like_doc_content = (
-                        re.match(r'^\s*#{1,6}\s+', line) is not None
-                        or re.match(r'^\s*[-*+]\s+', line) is not None
-                        or re.match(r'^\s*\d+\.\s+', line) is not None
-                        or stripped in ('---', '***', '___')
+                        re.match(r"^\s*#{1,6}\s+", line) is not None
+                        or re.match(r"^\s*[-*+]\s+", line) is not None
+                        or re.match(r"^\s*\d+\.\s+", line) is not None
+                        or stripped in ("---", "***", "___")
                     )
 
                     # Heuristic: if bash fence only had command lines and then doc content starts,
                     # it is usually an unclosed accidental fence from OCR.
-                    if looks_like_doc_content and current_lang in ("bash", "sh", "shell", "zsh") and code_line_count <= 2:
+                    if (
+                        looks_like_doc_content
+                        and current_lang in ("bash", "sh", "shell", "zsh")
+                        and code_line_count <= 2
+                    ):
                         output.append("```")
                         in_code_block = False
                         current_lang = ""
@@ -4435,31 +4781,36 @@ def convert_pdf_to_markdown_docling(pdf_path):
 
                 lowered = stripped.lower()
 
-                if re.match(r'^\d{1,4}$', stripped):
+                if re.match(r"^\d{1,4}$", stripped):
                     return True
-                if re.match(r'^[-–—_]+$', stripped):
+                if re.match(r"^[-–—_]+$", stripped):
                     return True
-                if re.match(r'^[a-z0-9_.-]+\.(md|txt|pdf|doc|docx|html|htm)$', lowered):
+                if re.match(r"^[a-z0-9_.-]+\.(md|txt|pdf|doc|docx|html|htm)$", lowered):
                     return True
                 if lowered in {
-                    'markdown reader',
-                    'untitled',
-                    'readme.md',
-                    'features',
-                    'editor overview',
-                    'preview overview',
+                    "markdown reader",
+                    "untitled",
+                    "readme.md",
+                    "features",
+                    "editor overview",
+                    "preview overview",
                 }:
                     return True
-                if '·' in stripped or '•' in stripped:
+                if "·" in stripped or "•" in stripped:
                     return True
-                if 'toggle, and drag-and-drop file opening' in lowered:
+                if "toggle, and drag-and-drop file opening" in lowered:
                     return True
-                if 'compatible with mac' in lowered and 'desktop environments' in lowered:
+                if (
+                    "compatible with mac" in lowered
+                    and "desktop environments" in lowered
+                ):
                     return True
 
-                if len(stripped) <= 40 and re.match(r'^[a-zA-Z0-9 .,_()\-/]+$', stripped):
+                if len(stripped) <= 40 and re.match(
+                    r"^[a-zA-Z0-9 .,_()\-/]+$", stripped
+                ):
                     word_count = len([w for w in stripped.split() if w])
-                    if 1 <= word_count <= 6 and lowered != 'installation & usage':
+                    if 1 <= word_count <= 6 and lowered != "installation & usage":
                         return True
 
                 return False
@@ -4475,7 +4826,7 @@ def convert_pdf_to_markdown_docling(pdf_path):
                 if image_idx >= len(ordered_image_uris):
                     continue
 
-                section_pattern = rf'(^\s*#{{2,6}}\s*{re.escape(section_name)}\s*$)(.*?)(?=^\s*#{{1,6}}\s+|\Z)'
+                section_pattern = rf"(^\s*#{{2,6}}\s*{re.escape(section_name)}\s*$)(.*?)(?=^\s*#{{1,6}}\s+|\Z)"
 
                 def _section_repl(match):
                     nonlocal inserted_count
@@ -4485,25 +4836,32 @@ def convert_pdf_to_markdown_docling(pdf_path):
                     body_lines = body.splitlines()
                     cleaned_lines = []
                     for body_line in body_lines:
-                        if re.match(r'^\s*!\[[^\]]*\]\(([^)]+)\)\s*$', body_line):
+                        if re.match(r"^\s*!\[[^\]]*\]\(([^)]+)\)\s*$", body_line):
                             continue
-                        if re.match(r'^\s*<img\b[^>]*>\s*$', body_line, re.IGNORECASE):
+                        if re.match(r"^\s*<img\b[^>]*>\s*$", body_line, re.IGNORECASE):
                             continue
-                        if re.match(r'^\s*<!--\s*image\s*-->\s*$', body_line, re.IGNORECASE):
+                        if re.match(
+                            r"^\s*<!--\s*image\s*-->\s*$", body_line, re.IGNORECASE
+                        ):
                             continue
-                        if section_name.lower() in ('editor overview', 'preview overview') and _is_screenshot_ocr_noise(body_line):
+                        if section_name.lower() in (
+                            "editor overview",
+                            "preview overview",
+                        ) and _is_screenshot_ocr_noise(body_line):
                             continue
                         cleaned_lines.append(body_line)
 
                     image_uri = ordered_image_uris[image_idx]
-                    image_line = f"![{section_name.lower().replace(' ', '-')}]({image_uri})"
+                    image_line = (
+                        f"![{section_name.lower().replace(' ', '-')}]({image_uri})"
+                    )
                     cleaned_body = "\n".join(cleaned_lines).strip("\n")
 
                     # For Preview Overview, aggressively remove dangling OCR text fragments.
-                    if section_name.lower() == 'preview overview':
+                    if section_name.lower() == "preview overview":
                         cleaned_body = re.sub(
-                            r'^[\s]*toggle, and drag-and-drop file opening\..*?(?:\nCompatible with mac[^\n]*)?',
-                            '',
+                            r"^[\s]*toggle, and drag-and-drop file opening\..*?(?:\nCompatible with mac[^\n]*)?",
+                            "",
                             cleaned_body,
                             flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
                         )
@@ -4514,14 +4872,19 @@ def convert_pdf_to_markdown_docling(pdf_path):
                         return f"{heading_line}\n\n{image_line}\n\n{cleaned_body}\n"
                     return f"{heading_line}\n\n{image_line}\n"
 
-                updated = re.sub(section_pattern, _section_repl, updated, flags=re.IGNORECASE | re.MULTILINE | re.DOTALL)
+                updated = re.sub(
+                    section_pattern,
+                    _section_repl,
+                    updated,
+                    flags=re.IGNORECASE | re.MULTILINE | re.DOTALL,
+                )
 
             # If two local section images are already inserted, remove stray GitHub attachment
             # image lines outside those sections to reduce reversed visual order.
             if inserted_count >= 2:
                 updated = re.sub(
-                    r'^\s*!\[[^\]]*\]\(https?://github\.com/user-attachments/assets/[^)]+\)\s*$\n?',
-                    '',
+                    r"^\s*!\[[^\]]*\]\(https?://github\.com/user-attachments/assets/[^)]+\)\s*$\n?",
+                    "",
                     updated,
                     flags=re.MULTILINE,
                 )
@@ -4532,7 +4895,9 @@ def convert_pdf_to_markdown_docling(pdf_path):
             cleaned = text
 
             def _strip_overview_body_noise(src_text, section_title):
-                section_re = rf'(?ms)^##\s*{re.escape(section_title)}\s*\n(.*?)(?=^##\s+|\Z)'
+                section_re = (
+                    rf"(?ms)^##\s*{re.escape(section_title)}\s*\n(.*?)(?=^##\s+|\Z)"
+                )
 
                 def _section_clean(match):
                     body = match.group(1)
@@ -4541,17 +4906,21 @@ def convert_pdf_to_markdown_docling(pdf_path):
                         s = ln.strip()
                         if not s:
                             continue
-                        if re.match(r'^!\[[^\]]*\]\([^)]+\)$', s):
+                        if re.match(r"^!\[[^\]]*\]\([^)]+\)$", s):
                             kept_lines.append(s)
                     if kept_lines:
-                        return f"## {section_title}\n\n" + "\n\n".join(kept_lines) + "\n\n"
+                        return (
+                            f"## {section_title}\n\n" + "\n\n".join(kept_lines) + "\n\n"
+                        )
                     return f"## {section_title}\n\n"
 
-                return re.sub(section_re, _section_clean, src_text, count=1, flags=re.IGNORECASE)
+                return re.sub(
+                    section_re, _section_clean, src_text, count=1, flags=re.IGNORECASE
+                )
 
             def _remove_duplicate_section(src_text, section_title):
                 # Keep only the first section occurrence for titles that should be unique.
-                pat = rf'(?ms)^##\s*{re.escape(section_title)}\s*\n.*?(?=^##\s+|\Z)'
+                pat = rf"(?ms)^##\s*{re.escape(section_title)}\s*\n.*?(?=^##\s+|\Z)"
                 matches = list(re.finditer(pat, src_text, flags=re.IGNORECASE))
                 if len(matches) <= 1:
                     return src_text
@@ -4560,109 +4929,121 @@ def convert_pdf_to_markdown_docling(pdf_path):
                 pieces = [src_text[:first_end]]
                 last = first_end
                 for m in matches[1:]:
-                    pieces.append(src_text[last:m.start()])
+                    pieces.append(src_text[last : m.start()])
                     last = m.end()
                 pieces.append(src_text[last:])
-                return ''.join(pieces)
+                return "".join(pieces)
 
             # Promote the document title when Docling downgrades first heading level.
-            cleaned = re.sub(r'\A\s*##\s*Markdown\s+Reader\s*\n', '# Markdown Reader\n\n', cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(
+                r"\A\s*##\s*Markdown\s+Reader\s*\n",
+                "# Markdown Reader\n\n",
+                cleaned,
+                flags=re.IGNORECASE,
+            )
 
             # Drop noisy app-window OCR chunks often injected between real sections.
             cleaned = re.sub(
-                r'(?mis)^Installation\s*&\s*Usage\s*\n\s*README\.MD\s*x\s*\n\s*#\s*Markdown\s+Reader\s*\n\s*1\.\s*Clone the repository\s*\n\s*##\s*What\'s New\s*\n',
-                '',
+                r"(?mis)^Installation\s*&\s*Usage\s*\n\s*README\.MD\s*x\s*\n\s*#\s*Markdown\s+Reader\s*\n\s*1\.\s*Clone the repository\s*\n\s*##\s*What\'s New\s*\n",
+                "",
                 cleaned,
             )
 
             # Remove malformed duplicated feature chunk produced by OCR.
             cleaned = re.sub(
-                r'(?mis)^##\s*Features\s+python\s+-m\s+venv\s+venv\s*\n.*?(?=^##\s+Editor Overview\b|^##\s+Preview Overview\b|^##\s+Installation\s*&\s*Usage\b)',
-                '',
+                r"(?mis)^##\s*Features\s+python\s+-m\s+venv\s+venv\s*\n.*?(?=^##\s+Editor Overview\b|^##\s+Preview Overview\b|^##\s+Installation\s*&\s*Usage\b)",
+                "",
                 cleaned,
             )
 
             # Remove duplicated heading right after Features (e.g. "## Features" then "## Markdown Reader").
             cleaned = re.sub(
-                r'(?mi)^##\s*Features\s*\n\s*##\s*Markdown\s+Reader\s*\n',
-                '## Features\n\n',
+                r"(?mi)^##\s*Features\s*\n\s*##\s*Markdown\s+Reader\s*\n",
+                "## Features\n\n",
                 cleaned,
             )
 
             # Remove duplicated intro fragment that often appears before a second Features block.
             cleaned = re.sub(
-                r'(?ms)^\*\s*Can be bundled as a macOS app using[^\n]*\n\n\*\s*Opens preview automatically[^\n]*\n\nMarkdown Reader is a clean and intuitive Markdown reader[^\n]*\n---\n\n##\s*Features\s*\n',
-                '## Features\n\n',
+                r"(?ms)^\*\s*Can be bundled as a macOS app using[^\n]*\n\n\*\s*Opens preview automatically[^\n]*\n\nMarkdown Reader is a clean and intuitive Markdown reader[^\n]*\n---\n\n##\s*Features\s*\n",
+                "## Features\n\n",
                 cleaned,
             )
 
             # Remove accidental standalone code block under Features: ```bash\ncd markdown-reader\n```
             cleaned = re.sub(
-                r'(?mis)^```(?:bash|sh|shell|zsh)\s*\n\s*cd\s+markdown-reader\s*\n```\s*\n(?=\s*[-*]\s+Real-time preview of Markdown rendered to HTML)',
-                '',
+                r"(?mis)^```(?:bash|sh|shell|zsh)\s*\n\s*cd\s+markdown-reader\s*\n```\s*\n(?=\s*[-*]\s+Real-time preview of Markdown rendered to HTML)",
+                "",
                 cleaned,
             )
 
             # Split merged command lines commonly produced by OCR/round-trip.
             cleaned = re.sub(
-                r'(?mi)^(\s*git clone\s+\S+)\s+cd\s+markdown-reader\s*$',
-                r'\1\ncd markdown-reader',
+                r"(?mi)^(\s*git clone\s+\S+)\s+cd\s+markdown-reader\s*$",
+                r"\1\ncd markdown-reader",
                 cleaned,
             )
             cleaned = re.sub(
-                r'(?mi)^(\s*git add\s+\.)\s+git\s+push\s*$',
-                r'\1\ngit push',
+                r"(?mi)^(\s*git add\s+\.)\s+git\s+push\s*$",
+                r"\1\ngit push",
                 cleaned,
             )
             cleaned = re.sub(
-                r'(?mi)^(\s*python\s+-m\s+venv\s+venv)\s+source\s+venv/bin/activate\s*(#.*)?$',
-                r'\1\nsource venv/bin/activate \2',
+                r"(?mi)^(\s*python\s+-m\s+venv\s+venv)\s+source\s+venv/bin/activate\s*(#.*)?$",
+                r"\1\nsource venv/bin/activate \2",
                 cleaned,
             )
             cleaned = re.sub(
-                r'(?mi)^\s*source\s+venv/bin/activate\s*#\s*macos/linux\s*#\s*(\.\\venv\\scripts\\activate\s*#\s*windows\s*\(cmd/powershell\))\s*$',
-                r'source venv/bin/activate  # macOS/Linux\n# \1',
+                r"(?mi)^\s*source\s+venv/bin/activate\s*#\s*macos/linux\s*#\s*(\.\\venv\\scripts\\activate\s*#\s*windows\s*\(cmd/powershell\))\s*$",
+                r"source venv/bin/activate  # macOS/Linux\n# \1",
                 cleaned,
             )
             cleaned = re.sub(
-                r'(?mi)^(\s*rm\s+-rf\s+build\s+dist)\s+python\s+setup\.py\s+py2app\s*$',
-                r'\1\npython setup.py py2app',
+                r"(?mi)^(\s*rm\s+-rf\s+build\s+dist)\s+python\s+setup\.py\s+py2app\s*$",
+                r"\1\npython setup.py py2app",
                 cleaned,
             )
-            
+
             # Merge consecutive git command code blocks (Submit Changes to Git section).
             cleaned = re.sub(
-                r'(?ms)^##\s*Submit Changes to Git\s*\n```(?:bash)?\s*\ngit commit[^\n]*\n```\s*\n+```(?:bash)?\s*\ngit add[^\n]*\ngit push[^\n]*\n```',
+                r"(?ms)^##\s*Submit Changes to Git\s*\n```(?:bash)?\s*\ngit commit[^\n]*\n```\s*\n+```(?:bash)?\s*\ngit add[^\n]*\ngit push[^\n]*\n```",
                 r'## Submit Changes to Git\n```bash\ngit add .\ngit commit -m "Update"  # Replace "Update" with a meaningful commit message\ngit push\n```',
                 cleaned,
             )
 
             # Remove trailing OCR bullet separators at end of list lines.
-            cleaned = re.sub(r'[ \t]*[·•]\s*$', '', cleaned, flags=re.MULTILINE)
+            cleaned = re.sub(r"[ \t]*[·•]\s*$", "", cleaned, flags=re.MULTILINE)
 
             # Remove isolated OCR/UI artifact lines.
-            cleaned = re.sub(r'(?mi)^\s*(README\.MD\s*x|Copy|Markdown Reader|What\'s New)\s*$', '', cleaned)
-            cleaned = re.sub(r'(?m)^\s*\d{1,3}\s*$', '', cleaned)
+            cleaned = re.sub(
+                r"(?mi)^\s*(README\.MD\s*x|Copy|Markdown Reader|What\'s New)\s*$",
+                "",
+                cleaned,
+            )
+            cleaned = re.sub(r"(?m)^\s*\d{1,3}\s*$", "", cleaned)
 
             # Repair bare command lines that lost fenced code blocks.
             cleaned = re.sub(
-                r'(?mis)^##\s*Running the Application\s*\n\s*python\s+app\.py\s*$',
-                '## Running the Application\n\n```bash\npython app.py\n```',
+                r"(?mis)^##\s*Running the Application\s*\n\s*python\s+app\.py\s*$",
+                "## Running the Application\n\n```bash\npython app.py\n```",
                 cleaned,
             )
             cleaned = re.sub(
-                r'(?mis)^##\s*Exit the Virtual Environment\s*\n\s*deactivate\s*$',
-                '## Exit the Virtual Environment\n\n```bash\ndeactivate\n```',
+                r"(?mis)^##\s*Exit the Virtual Environment\s*\n\s*deactivate\s*$",
+                "## Exit the Virtual Environment\n\n```bash\ndeactivate\n```",
                 cleaned,
             )
             cleaned = re.sub(
-                r'(?mis)^##\s*AI-powered translation:\s*\n\s*To enable AI-powered translation features, you need to set up API keys:\s*\n\s*```[\s\S]*?```',
+                r"(?mis)^##\s*AI-powered translation:\s*\n\s*To enable AI-powered translation features, you need to set up API keys:\s*\n\s*```[\s\S]*?```",
                 '## AI-powered translation:\n\nTo enable AI-powered translation features, open "Settings -> AI Provider & API Keys..." and save your provider, model, and API key.',
                 cleaned,
             )
             cleaned = re.sub(
-                r'(?mis)^##\s*3\.\s*Install dependencies\s*\n\s*For Mac users[\s\S]*?before running\s+`?pip install`?\s*\.\s*\n\s*pip install -r requirements\.txt\s*$',
-                lambda m: m.group(0).replace('\npip install -r requirements.txt', '\n\n```bash\npip install -r requirements.txt\n```'),
+                r"(?mis)^##\s*3\.\s*Install dependencies\s*\n\s*For Mac users[\s\S]*?before running\s+`?pip install`?\s*\.\s*\n\s*pip install -r requirements\.txt\s*$",
+                lambda m: m.group(0).replace(
+                    "\npip install -r requirements.txt",
+                    "\n\n```bash\npip install -r requirements.txt\n```",
+                ),
                 cleaned,
             )
             cleaned = re.sub(
@@ -4672,48 +5053,54 @@ def convert_pdf_to_markdown_docling(pdf_path):
             )
 
             # Normalize section heading levels for numbered installation sub-steps.
-            cleaned = re.sub(r'(?mi)^##\s*(\d+\.\s+.+)$', r'#### \1', cleaned)
+            cleaned = re.sub(r"(?mi)^##\s*(\d+\.\s+.+)$", r"#### \1", cleaned)
 
             # Restore common README links when OCR drops markdown link syntax.
             cleaned = re.sub(
-                r'(?mi)(PrepareForMacUser)\s+file',
-                r'[PrepareForMacUser](./doc/PrepareForMacUser.md) file',
+                r"(?mi)(PrepareForMacUser)\s+file",
+                r"[PrepareForMacUser](./doc/PrepareForMacUser.md) file",
                 cleaned,
             )
             cleaned = re.sub(
-                r'(?mi)(PrepareForWindowsUser)\s+file',
-                r'[PrepareForWindowsUser](./doc/PrepareForWindowsUser.md) file',
+                r"(?mi)(PrepareForWindowsUser)\s+file",
+                r"[PrepareForWindowsUser](./doc/PrepareForWindowsUser.md) file",
                 cleaned,
             )
 
             # Remove immediate duplicate headings/images that often appear back-to-back.
             cleaned = re.sub(
-                r'(?ms)(^##\s*Preview Overview\s*\n\s*!\[[^\]]*\]\([^)]+\)\s*\n)\s*\1+',
-                r'\1',
+                r"(?ms)(^##\s*Preview Overview\s*\n\s*!\[[^\]]*\]\([^)]+\)\s*\n)\s*\1+",
+                r"\1",
                 cleaned,
             )
 
-            cleaned = _strip_overview_body_noise(cleaned, 'Editor Overview')
-            cleaned = _strip_overview_body_noise(cleaned, 'Preview Overview')
-            cleaned = _remove_duplicate_section(cleaned, 'Editor Overview')
-            cleaned = _remove_duplicate_section(cleaned, 'Preview Overview')
+            cleaned = _strip_overview_body_noise(cleaned, "Editor Overview")
+            cleaned = _strip_overview_body_noise(cleaned, "Preview Overview")
+            cleaned = _remove_duplicate_section(cleaned, "Editor Overview")
+            cleaned = _remove_duplicate_section(cleaned, "Preview Overview")
 
             # Remove exact duplicated non-empty lines while preserving order.
             lines = cleaned.splitlines()
             seen_once = set()
             deduped_lines = []
             for line in lines:
-                normalized = re.sub(r'\s+', ' ', line).strip().lower()
+                normalized = re.sub(r"\s+", " ", line).strip().lower()
                 if not normalized:
                     deduped_lines.append(line)
                     continue
 
                 should_dedupe = (
-                    normalized.startswith('markdown reader is a clean and intuitive markdown reader')
-                    or normalized == '## features'
+                    normalized.startswith(
+                        "markdown reader is a clean and intuitive markdown reader"
+                    )
+                    or normalized == "## features"
                 )
 
-                if normalized.startswith('## system requirements') or normalized.startswith('## license') or normalized.startswith('## contributing'):
+                if (
+                    normalized.startswith("## system requirements")
+                    or normalized.startswith("## license")
+                    or normalized.startswith("## contributing")
+                ):
                     deduped_lines.append(line)
                     continue
 
@@ -4724,52 +5111,54 @@ def convert_pdf_to_markdown_docling(pdf_path):
 
                 deduped_lines.append(line)
 
-            cleaned = '\n'.join(deduped_lines)
-            cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
-            
+            cleaned = "\n".join(deduped_lines)
+            cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+
             # Restore missing horizontal separator before System Requirements section
             # Match any text followed by one or more newlines, then the heading
             cleaned = re.sub(
-                r'([^\n])\n+(##\s+System\s+Requirements)',
-                r'\1\n\n---\n\n\2',
+                r"([^\n])\n+(##\s+System\s+Requirements)",
+                r"\1\n\n---\n\n\2",
                 cleaned,
-                flags=re.IGNORECASE
+                flags=re.IGNORECASE,
             )
-            
+
             # Format polish: remove spaces before colons and commas
-            cleaned = re.sub(r'\s+:', ':', cleaned)  # "Translation :" → "Translation:"
-            cleaned = re.sub(r'\s+,', ',', cleaned)  # ".md , .html" → ".md, .html"
-            
+            cleaned = re.sub(r"\s+:", ":", cleaned)  # "Translation :" → "Translation:"
+            cleaned = re.sub(r"\s+,", ",", cleaned)  # ".md , .html" → ".md, .html"
+
             return cleaned
 
         markdown_text = _bind_images_to_sections(markdown_text, image_uris)
         markdown_text = _fix_malformed_code_fences(markdown_text)
         markdown_text = _cleanup_docling_structure(markdown_text)
-        markdown_text = re.sub(r'\n{3,}', '\n\n', markdown_text)
+        markdown_text = re.sub(r"\n{3,}", "\n\n", markdown_text)
 
         # If markdown still has no image reference, append extracted images as fallback
-        has_any_md_images = re.search(r'!\[[^\]]*\]\([^)]+\)', markdown_text) is not None
+        has_any_md_images = (
+            re.search(r"!\[[^\]]*\]\([^)]+\)", markdown_text) is not None
+        )
         if image_uris and not has_any_md_images:
             markdown_text = markdown_text.rstrip() + "\n\n"
             for idx, uri in enumerate(image_uris, 1):
                 markdown_text += f"![docling-image-{idx}]({uri})\n\n"
-        
+
         return markdown_text.strip()
-        
+
     except ImportError:
         messagebox.showwarning(
             "Docling Not Installed",
             "Advanced PDF conversion requires Docling.\n"
             "Install it using: pip install docling\n\n"
-            "Falling back to standard converter."
+            "Falling back to standard converter.",
         )
         return convert_pdf_to_markdown(pdf_path)
-        
+
     except Exception as e:
         messagebox.showerror(
             "PDF Conversion Error",
             f"Failed to convert PDF with Docling: {e}\n\n"
-            "Falling back to standard converter."
+            "Falling back to standard converter.",
         )
         return convert_pdf_to_markdown(pdf_path)
 

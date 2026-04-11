@@ -1,72 +1,72 @@
 import base64
 import mimetypes
 import os
-from pathlib import Path
-from urllib.parse import urlparse
 import re
+from urllib.parse import urlparse
 
 import requests
 from weasyprint import HTML
 
+
 def custom_url_fetcher(url):
     """
     Custom URL fetcher that handles both local and remote resources.
-    
+
     :param url: The URL to fetch
     :return: A dictionary with 'string', 'mime_type', and 'encoding' keys
     """
     # Parse the URL
     parsed = urlparse(url)
-    
-    if parsed.scheme in ('http', 'https'):
+
+    if parsed.scheme in ("http", "https"):
         # For remote URLs, fetch them
         try:
             response = requests.get(url, timeout=10, allow_redirects=True)
             response.raise_for_status()
             return {
-                'string': response.content,
-                'mime_type': response.headers.get('Content-Type', 'image/png'),
-                'encoding': None,
+                "string": response.content,
+                "mime_type": response.headers.get("Content-Type", "image/png"),
+                "encoding": None,
             }
         except Exception:
             # Return a placeholder or empty content if fetch fails
             return {
-                'string': b'',
-                'mime_type': 'image/png',
-                'encoding': None,
+                "string": b"",
+                "mime_type": "image/png",
+                "encoding": None,
             }
-    elif parsed.scheme == 'file':
+    elif parsed.scheme == "file":
         # For file URLs, use the default behavior
         file_path = parsed.path
         try:
-            with open(file_path, 'rb') as f:
+            with open(file_path, "rb") as f:
                 content = f.read()
             return {
-                'string': content,
-                'mime_type': 'application/octet-stream',
-                'encoding': None,
+                "string": content,
+                "mime_type": "application/octet-stream",
+                "encoding": None,
             }
         except Exception:
             return {
-                'string': b'',
-                'mime_type': 'application/octet-stream',
-                'encoding': None,
+                "string": b"",
+                "mime_type": "application/octet-stream",
+                "encoding": None,
             }
     else:
         # For other schemes, try to handle as file path
         try:
-            with open(url, 'rb') as f:
+            with open(url, "rb") as f:
                 content = f.read()
             return {
-                'string': content,
-                'mime_type': 'application/octet-stream',
-                'encoding': None,
+                "string": content,
+                "mime_type": "application/octet-stream",
+                "encoding": None,
             }
         except Exception:
             return {
-                'string': b'',
-                'mime_type': 'application/octet-stream',
-                'encoding': None,
+                "string": b"",
+                "mime_type": "application/octet-stream",
+                "encoding": None,
             }
 
 
@@ -89,7 +89,11 @@ def _inline_local_images(html_content: str, base_dir: str = None) -> str:
             if src.startswith("file://"):
                 file_path = src[7:]
                 # Windows: file:///C:/... -> C:/...
-                if file_path.startswith("/") and len(file_path) > 2 and file_path[2] == ":":
+                if (
+                    file_path.startswith("/")
+                    and len(file_path) > 2
+                    and file_path[2] == ":"
+                ):
                     file_path = file_path[1:]
             elif os.path.isabs(src):
                 file_path = src
@@ -122,7 +126,9 @@ def _inline_local_images(html_content: str, base_dir: str = None) -> str:
         return m.group(0)
 
     # Match src="..." and src='...'
-    return re.sub(r'src=(["\'])([^"\']+)\1', _replace_attr, html_content, flags=re.IGNORECASE)
+    return re.sub(
+        r'src=(["\'])([^"\']+)\1', _replace_attr, html_content, flags=re.IGNORECASE
+    )
 
 
 def _wrap_html_for_pdf(html_content: str) -> str:
@@ -188,21 +194,24 @@ def _wrap_html_for_pdf(html_content: str) -> str:
 def _normalize_image_tags(html_content: str) -> str:
     def _strip_size_attributes(match):
         tag = match.group(0)
-        tag = re.sub(r'\swidth\s*=\s*(["\']).*?\1', '', tag, flags=re.IGNORECASE)
-        tag = re.sub(r'\sheight\s*=\s*(["\']).*?\1', '', tag, flags=re.IGNORECASE)
-        tag = re.sub(r'\swidth\s*=\s*\S+', '', tag, flags=re.IGNORECASE)
-        tag = re.sub(r'\sheight\s*=\s*\S+', '', tag, flags=re.IGNORECASE)
+        tag = re.sub(r'\swidth\s*=\s*(["\']).*?\1', "", tag, flags=re.IGNORECASE)
+        tag = re.sub(r'\sheight\s*=\s*(["\']).*?\1', "", tag, flags=re.IGNORECASE)
+        tag = re.sub(r"\swidth\s*=\s*\S+", "", tag, flags=re.IGNORECASE)
+        tag = re.sub(r"\sheight\s*=\s*\S+", "", tag, flags=re.IGNORECASE)
         return tag
 
-    return re.sub(r'<img\b[^>]*>', _strip_size_attributes, html_content, flags=re.IGNORECASE)
+    return re.sub(
+        r"<img\b[^>]*>", _strip_size_attributes, html_content, flags=re.IGNORECASE
+    )
+
 
 def export_markdown_to_pdf(html_content: str, output_path: str, base_url: str = None):
-    """ 
-    Export rendered HTML content to PDF 
+    """
+    Export rendered HTML content to PDF
 
     Args:
-        html_content (str): HTML string already rendered from Markdown 
-        output_path (str): Target PDF file path  
+        html_content (str): HTML string already rendered from Markdown
+        output_path (str): Target PDF file path
         base_url (str): Base directory (filesystem path or file:// URL) where the
                         source Markdown file lives, used to resolve relative image paths
                         before they are inlined as base64 data URIs.
@@ -214,7 +223,11 @@ def export_markdown_to_pdf(html_content: str, output_path: str, base_url: str = 
             if base_url.startswith("file://"):
                 base_dir = base_url[7:]
                 # Windows: file:///C:/... -> C:/...
-                if base_dir.startswith("/") and len(base_dir) > 2 and base_dir[2] == ":":
+                if (
+                    base_dir.startswith("/")
+                    and len(base_dir) > 2
+                    and base_dir[2] == ":"
+                ):
                     base_dir = base_dir[1:]
             else:
                 base_dir = base_url
@@ -230,9 +243,6 @@ def export_markdown_to_pdf(html_content: str, output_path: str, base_url: str = 
         html.write_pdf(output_path)
     except Exception:
         import traceback
+
         traceback.print_exc()
         raise
-
-
-
-

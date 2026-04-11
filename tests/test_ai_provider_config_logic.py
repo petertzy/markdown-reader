@@ -18,7 +18,9 @@ class TestAIProviderConfigLogic(unittest.TestCase):
             "OpenAI Compatible",
         )
 
-    def test_provider_fallback_priority_places_openai_compatible_before_openrouter(self):
+    def test_provider_fallback_priority_places_openai_compatible_before_openrouter(
+        self,
+    ):
         order = logic._build_provider_order("openai")
         self.assertEqual(order[0], "openai")
         self.assertLess(order.index("openai_compatible"), order.index("openrouter"))
@@ -26,21 +28,32 @@ class TestAIProviderConfigLogic(unittest.TestCase):
     def test_openai_compatible_base_url_choice_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             settings_file = Path(tmp_dir) / "settings.json"
-            with patch.object(logic, "APP_SETTINGS_FILE_PATH", settings_file), patch.dict(
-                os.environ,
-                {
-                    "OPENAI_COMPATIBLE_BASE_URL": "",
-                    "OPENAI_COMPATIBLE_BASE_URL_CHOICE": "",
-                },
-                clear=False,
+            with (
+                patch.object(logic, "APP_SETTINGS_FILE_PATH", settings_file),
+                patch.dict(
+                    os.environ,
+                    {
+                        "OPENAI_COMPATIBLE_BASE_URL": "",
+                        "OPENAI_COMPATIBLE_BASE_URL_CHOICE": "",
+                    },
+                    clear=False,
+                ),
             ):
                 selected = logic.set_openai_compatible_base_url_choice("groq")
                 self.assertEqual(selected, "groq")
-                self.assertEqual(os.environ.get("OPENAI_COMPATIBLE_BASE_URL_CHOICE"), "groq")
-                self.assertEqual(os.environ.get("OPENAI_COMPATIBLE_BASE_URL"), "https://api.groq.com/openai/v1")
+                self.assertEqual(
+                    os.environ.get("OPENAI_COMPATIBLE_BASE_URL_CHOICE"), "groq"
+                )
+                self.assertEqual(
+                    os.environ.get("OPENAI_COMPATIBLE_BASE_URL"),
+                    "https://api.groq.com/openai/v1",
+                )
 
                 self.assertEqual(logic.get_openai_compatible_base_url_choice(), "groq")
-                self.assertEqual(logic.get_openai_compatible_base_url(), "https://api.groq.com/openai/v1")
+                self.assertEqual(
+                    logic.get_openai_compatible_base_url(),
+                    "https://api.groq.com/openai/v1",
+                )
 
     def test_fetch_models_uses_base_url_override(self):
         class _DummyResp:
@@ -50,7 +63,9 @@ class TestAIProviderConfigLogic(unittest.TestCase):
             def json(self):
                 return {"data": [{"id": "override-model"}]}
 
-        with patch("markdown_reader.logic.requests.get", return_value=_DummyResp()) as mock_get:
+        with patch(
+            "markdown_reader.logic.requests.get", return_value=_DummyResp()
+        ) as mock_get:
             models = logic.fetch_available_models(
                 "openai_compatible",
                 "dummy-key",

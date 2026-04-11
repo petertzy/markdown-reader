@@ -49,6 +49,13 @@ ignore = [
     "E501",  # line too long — handled by formatter
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# ttkbootstrap is designed to be used with star imports for its style constants
+"app.py" = ["F403", "F405"]
+"markdown_reader/ui.py" = ["F403", "F405"]
+# sys.setrecursionlimit() must run before importing setuptools (see comment in file)
+"setup.py" = ["E402"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["markdown_reader"]
 
