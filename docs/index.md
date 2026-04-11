@@ -57,10 +57,18 @@ source venv/bin/activate  # macOS/Linux
 
 For Mac users, you should first complete the preparation steps described in the [PrepareForMacUser](./doc/PrepareForMacUser.md) file.
 
-For Windows users, WeasyPrint requires additional system libraries. Complete the preparation steps described in the [PrepareForWindowsUser](./doc/PrepareForWindowsUser.md) file before running `pip install`.
+For Windows users, WeasyPrint requires additional system libraries. Complete the preparation steps described in the [PrepareForWindowsUser](./doc/PrepareForWindowsUser.md) file before installing dependencies.
+
+With [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
-pip install -r requirements.txt
+uv sync
+```
+
+Or with pip:
+
+```bash
+pip install .
 ```
 
 ---
