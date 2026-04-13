@@ -26,6 +26,7 @@ Thank you to all the contributors who have helped make Markdown Reader better!
 - [@raza-khan0108](https://github.com/raza-khan0108) - Code contributions
 - [@O-sama12](https://github.com/O-sama12) - QA and testing
 
+- [@korbonits](https://github.com/korbonits) - chore: migrate to uv, ruff, and ty (#158)
 ## How to Contribute
 
 We welcome contributions! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) guide for details on how to:
