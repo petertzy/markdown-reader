@@ -65,6 +65,14 @@ With [uv](https://docs.astral.sh/uv/) (recommended):
 uv sync
 ```
 
+If you update dependencies in `pyproject.toml`, regenerate and commit the lockfile:
+
+```bash
+uv lock
+```
+
+CI uses `uv sync --locked --extra dev`, so `uv.lock` must stay in sync with `pyproject.toml`.
+
 Or with pip:
 
 ```bash
