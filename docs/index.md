@@ -7,7 +7,7 @@ Markdown Reader is a clean and intuitive Markdown editor/reader with real-time p
 ## Features
 
 * Tabbed Markdown editing with real-time HTML preview.
-* **AI-Powered Translation**: Translate Markdown documents while preserving formatting (supports OpenRouter, OpenAI, and Anthropic).
+* **AI-Powered Translation**: Translate Markdown documents while preserving formatting (supports OpenAI Compatible, OpenRouter, OpenAI, and Anthropic).
 * **Built-in AI Agent Chat**: A dockable in-app chat panel can read current document context and suggest/apply edits.
 * **AI Task Automation Templates**: Run reusable templates for formatting, TOC generation, summaries, and code-block cleanup.
 * **Approval/Reject Workflow**: Every AI-proposed change can be explicitly applied or rejected from the panel.
@@ -140,6 +140,34 @@ The generated app will be located in the `dist/` folder. You can launch it by do
 deactivate
 ```
 
+## Code Formatting (Ruff)
+
+This project uses **Ruff** to ensure consistent code formatting across all contributions.
+
+Before submitting changes, please check and format your code.
+
+### Check formatting
+
+```bash
+uv run ruff format --check .
+```
+
+If any files are not properly formatted, you will see output like:
+
+```text
+Would reformat: some_file.py
+```
+
+This means the file does not match the required formatting style.
+
+### Fix formatting
+
+To automatically format all files:
+
+```bash
+uv run ruff format .
+```
+
 ## Submit Changes to Git
 ```bash
 git add .
@@ -154,7 +182,7 @@ git push
 * HTML Preview: Dynamically generated HTML opened in the default browser
 * File Conversion: `html2text` for HTML, `PyMuPDF` and `docling` for PDF import (`pypdf` is used as a fallback when PyMuPDF is unavailable)
 * PDF Export: `weasyprint`
-* AI Translation: `requests` for API communication with OpenRouter, OpenAI, and Anthropic
+* AI Translation: `requests` for API communication with OpenAI Compatible, OpenRouter, OpenAI, and Anthropic
 * Configuration: Per-user settings JSON for provider/model (macOS `~/Library/Application Support/MarkdownReader/settings.json`; Windows `%APPDATA%/MarkdownReader/settings.json`; Linux `~/.config/markdown-reader/settings.json`) plus OS credential storage for API keys (`keyring`)
 * Auto-failover: Automatically switches AI providers when the primary provider returns rate-limit/auth/server errors
 
@@ -171,6 +199,7 @@ To enable AI-powered translation features, you need to set up API keys:
 1. Open `Settings -> AI Provider & API Keys...`.
 2. Choose provider and model.
 3. Enter API key and save.
+4. If you choose `OpenAI Compatible`, you can also choose a Base URL option (`Navidia` or `Groq`).
 
 The app stores provider and model in a per-user JSON file:
 
@@ -182,6 +211,9 @@ The app stores provider and model in a per-user JSON file:
 - **OpenRouter** (recommended for free tier): [openrouter.ai](https://openrouter.ai/)
 - **OpenAI**: [platform.openai.com](https://platform.openai.com/)
 - **Anthropic**: [console.anthropic.com](https://console.anthropic.com/)
+- **OpenAI Compatible**: Create an API key from your chosen compatible provider console, then select the matching Base URL preset in this app:
+  - **Navidia preset**: [NVIDIA Integrate](https://build.nvidia.com/)
+  - **Groq preset**: [Groq Console](https://console.groq.com/keys)
 
 API keys are saved in the OS credential store (Keychain on macOS, Credential Manager on Windows, Secret Service/KWallet on Linux when available).
 
@@ -206,4 +238,3 @@ All contributions are welcome, including:
 - Documentation improvements
 
 Please see our [CONTRIBUTING](CONTRIBUTING.md) guide for more details on how to get started, submit changes, or report issues.
-

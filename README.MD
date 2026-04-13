@@ -140,6 +140,34 @@ The generated app will be located in the `dist/` folder. You can launch it by do
 deactivate
 ```
 
+## Code Formatting (Ruff)
+
+This project uses **Ruff** to ensure consistent code formatting across all contributions.
+
+Before submitting changes, please check and format your code.
+
+### Check formatting
+
+```bash
+uv run ruff format --check .
+```
+
+If any files are not properly formatted, you will see output like:
+
+```text
+Would reformat: some_file.py
+```
+
+This means the file does not match the required formatting style.
+
+### Fix formatting
+
+To automatically format all files:
+
+```bash
+uv run ruff format .
+```
+
 ## Submit Changes to Git
 ```bash
 git add .
