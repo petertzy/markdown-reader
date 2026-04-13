@@ -6,8 +6,8 @@ import sys
 # 5000 is enough for fontTools, weasyprint and other deep packages.
 sys.setrecursionlimit(5000)
 
-from setuptools import setup
 from py2app.build_app import py2app as py2app_build
+from setuptools import setup
 
 
 class py2app_cmd(py2app_build):

@@ -71,6 +71,16 @@ Or with pip:
 pip install .
 ```
 
+#### 4. Install pre-commit hooks (recommended)
+
+This project uses [pre-commit](https://pre-commit.com/) to automatically fix import sorting and code formatting on every commit. Run this once after cloning:
+
+```bash
+pre-commit install
+```
+
+After this, `ruff --fix` and `ruff-format` will run automatically on staged files whenever you `git commit`.
+
 ---
 
 ## Running the Application
