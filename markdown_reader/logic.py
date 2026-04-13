@@ -2062,13 +2062,9 @@ def _protect_math(markdown_text):
         key = f"MATHPLACEHOLDER{counter[0]}X"
         counter[0] += 1
         if display:
-            replacements[key] = (
-                f'<div class="math-display">\\[{content}\\]</div>'
-            )
+            replacements[key] = f'<div class="math-display">\\[{content}\\]</div>'
         else:
-            replacements[key] = (
-                f'<span class="math-inline">\\({content}\\)</span>'
-            )
+            replacements[key] = f'<span class="math-inline">\\({content}\\)</span>'
         return key
 
     def replace_block(m):
