@@ -7,6 +7,22 @@ import sys
 sys.setrecursionlimit(5000)
 
 from setuptools import setup
+from py2app.build_app import py2app as py2app_build
+
+
+class py2app_cmd(py2app_build):
+    """Subclass that clears install_requires before py2app processes it.
+
+    py2app >= 0.28 no longer supports install_requires (all dependencies must
+    already be present in the active venv).  setuptools auto-populates
+    install_requires from pyproject.toml's [project].dependencies, so we
+    clear it here to avoid the "install_requires is no longer supported" error.
+    """
+
+    def finalize_options(self):
+        self.distribution.install_requires = []
+        super().finalize_options()
+
 
 APP = ["app.py"]
 DATA_FILES = []
@@ -91,5 +107,5 @@ setup(
     name="MarkdownReader",
     data_files=DATA_FILES,
     options={"py2app": OPTIONS},
-    setup_requires=["py2app"],
+    cmdclass={"py2app": py2app_cmd},
 )
