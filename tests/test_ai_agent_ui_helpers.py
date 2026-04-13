@@ -44,7 +44,9 @@ class TestAIAgentUIHelpers(unittest.TestCase):
         ok, _ = app._validate_ai_action_payload({"type": "none", "content": "x"})
         self.assertFalse(ok)
 
-        ok, _ = app._validate_ai_action_payload({"type": "replace_selection", "content": ""})
+        ok, _ = app._validate_ai_action_payload(
+            {"type": "replace_selection", "content": ""}
+        )
         self.assertFalse(ok)
 
         ok, _ = app._validate_ai_action_payload(
@@ -67,7 +69,9 @@ class TestAIAgentUIHelpers(unittest.TestCase):
             "old-doc": {"type": "replace_selection", "content": "x", "reason": "test"}
         }
         persist_calls = {"count": 0}
-        app._persist_ai_chat_histories = lambda: persist_calls.__setitem__("count", persist_calls["count"] + 1)
+        app._persist_ai_chat_histories = lambda: persist_calls.__setitem__(
+            "count", persist_calls["count"] + 1
+        )
 
         app._migrate_chat_document_key("old-doc", "new-doc")
 
@@ -80,7 +84,9 @@ class TestAIAgentUIHelpers(unittest.TestCase):
             ],
         )
         self.assertNotIn("old-doc", app.ai_chat_pending_actions)
-        self.assertEqual(app.ai_chat_pending_actions["new-doc"]["type"], "replace_selection")
+        self.assertEqual(
+            app.ai_chat_pending_actions["new-doc"]["type"], "replace_selection"
+        )
         self.assertEqual(persist_calls["count"], 1)
 
     def test_migrate_chat_document_key_noop_when_invalid(self):
@@ -88,7 +94,9 @@ class TestAIAgentUIHelpers(unittest.TestCase):
         app.ai_chat_histories = {"same": [{"role": "user", "content": "msg"}]}
         app.ai_chat_pending_actions = {}
         persist_calls = {"count": 0}
-        app._persist_ai_chat_histories = lambda: persist_calls.__setitem__("count", persist_calls["count"] + 1)
+        app._persist_ai_chat_histories = lambda: persist_calls.__setitem__(
+            "count", persist_calls["count"] + 1
+        )
 
         app._migrate_chat_document_key("same", "same")
         app._migrate_chat_document_key("", "new")
@@ -113,7 +121,9 @@ class TestAIAgentUIHelpers(unittest.TestCase):
         self.assertIn("Proposed content preview (replace_selection):", text)
         self.assertIn("- Key point A", text)
 
-    def test_compose_assistant_chat_text_skips_duplicate_preview_when_same_content(self):
+    def test_compose_assistant_chat_text_skips_duplicate_preview_when_same_content(
+        self,
+    ):
         app = MarkdownReader.__new__(MarkdownReader)
 
         summary = (
@@ -137,9 +147,10 @@ class TestAIAgentUIHelpers(unittest.TestCase):
         app.ai_action_audit_logs = []
         app._get_document_id_for_tab = lambda tab_index=None: "doc-1"
 
-        with patch("markdown_reader.ui.AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES", 2), patch(
-            "markdown_reader.ui.append_ai_automation_log"
-        ) as mock_append:
+        with (
+            patch("markdown_reader.ui.AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES", 2),
+            patch("markdown_reader.ui.append_ai_automation_log") as mock_append,
+        ):
             app._append_ai_audit_log("proposed", "replace_selection", content="a")
             app._append_ai_audit_log("applied", "replace_selection", content="b")
             app._append_ai_audit_log("rejected", "replace_selection", content="c")
@@ -197,9 +208,12 @@ class TestAIAgentUIHelpers(unittest.TestCase):
                 }
             )
 
-        with patch("markdown_reader.ui.load_ai_automation_logs", return_value=logs) as mock_load, patch(
-            "markdown_reader.ui.dialogs.Messagebox.show_info"
-        ) as mock_show:
+        with (
+            patch(
+                "markdown_reader.ui.load_ai_automation_logs", return_value=logs
+            ) as mock_load,
+            patch("markdown_reader.ui.dialogs.Messagebox.show_info") as mock_show,
+        ):
             app.show_ai_automation_log()
 
         mock_load.assert_called_once_with(limit=10)

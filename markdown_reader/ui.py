@@ -3,24 +3,23 @@ import re
 import subprocess
 import sys
 import threading
-from datetime import datetime, timezone
 import tkinter as tk
 import tkinter.font  # moved here from inside methods
-from tkinter import filedialog, messagebox, simpledialog, ttk
+from datetime import UTC, datetime
+from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
-import markdown
 import ttkbootstrap as ttkb
 from ttkbootstrap import dialogs
 from ttkbootstrap.constants import *
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-from markdown_reader.file_handler import drop_file, load_file
+from markdown_reader.file_handler import drop_file
 from markdown_reader.logic import (
-    APP_SETTINGS_FILE_PATH,
     AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES,
     AI_PROVIDER_PRIORITY,
+    APP_SETTINGS_FILE_PATH,
     TranslationConfigError,
     append_ai_automation_log,
     convert_html_to_markdown,
@@ -29,27 +28,25 @@ from markdown_reader.logic import (
     delete_secure_ai_api_key,
     export_to_docx,
     export_to_html,
-    export_to_pdf,
     fetch_available_models,
     get_ai_automation_task_templates,
     get_ai_provider_display_name,
     get_ai_provider_env_var,
     get_ai_provider_model,
-    get_provider_default_models,
     get_openai_compatible_base_url_choice,
     get_openai_compatible_base_url_options,
     get_openai_compatible_env_var,
     get_openai_compatible_storage_key_name,
+    get_provider_default_models,
     get_secure_ai_api_key,
-    is_secure_key_storage_available,
+    load_ai_automation_logs,
     load_ai_chat_histories,
     load_persisted_ai_settings,
     open_preview_in_browser,
     request_ai_agent_response,
     save_ai_chat_histories,
-    load_ai_automation_logs,
-    set_current_ai_provider,
     set_ai_provider_model,
+    set_current_ai_provider,
     set_openai_compatible_base_url_choice,
     set_secure_ai_api_key,
     split_markdown_for_translation,
@@ -242,7 +239,8 @@ class MarkdownReader:
             "Chinese (Traditional)",
         ]
         self.ai_provider_var = tk.StringVar(
-            value=os.getenv("AI_PROVIDER", AI_PROVIDER_PRIORITY[0]).strip().lower() or AI_PROVIDER_PRIORITY[0]
+            value=os.getenv("AI_PROVIDER", AI_PROVIDER_PRIORITY[0]).strip().lower()
+            or AI_PROVIDER_PRIORITY[0]
         )
         self.ai_chat_panel_visible_var = tk.BooleanVar(value=False)
         self.ai_chat_context_mode_var = tk.StringVar(value="selection")
@@ -279,7 +277,11 @@ class MarkdownReader:
             ("Undo", "<Control-KeyPress-z>", self.undo_action),
             ("Redo", "<Control-KeyPress-y>", self.redo_action),
             ("Redo", "<Control-Shift-KeyPress-Z>", self.redo_action),
-            ("Toggle AI Agent Panel", "<Control-Shift-KeyPress-A>", self._toggle_ai_chat_panel_shortcut),
+            (
+                "Toggle AI Agent Panel",
+                "<Control-Shift-KeyPress-A>",
+                self._toggle_ai_chat_panel_shortcut,
+            ),
             (
                 "Translate Full Document with AI",
                 "<Control-Shift-KeyPress-T>",
@@ -303,10 +305,26 @@ class MarkdownReader:
                 "<Control-KeyPress-t>",
                 lambda: self.translate_with_ai(selected_only=True),
             ),
-            ("Heading 1", "<Control-KeyPress-1>", lambda: self.apply_style("Heading 1")),
-            ("Heading 2", "<Control-KeyPress-2>", lambda: self.apply_style("Heading 2")),
-            ("Heading 3", "<Control-KeyPress-3>", lambda: self.apply_style("Heading 3")),
-            ("Normal Text", "<Control-KeyPress-0>", lambda: self.apply_style("Normal text")),
+            (
+                "Heading 1",
+                "<Control-KeyPress-1>",
+                lambda: self.apply_style("Heading 1"),
+            ),
+            (
+                "Heading 2",
+                "<Control-KeyPress-2>",
+                lambda: self.apply_style("Heading 2"),
+            ),
+            (
+                "Heading 3",
+                "<Control-KeyPress-3>",
+                lambda: self.apply_style("Heading 3"),
+            ),
+            (
+                "Normal Text",
+                "<Control-KeyPress-0>",
+                lambda: self.apply_style("Normal text"),
+            ),
             ("Insert Table", "<Control-Alt-KeyPress-t>", self.insert_table),
             ("Export to HTML", "<Control-Alt-KeyPress-h>", self.export_to_html_dialog),
             ("Export to Word", "<Control-Alt-KeyPress-d>", self.export_to_docx_dialog),
@@ -319,11 +337,23 @@ class MarkdownReader:
                     ("New File", "<Command-KeyPress-n>", self.new_file),
                     ("Open File", "<Command-KeyPress-o>", self.open_file),
                     ("Save File", "<Command-KeyPress-s>", self.save_file),
-                    ("Close Current Tab", "<Command-KeyPress-w>", self.close_current_tab),
-                    ("Close All Tabs", "<Command-Shift-KeyPress-W>", self.close_all_tabs),
+                    (
+                        "Close Current Tab",
+                        "<Command-KeyPress-w>",
+                        self.close_current_tab,
+                    ),
+                    (
+                        "Close All Tabs",
+                        "<Command-Shift-KeyPress-W>",
+                        self.close_all_tabs,
+                    ),
                     ("Undo", "<Command-KeyPress-z>", self.undo_action),
                     ("Redo", "<Command-Shift-KeyPress-Z>", self.redo_action),
-                    ("Toggle AI Agent Panel", "<Command-Shift-KeyPress-A>", self._toggle_ai_chat_panel_shortcut),
+                    (
+                        "Toggle AI Agent Panel",
+                        "<Command-Shift-KeyPress-A>",
+                        self._toggle_ai_chat_panel_shortcut,
+                    ),
                     (
                         "Translate Full Document with AI",
                         "<Command-Shift-KeyPress-T>",
@@ -339,7 +369,11 @@ class MarkdownReader:
             self.editor_shortcuts.extend(
                 [
                     ("Search", "<Command-KeyPress-f>", self.open_search_dialog),
-                    ("Replace", "<Command-Option-KeyPress-f>", self.open_replace_dialog),
+                    (
+                        "Replace",
+                        "<Command-Option-KeyPress-f>",
+                        self.open_replace_dialog,
+                    ),
                     ("Bold", "<Command-KeyPress-b>", self.toggle_bold),
                     ("Italic", "<Command-KeyPress-i>", self.toggle_italic),
                     ("Underline", "<Command-KeyPress-u>", self.toggle_underline),
@@ -348,14 +382,42 @@ class MarkdownReader:
                         "<Command-KeyPress-t>",
                         lambda: self.translate_with_ai(selected_only=True),
                     ),
-                    ("Heading 1", "<Command-KeyPress-1>", lambda: self.apply_style("Heading 1")),
-                    ("Heading 2", "<Command-KeyPress-2>", lambda: self.apply_style("Heading 2")),
-                    ("Heading 3", "<Command-KeyPress-3>", lambda: self.apply_style("Heading 3")),
-                    ("Normal Text", "<Command-KeyPress-0>", lambda: self.apply_style("Normal text")),
+                    (
+                        "Heading 1",
+                        "<Command-KeyPress-1>",
+                        lambda: self.apply_style("Heading 1"),
+                    ),
+                    (
+                        "Heading 2",
+                        "<Command-KeyPress-2>",
+                        lambda: self.apply_style("Heading 2"),
+                    ),
+                    (
+                        "Heading 3",
+                        "<Command-KeyPress-3>",
+                        lambda: self.apply_style("Heading 3"),
+                    ),
+                    (
+                        "Normal Text",
+                        "<Command-KeyPress-0>",
+                        lambda: self.apply_style("Normal text"),
+                    ),
                     ("Insert Table", "<Command-Option-KeyPress-t>", self.insert_table),
-                    ("Export to HTML", "<Command-Option-KeyPress-h>", self.export_to_html_dialog),
-                    ("Export to Word", "<Command-Option-KeyPress-d>", self.export_to_docx_dialog),
-                    ("Export to PDF", "<Command-Option-KeyPress-p>", self.export_to_pdf_dialog),
+                    (
+                        "Export to HTML",
+                        "<Command-Option-KeyPress-h>",
+                        self.export_to_html_dialog,
+                    ),
+                    (
+                        "Export to Word",
+                        "<Command-Option-KeyPress-d>",
+                        self.export_to_docx_dialog,
+                    ),
+                    (
+                        "Export to PDF",
+                        "<Command-Option-KeyPress-p>",
+                        self.export_to_pdf_dialog,
+                    ),
                 ]
             )
 
@@ -489,7 +551,9 @@ class MarkdownReader:
         )
         style_menu.config(width=12)
         style_menu.pack(side=tk.LEFT, padx=2, pady=2)
-        self._tooltips.append(HoverTooltip(style_menu, "Text style (Normal, Heading 1-3)"))
+        self._tooltips.append(
+            HoverTooltip(style_menu, "Text style (Normal, Heading 1-3)")
+        )
         menu_ = tk.Menu(style_menu, tearoff=0)
         for s in style_options:
             menu_.add_radiobutton(
@@ -728,7 +792,9 @@ class MarkdownReader:
             text="Hide",
             width=8,
             bootstyle="secondary-outline",
-            command=lambda: self.ai_chat_panel_visible_var.set(False) or self.toggle_ai_chat_panel(),
+            command=lambda: (
+                self.ai_chat_panel_visible_var.set(False) or self.toggle_ai_chat_panel()
+            ),
         ).pack(side=tk.RIGHT)
 
         self.ai_chat_history_box = ScrolledText(
@@ -774,9 +840,19 @@ class MarkdownReader:
 
         template_row = ttkb.Frame(self.ai_chat_panel)
         template_row.pack(fill=tk.X, pady=(0, 3))
-        ttk.Label(template_row, text="Automation Template:").pack(side=tk.LEFT, padx=(0, 8))
-        self.ai_template_var = tk.StringVar(value=(self.ai_automation_templates[0]["id"] if self.ai_automation_templates else ""))
-        template_choices = [f"{item['id']}: {item['title']}" for item in self.ai_automation_templates]
+        ttk.Label(template_row, text="Automation Template:").pack(
+            side=tk.LEFT, padx=(0, 8)
+        )
+        self.ai_template_var = tk.StringVar(
+            value=(
+                self.ai_automation_templates[0]["id"]
+                if self.ai_automation_templates
+                else ""
+            )
+        )
+        template_choices = [
+            f"{item['id']}: {item['title']}" for item in self.ai_automation_templates
+        ]
         self._ai_template_combo = ttk.Combobox(
             template_row,
             state="readonly",
@@ -796,7 +872,9 @@ class MarkdownReader:
 
         context_scope_row = ttkb.Frame(self.ai_chat_panel)
         context_scope_row.pack(fill=tk.X, pady=(0, 3))
-        ttk.Label(context_scope_row, text="Context Scope:").pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Label(context_scope_row, text="Context Scope:").pack(
+            side=tk.LEFT, padx=(0, 8)
+        )
         ttk.Radiobutton(
             context_scope_row,
             text="Full document",
@@ -963,10 +1041,15 @@ class MarkdownReader:
         box.configure(state=tk.DISABLED)
         box.see(tk.END)
 
-        action = self.ai_chat_pending_actions.get(doc_id, {"type": "none"}) if doc_id else {"type": "none"}
-        has_action = action.get("type") in ("replace_selection", "replace_document") and bool(
-            str(action.get("content", "")).strip()
+        action = (
+            self.ai_chat_pending_actions.get(doc_id, {"type": "none"})
+            if doc_id
+            else {"type": "none"}
         )
+        has_action = action.get("type") in (
+            "replace_selection",
+            "replace_document",
+        ) and bool(str(action.get("content", "")).strip())
         self._ai_apply_btn.configure(state=(tk.NORMAL if has_action else tk.DISABLED))
         self._ai_reject_btn.configure(state=(tk.NORMAL if has_action else tk.DISABLED))
 
@@ -1010,7 +1093,7 @@ class MarkdownReader:
 
         target_doc_id = (doc_id or self._get_document_id_for_tab() or "").strip()
         entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "doc_id": target_doc_id,
             "status": clean_status,
             "action_type": clean_action_type,
@@ -1033,7 +1116,9 @@ class MarkdownReader:
 
         selected_label = (self._ai_template_combo.get() or "").strip()
         if not selected_label:
-            dialogs.Messagebox.show_info("AI Agent", "Please select an automation template.")
+            dialogs.Messagebox.show_info(
+                "AI Agent", "Please select an automation template."
+            )
             return
 
         template_id = selected_label.split(":", 1)[0].strip()
@@ -1044,7 +1129,9 @@ class MarkdownReader:
                 break
 
         if not selected_template:
-            dialogs.Messagebox.show_info("AI Agent", "Selected template is not available.")
+            dialogs.Messagebox.show_info(
+                "AI Agent", "Selected template is not available."
+            )
             return
 
         requires_selection = bool(selected_template.get("requires_selection", False))
@@ -1078,7 +1165,9 @@ class MarkdownReader:
             self.ai_action_audit_logs = persisted_logs
 
         if not self.ai_action_audit_logs:
-            dialogs.Messagebox.show_info("No AI automation actions logged yet.", "AI Audit Log")
+            dialogs.Messagebox.show_info(
+                "No AI automation actions logged yet.", "AI Audit Log"
+            )
             return
 
         rows = []
@@ -1107,7 +1196,9 @@ class MarkdownReader:
         doc_id = self._get_document_id_for_tab()
         if not doc_id:
             return
-        if not messagebox.askyesno("Clear Chat", "Clear chat history for this document?"):
+        if not messagebox.askyesno(
+            "Clear Chat", "Clear chat history for this document?"
+        ):
             return
 
         self.ai_chat_histories.pop(doc_id, None)
@@ -1129,12 +1220,16 @@ class MarkdownReader:
         """Send a message to the AI agent with document context."""
 
         if self._chat_busy:
-            dialogs.Messagebox.show_info("AI Agent", "AI Agent is processing another request.")
+            dialogs.Messagebox.show_info(
+                "AI Agent", "AI Agent is processing another request."
+            )
             return
 
         text_area = self.get_current_text_area()
         if not text_area:
-            dialogs.Messagebox.show_info("No document", "Please open or create a document first.")
+            dialogs.Messagebox.show_info(
+                "No document", "Please open or create a document first."
+            )
             return
 
         user_message = self.ai_chat_input_box.get("1.0", "end-1c").strip()
@@ -1183,16 +1278,22 @@ class MarkdownReader:
                         )
                         self.root.after(
                             0,
-                            lambda data=result, idx=tab_index, msg=user_message: self._finish_ai_agent_response(data, idx, msg),
+                            lambda data=result, idx=tab_index, msg=user_message: (
+                                self._finish_ai_agent_response(data, idx, msg)
+                            ),
                         )
                         break
                     except TranslationConfigError as exc:
                         dialog_result = self._request_translation_api_key(exc)
                         if not dialog_result:
                             raise RuntimeError("No API key provided.") from exc
-                        self._apply_ai_key_dialog_result(dialog_result, show_feedback=False)
+                        self._apply_ai_key_dialog_result(
+                            dialog_result, show_feedback=False
+                        )
             except Exception as exc:
-                self.root.after(0, lambda err=str(exc): self._fail_ai_agent_response(err))
+                self.root.after(
+                    0, lambda err=str(exc): self._fail_ai_agent_response(err)
+                )
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1224,7 +1325,7 @@ class MarkdownReader:
             action_type = "none"
             content = ""
 
-        action_id = datetime.now(timezone.utc).strftime("ai-%Y%m%d%H%M%S%f")
+        action_id = datetime.now(UTC).strftime("ai-%Y%m%d%H%M%S%f")
         safe_action = {
             "type": action_type,
             "content": content,
@@ -1251,7 +1352,9 @@ class MarkdownReader:
         if action_type == "none":
             self.ai_agent_status_var.set("Reply received")
         else:
-            self.ai_agent_status_var.set("Suggestion ready to apply (preview shown in chat)")
+            self.ai_agent_status_var.set(
+                "Suggestion ready to apply (preview shown in chat)"
+            )
 
     def _fail_ai_agent_response(self, error_message):
         """Finalize a failed AI agent request."""
@@ -1281,12 +1384,12 @@ class MarkdownReader:
             return base_message
 
         preview_limit = 2400
-        preview = content if len(content) <= preview_limit else content[:preview_limit] + "\n..."
-        return (
-            f"{base_message}\n\n"
-            f"Proposed content preview ({action_type}):\n"
-            f"{preview}"
+        preview = (
+            content
+            if len(content) <= preview_limit
+            else content[:preview_limit] + "\n..."
         )
+        return f"{base_message}\n\nProposed content preview ({action_type}):\n{preview}"
 
     def _validate_ai_action_payload(self, action):
         """Validate AI action payload before applying to the editor."""
@@ -1357,7 +1460,9 @@ class MarkdownReader:
                     start_idx = text_area.index("sel.first")
                     end_idx = text_area.index("sel.last")
                 except tk.TclError:
-                    dialogs.Messagebox.show_info("AI Agent", "Please select a section to replace.")
+                    dialogs.Messagebox.show_info(
+                        "AI Agent", "Please select a section to replace."
+                    )
                     return
                 text_area.delete(start_idx, end_idx)
                 text_area.insert(start_idx, content)
@@ -1367,7 +1472,11 @@ class MarkdownReader:
             self.mark_tab_modified(idx)
             self.update_preview()
 
-            self.ai_chat_pending_actions[doc_id] = {"type": "none", "content": "", "reason": ""}
+            self.ai_chat_pending_actions[doc_id] = {
+                "type": "none",
+                "content": "",
+                "reason": "",
+            }
             self._render_current_chat_history()
             self.ai_agent_status_var.set("Suggestion applied")
             self.ai_last_applied_action_id_by_doc[doc_id] = action_id
@@ -1390,7 +1499,9 @@ class MarkdownReader:
                 related_action_id=action_id,
                 doc_id=doc_id,
             )
-            dialogs.Messagebox.show_error("AI Agent", f"Failed to apply suggestion: {exc}")
+            dialogs.Messagebox.show_error(
+                "AI Agent", f"Failed to apply suggestion: {exc}"
+            )
 
     def reject_ai_agent_action(self):
         """Reject and clear the current pending AI suggestion."""
@@ -1411,10 +1522,16 @@ class MarkdownReader:
         action_id = (action.get("action_id") or "").strip()
         user_message = (action.get("user_message") or "").strip()
 
-        if not messagebox.askyesno("Reject AI Suggestion", "Reject and clear this AI suggestion?"):
+        if not messagebox.askyesno(
+            "Reject AI Suggestion", "Reject and clear this AI suggestion?"
+        ):
             return
 
-        self.ai_chat_pending_actions[doc_id] = {"type": "none", "content": "", "reason": ""}
+        self.ai_chat_pending_actions[doc_id] = {
+            "type": "none",
+            "content": "",
+            "reason": "",
+        }
         self._render_current_chat_history()
         self.ai_agent_status_var.set("Suggestion rejected")
         self._append_ai_audit_log(
@@ -1438,7 +1555,9 @@ class MarkdownReader:
         if not doc_id:
             return
 
-        last_action_id = (self.ai_last_applied_action_id_by_doc.get(doc_id) or "").strip()
+        last_action_id = (
+            self.ai_last_applied_action_id_by_doc.get(doc_id) or ""
+        ).strip()
         if not last_action_id:
             dialogs.Messagebox.show_info(
                 "Undo AI Task",
@@ -1466,7 +1585,9 @@ class MarkdownReader:
                 doc_id=doc_id,
             )
         except tk.TclError:
-            dialogs.Messagebox.show_info("Undo AI Task", "No undo step is currently available.")
+            dialogs.Messagebox.show_info(
+                "Undo AI Task", "No undo step is currently available."
+            )
 
     def _format_shortcut_pattern(self, pattern):
         """
@@ -1528,7 +1649,9 @@ class MarkdownReader:
             else:
                 subprocess.Popen(["xdg-open", path_str])
         except Exception as exc:
-            dialogs.Messagebox.show_error("AI Data Folder", f"Failed to open folder: {exc}")
+            dialogs.Messagebox.show_error(
+                "AI Data Folder", f"Failed to open folder: {exc}"
+            )
 
     def _on_drop_files(self, event):
         """
@@ -1539,7 +1662,7 @@ class MarkdownReader:
         :raises RuntimeError: If the error handling drop fails.
         """
 
-        print(f"🔍 Drop event triggered")
+        print("🔍 Drop event triggered")
         print(f"   Event data type: {type(event.data)}")
         print(f"   Event data: {event.data}")
 
@@ -1607,7 +1730,7 @@ class MarkdownReader:
                     try:
                         idx = self.notebook.index(self.notebook.select())
                         self.mark_tab_modified(idx)
-                    except:
+                    except Exception:
                         pass
                 return None
 
@@ -1619,7 +1742,7 @@ class MarkdownReader:
                     try:
                         idx = self.notebook.index(self.notebook.select())
                         self.mark_tab_modified(idx)
-                    except:
+                    except Exception:
                         pass
                 return None
 
@@ -1634,7 +1757,7 @@ class MarkdownReader:
                     try:
                         idx = self.notebook.index(self.notebook.select())
                         self.mark_tab_modified(idx)
-                    except:
+                    except Exception:
                         pass
 
             return None
@@ -1732,7 +1855,7 @@ class MarkdownReader:
                 else:
                     content = convert_pdf_to_markdown(abs_path)
             else:
-                with open(abs_path, "r", encoding="utf-8") as f:
+                with open(abs_path, encoding="utf-8") as f:
                     content = f.read()
 
                 # Check if file is HTML and convert to Markdown
@@ -1942,7 +2065,6 @@ class MarkdownReader:
 
         # Use the selected font for highlighting
         import platform
-        import tkinter.font
 
         system = platform.system()
         if system == "Darwin":  # macOS
@@ -2052,7 +2174,7 @@ class MarkdownReader:
             if current_title.startswith("* "):
                 current_title = current_title[2:]
             self.notebook.tab(tab_index, text=current_title)
-        except:
+        except Exception:
             pass
 
     def quit(self):
@@ -2498,10 +2620,18 @@ class MarkdownReader:
 
         widget.bind("<Command-KeyPress-z>", lambda _e: (self.undo_action(), "break")[1])
         widget.bind("<Control-KeyPress-z>", lambda _e: (self.undo_action(), "break")[1])
-        widget.bind("<Command-Shift-KeyPress-z>", lambda _e: (self.redo_action(), "break")[1])
-        widget.bind("<Command-Shift-KeyPress-Z>", lambda _e: (self.redo_action(), "break")[1])
-        widget.bind("<Control-Shift-KeyPress-z>", lambda _e: (self.redo_action(), "break")[1])
-        widget.bind("<Control-Shift-KeyPress-Z>", lambda _e: (self.redo_action(), "break")[1])
+        widget.bind(
+            "<Command-Shift-KeyPress-z>", lambda _e: (self.redo_action(), "break")[1]
+        )
+        widget.bind(
+            "<Command-Shift-KeyPress-Z>", lambda _e: (self.redo_action(), "break")[1]
+        )
+        widget.bind(
+            "<Control-Shift-KeyPress-z>", lambda _e: (self.redo_action(), "break")[1]
+        )
+        widget.bind(
+            "<Control-Shift-KeyPress-Z>", lambda _e: (self.redo_action(), "break")[1]
+        )
         widget.bind("<Control-KeyPress-y>", lambda _e: (self.redo_action(), "break")[1])
 
     def _bind_search_dialog_shortcuts_recursive(self, widget):
@@ -2564,7 +2694,9 @@ class MarkdownReader:
 
         entry_font = (self.current_font_family, max(13, self.current_font_size))
 
-        search_entry = ttk.Entry(top_row, textvariable=search_var, width=42, font=entry_font)
+        search_entry = ttk.Entry(
+            top_row, textvariable=search_var, width=42, font=entry_font
+        )
         search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self._search_entry = search_entry
 
@@ -2637,11 +2769,15 @@ class MarkdownReader:
 
         search_entry.bind("<Return>", lambda _e: (self.find_next_match(), "break")[1])
         search_entry.bind("<KP_Enter>", lambda _e: (self.find_next_match(), "break")[1])
-        search_entry.bind("<Shift-Return>", lambda _e: (self.find_previous_match(), "break")[1])
+        search_entry.bind(
+            "<Shift-Return>", lambda _e: (self.find_previous_match(), "break")[1]
+        )
 
         dialog.bind("<Return>", lambda _e: (self.find_next_match(), "break")[1])
         dialog.bind("<KP_Enter>", lambda _e: (self.find_next_match(), "break")[1])
-        dialog.bind("<Shift-Return>", lambda _e: (self.find_previous_match(), "break")[1])
+        dialog.bind(
+            "<Shift-Return>", lambda _e: (self.find_previous_match(), "break")[1]
+        )
         dialog.bind("<Escape>", lambda _e: self._close_search_dialog())
         dialog.protocol("WM_DELETE_WINDOW", self._close_search_dialog)
 
@@ -2651,10 +2787,14 @@ class MarkdownReader:
         replace_row = tk.Frame(container)
         replace_row.pack(fill=tk.X, padx=10, pady=(0, 8))
 
-        tk.Label(replace_row, text="Replace:", anchor="w").pack(side=tk.LEFT, padx=(0, 8))
+        tk.Label(replace_row, text="Replace:", anchor="w").pack(
+            side=tk.LEFT, padx=(0, 8)
+        )
 
         replace_var = tk.StringVar(value=self._last_replace_text)
-        replace_entry = ttk.Entry(replace_row, textvariable=replace_var, width=42, font=entry_font)
+        replace_entry = ttk.Entry(
+            replace_row, textvariable=replace_var, width=42, font=entry_font
+        )
         replace_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self._replace_entry = replace_entry
 
@@ -2673,7 +2813,10 @@ class MarkdownReader:
             command=self.replace_all_matches,
         ).pack(side=tk.LEFT, padx=(0, 0))
 
-        replace_var.trace_add("write", lambda *_args: setattr(self, "_last_replace_text", replace_var.get()))
+        replace_var.trace_add(
+            "write",
+            lambda *_args: setattr(self, "_last_replace_text", replace_var.get()),
+        )
 
         self._bind_search_dialog_shortcuts_recursive(dialog)
 
@@ -2729,8 +2872,12 @@ class MarkdownReader:
             if len(current_ranges) >= 2:
                 previous_current = (str(current_ranges[0]), str(current_ranges[1]))
 
-        text_area.tag_configure("search_match_all", background="#d9e9ff", foreground="#000000")
-        text_area.tag_configure("search_match_current", background="#ffd166", foreground="#000000")
+        text_area.tag_configure(
+            "search_match_all", background="#d9e9ff", foreground="#000000"
+        )
+        text_area.tag_configure(
+            "search_match_current", background="#ffd166", foreground="#000000"
+        )
         self._clear_search_highlight(text_area)
 
         if not query:
@@ -2822,9 +2969,15 @@ class MarkdownReader:
         if current_start is None:
             target = matches[0] if forward else matches[-1]
         else:
-            indices = [i for i, (start, _) in enumerate(matches) if start == current_start]
+            indices = [
+                i for i, (start, _) in enumerate(matches) if start == current_start
+            ]
             current_idx = indices[0] if indices else 0
-            target_idx = (current_idx + 1) % len(matches) if forward else (current_idx - 1) % len(matches)
+            target_idx = (
+                (current_idx + 1) % len(matches)
+                if forward
+                else (current_idx - 1) % len(matches)
+            )
             target = matches[target_idx]
 
         text_area.tag_remove("search_match_current", "1.0", tk.END)
@@ -2839,13 +2992,23 @@ class MarkdownReader:
         # allowing users to click and edit the document like VSCode.
         focus_widget = self.root.focus_get()
         focus_in_search_ui = False
-        if self._is_search_dialog_active() and focus_widget is not None and self._search_dialog is not None:
+        if (
+            self._is_search_dialog_active()
+            and focus_widget is not None
+            and self._search_dialog is not None
+        ):
             try:
-                focus_in_search_ui = str(focus_widget).startswith(str(self._search_dialog))
+                focus_in_search_ui = str(focus_widget).startswith(
+                    str(self._search_dialog)
+                )
             except Exception:
                 focus_in_search_ui = False
 
-        if focus_in_search_ui and self._search_entry and self._search_entry.winfo_exists():
+        if (
+            focus_in_search_ui
+            and self._search_entry
+            and self._search_entry.winfo_exists()
+        ):
             self._search_entry.focus_set()
             self._search_entry.icursor(tk.END)
         elif not focus_in_search_ui:
@@ -2974,11 +3137,8 @@ class MarkdownReader:
 
         _default = AI_PROVIDER_PRIORITY[0]
         return (
-            (self.ai_provider_var.get() or os.getenv("AI_PROVIDER", _default))
-            .strip()
-            .lower()
-            or _default
-        )
+            self.ai_provider_var.get() or os.getenv("AI_PROVIDER", _default)
+        ).strip().lower() or _default
 
     def _request_translation_cancel(self):
         """Request cancellation of the running translation job."""
@@ -3030,7 +3190,9 @@ class MarkdownReader:
         """Prompt the user for an API key and optional secure persistence."""
 
         provider_options = ["openai_compatible", "openrouter", "openai", "anthropic"]
-        initial_provider = (provider_name or self._get_current_ai_provider()).strip().lower()
+        initial_provider = (
+            (provider_name or self._get_current_ai_provider()).strip().lower()
+        )
         if initial_provider not in provider_options:
             initial_provider = "openrouter"
 
@@ -3063,7 +3225,9 @@ class MarkdownReader:
             ttk.Label(container, text="Provider:").pack(anchor="w")
             provider_combo = ttk.Combobox(
                 container,
-                values=[get_ai_provider_display_name(name) for name in provider_options],
+                values=[
+                    get_ai_provider_display_name(name) for name in provider_options
+                ],
                 state="readonly",
                 width=40,
             )
@@ -3109,7 +3273,9 @@ class MarkdownReader:
         def on_confirm():
             api_key = api_key_entry.get().strip()
             if not api_key:
-                dialogs.Messagebox.show_error("Missing API Key", "Please enter an API key.")
+                dialogs.Messagebox.show_error(
+                    "Missing API Key", "Please enter an API key."
+                )
                 return
 
             result.update(
@@ -3168,7 +3334,11 @@ class MarkdownReader:
         if not result:
             return False
 
-        provider_name = (result.get("provider_name") or self._get_current_ai_provider()).strip().lower()
+        provider_name = (
+            (result.get("provider_name") or self._get_current_ai_provider())
+            .strip()
+            .lower()
+        )
         env_var = get_ai_provider_env_var(provider_name)
 
         if result.get("delete_stored"):
@@ -3193,7 +3363,11 @@ class MarkdownReader:
             set_secure_ai_api_key(provider_name, api_key)
 
         if show_feedback:
-            storage_text = "saved securely" if result.get("save_securely") else "stored for this session only"
+            storage_text = (
+                "saved securely"
+                if result.get("save_securely")
+                else "stored for this session only"
+            )
             dialogs.Messagebox.show_info(
                 "AI API Key",
                 f"The {get_ai_provider_display_name(provider_name)} key is now {storage_text}.",
@@ -3236,7 +3410,11 @@ class MarkdownReader:
             width=30,
         )
         # Show display label in the combo
-        provider_combo.set(provider_labels.get(provider_var.get(), provider_labels[AI_PROVIDER_PRIORITY[0]]))
+        provider_combo.set(
+            provider_labels.get(
+                provider_var.get(), provider_labels[AI_PROVIDER_PRIORITY[0]]
+            )
+        )
         provider_combo.pack(anchor="w", pady=(4, 12))
 
         # --- OpenAI Compatible base URL ---
@@ -3245,8 +3423,12 @@ class MarkdownReader:
         base_url_label.pack(anchor="w")
 
         base_url_options = get_openai_compatible_base_url_options()
-        base_url_label_to_key = {item["label"]: item["key"] for item in base_url_options}
-        base_url_key_to_label = {item["key"]: item["label"] for item in base_url_options}
+        base_url_label_to_key = {
+            item["label"]: item["key"] for item in base_url_options
+        }
+        base_url_key_to_label = {
+            item["key"]: item["label"] for item in base_url_options
+        }
         base_url_key_to_url = {item["key"]: item["url"] for item in base_url_options}
         base_url_var = tk.StringVar(value=get_openai_compatible_base_url_choice())
         base_url_combo = ttk.Combobox(
@@ -3365,43 +3547,63 @@ class MarkdownReader:
             # endpoint-specific (e.g., Navidia vs Groq), so do not inject cross-endpoint models.
             selected_base_url = ""
             if pname == "openai_compatible":
-                selected_base_url = base_url_key_to_url.get(base_url_var.get().strip().lower(), "")
-            defaults = get_provider_default_models(pname, base_url_override=selected_base_url)
+                selected_base_url = base_url_key_to_url.get(
+                    base_url_var.get().strip().lower(), ""
+                )
+            defaults = get_provider_default_models(
+                pname, base_url_override=selected_base_url
+            )
             current_model = (get_ai_provider_model(pname) or "").strip()
             model_values = list(defaults)
-            if pname != "openai_compatible" and current_model and current_model not in model_values:
+            if (
+                pname != "openai_compatible"
+                and current_model
+                and current_model not in model_values
+            ):
                 model_values.insert(0, current_model)
 
             model_combo["values"] = model_values
-            if current_model and (pname != "openai_compatible" or current_model in model_values):
+            if current_model and (
+                pname != "openai_compatible" or current_model in model_values
+            ):
                 model_var.set(current_model)
             else:
                 model_var.set(model_values[0] if model_values else "")
             api_key_entry.delete(0, tk.END)
             env_var = _effective_env_var_name()
-            existing_key = (os.environ.get(env_var, "").strip() if env_var else "") or get_secure_ai_api_key(
-                _effective_key_name()
-            )
+            existing_key = (
+                os.environ.get(env_var, "").strip() if env_var else ""
+            ) or get_secure_ai_api_key(_effective_key_name())
             if existing_key:
-                stored_key_status_var.set("A key is already configured for the current provider/endpoint.")
+                stored_key_status_var.set(
+                    "A key is already configured for the current provider/endpoint."
+                )
                 fetch_status_var.set("")
             else:
-                stored_key_status_var.set("No key configured for the current provider/endpoint. Please enter an API key.")
-                fetch_status_var.set("This endpoint has no API key yet. Please enter one.")
+                stored_key_status_var.set(
+                    "No key configured for the current provider/endpoint. Please enter an API key."
+                )
+                fetch_status_var.set(
+                    "This endpoint has no API key yet. Please enter one."
+                )
             hint_var.set(
                 "Keys are stored in the system credential store. A prompt may appear when a key is accessed."
             )
 
         def _fetch_models_async(*_):
             pname = _get_normalized_provider()
-            key = api_key_entry.get().strip() or get_secure_ai_api_key(_effective_key_name())
+            key = api_key_entry.get().strip() or get_secure_ai_api_key(
+                _effective_key_name()
+            )
             if not key:
                 fetch_status_var.set("Enter an API key to fetch the live model list.")
                 return
 
             selected_base_url = ""
             if pname == "openai_compatible":
-                selected_base_url = base_url_key_to_url.get(base_url_var.get().strip().lower(), "")
+                selected_base_url = base_url_key_to_url.get(
+                    base_url_var.get().strip().lower(), ""
+                )
 
             fetch_status_var.set("Fetching model list…")
             model_combo.config(state="disabled")
@@ -3412,6 +3614,7 @@ class MarkdownReader:
                     key,
                     base_url_override=selected_base_url,
                 )
+
                 def update():
                     model_combo.config(state="normal")
                     model_combo["values"] = models
@@ -3419,6 +3622,7 @@ class MarkdownReader:
                     if cur not in models:
                         model_var.set(models[0] if models else "")
                     fetch_status_var.set(f"{len(models)} models available.")
+
                 dialog.after(0, update)
 
             threading.Thread(target=worker, daemon=True).start()
@@ -3434,13 +3638,13 @@ class MarkdownReader:
             # Ensure a key exists for this provider/endpoint before saving.
             if not new_key:
                 env_var = _effective_env_var_name()
-                existing_key = (os.environ.get(env_var, "").strip() if env_var else "") or get_secure_ai_api_key(
-                    _effective_key_name()
-                )
+                existing_key = (
+                    os.environ.get(env_var, "").strip() if env_var else ""
+                ) or get_secure_ai_api_key(_effective_key_name())
                 if not existing_key:
                     dialogs.Messagebox.show_error(
                         "API Key Required",
-                        f"No API key is stored for this endpoint.\nPlease enter a key in the API Key field.",
+                        "No API key is stored for this endpoint.\nPlease enter a key in the API Key field.",
                     )
                     api_key_entry.focus_set()
                     return
@@ -3453,7 +3657,9 @@ class MarkdownReader:
                 try:
                     set_secure_ai_api_key(_effective_key_name(), new_key)
                 except Exception as exc:
-                    dialogs.Messagebox.show_error("Key Storage", f"Could not save key: {exc}")
+                    dialogs.Messagebox.show_error(
+                        "Key Storage", f"Could not save key: {exc}"
+                    )
                     return
 
             # Model handling
@@ -3471,7 +3677,7 @@ class MarkdownReader:
             )
 
         def on_delete_key():
-            pname = _get_normalized_provider()
+            _get_normalized_provider()
             try:
                 delete_secure_ai_api_key(_effective_key_name())
             except Exception:
@@ -3485,12 +3691,12 @@ class MarkdownReader:
                 "Keys are stored in the system credential store. A prompt may appear when a key is accessed."
             )
 
-        ttk.Button(button_frame, text="Delete Key", command=on_delete_key, width=12).grid(
-            row=0, column=0, padx=4
-        )
-        ttk.Button(button_frame, text="Fetch Models", command=_fetch_models_async, width=12).grid(
-            row=0, column=1, padx=4
-        )
+        ttk.Button(
+            button_frame, text="Delete Key", command=on_delete_key, width=12
+        ).grid(row=0, column=0, padx=4)
+        ttk.Button(
+            button_frame, text="Fetch Models", command=_fetch_models_async, width=12
+        ).grid(row=0, column=1, padx=4)
         ttk.Button(button_frame, text="Save", command=on_save, width=12).grid(
             row=0, column=2, padx=4
         )
@@ -3510,7 +3716,14 @@ class MarkdownReader:
         """Prompt for an API key from a worker thread via the unified config dialog."""
 
         dialog_done = threading.Event()
-        provider_name = (getattr(config_error, "provider_name", None) or self._get_current_ai_provider()).strip().lower()
+        provider_name = (
+            (
+                getattr(config_error, "provider_name", None)
+                or self._get_current_ai_provider()
+            )
+            .strip()
+            .lower()
+        )
 
         def show_dialog():
             self.open_ai_provider_config()
@@ -3552,7 +3765,9 @@ class MarkdownReader:
         text_area.mark_gravity(mark_name, tk.RIGHT)
         text_area.see(start_idx)
         text_area.focus_set()
-        self._show_translation_progress(total_chunks, f"Preparing translation... 0/{total_chunks}")
+        self._show_translation_progress(
+            total_chunks, f"Preparing translation... 0/{total_chunks}"
+        )
         return {
             "tab_index": tab_index,
             "text_area": text_area,
@@ -3602,7 +3817,8 @@ class MarkdownReader:
 
         if unique_notes:
             dialogs.Messagebox.show_info(
-                "Translation completed with notes:\n\n" + "\n".join(f"- {note}" for note in unique_notes),
+                "Translation completed with notes:\n\n"
+                + "\n".join(f"- {note}" for note in unique_notes),
                 "Translation Notes",
             )
 
@@ -3837,18 +4053,24 @@ class MarkdownReader:
                             ambiguity_notes.extend(chunk_notes)
                             self.root.after(
                                 0,
-                                lambda chunk=translated_chunk, index=chunk_index: self._append_translation_chunk(
-                                    session,
-                                    chunk,
-                                    index,
+                                lambda chunk=translated_chunk, index=chunk_index: (
+                                    self._append_translation_chunk(
+                                        session,
+                                        chunk,
+                                        index,
+                                    )
                                 ),
                             )
                             break
                         except TranslationConfigError as exc:
                             dialog_result = self._request_translation_api_key(exc)
                             if not dialog_result:
-                                raise RuntimeError("Translation cancelled because no API key was provided.") from exc
-                            self._apply_ai_key_dialog_result(dialog_result, show_feedback=False)
+                                raise RuntimeError(
+                                    "Translation cancelled because no API key was provided."
+                                ) from exc
+                            self._apply_ai_key_dialog_result(
+                                dialog_result, show_feedback=False
+                            )
 
                 self.root.after(
                     0,
@@ -4290,9 +4512,15 @@ Example - Data Table:
 
         # Use markdown2 (same as the rest of the app) for consistent rendering.
         import markdown2 as _md2
+
         html_content = _md2.markdown(
             md_content,
-            extras=["fenced-code-blocks", "code-friendly", "tables", "break-on-newline"],
+            extras=[
+                "fenced-code-blocks",
+                "code-friendly",
+                "tables",
+                "break-on-newline",
+            ],
         )
 
         # Export to PDF using WeasyPrint (images inlined as base64 inside the exporter)
@@ -4304,6 +4532,7 @@ Example - Data Table:
             )
         except Exception as exc:
             import traceback
+
             dialogs.Messagebox.show_error(
                 "PDF Export Failed",
                 f"Could not export PDF:\n{exc}\n\nSee console for full traceback.",
@@ -4313,7 +4542,7 @@ Example - Data Table:
     def show_help(self):
         """
         Displays a help dialog with information about the application features.
-        
+
         Opens a new help window containing detailed descriptions of all application menus,
         menu items, and their functionality. The help window features organized sections
         for File, View, Edit, Settings, Tools, and Table menus with descriptions and
@@ -4338,15 +4567,15 @@ Example - Data Table:
         x = max(20, min(x, screen_width - window_width - 20))
         y = max(20, min(y, screen_height - window_height - 40))
         help_window.geometry(f"{window_width}x{window_height}+{x}+{y}")
-        
+
         # Colors
         bg_color = "#2A2A2A"
         text_color = "#F5F5F5"
-        
+
         # Main container
         main_container = tk.Frame(help_window, bg=bg_color)
         main_container.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
-        
+
         # Help text area
         help_text = ScrolledText(
             main_container,
@@ -4358,101 +4587,169 @@ Example - Data Table:
             fg=text_color,
             insertbackground=text_color,
             relief=tk.FLAT,
-            borderwidth=0
+            borderwidth=0,
         )
         help_text.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
-        
+
         # Tags for formatting
-        help_text.tag_configure("bold_item", font=("Arial", 8, "bold"), foreground=text_color)
-        help_text.tag_configure("menu_header", font=("Arial", 9, "bold"), foreground=text_color,justify="left",spacing1=10,spacing3=10)
-        
+        help_text.tag_configure(
+            "bold_item", font=("Arial", 8, "bold"), foreground=text_color
+        )
+        help_text.tag_configure(
+            "menu_header",
+            font=("Arial", 9, "bold"),
+            foreground=text_color,
+            justify="left",
+            spacing1=10,
+            spacing3=10,
+        )
+
         # File Menu
         help_text.insert("end", "1. File Menu", "menu_header")
         help_text.insert("end", "\n")
-        
+
         help_text.insert("end", "1.1 New", "bold_item")
-        help_text.insert("end", "\n    Creates a new blank Markdown (.md) document for editing.\n\n")
-        
+        help_text.insert(
+            "end", "\n    Creates a new blank Markdown (.md) document for editing.\n\n"
+        )
+
         help_text.insert("end", "1.2 Open File", "bold_item")
-        help_text.insert("end", "\n    Opens an existing Markdown (.md) file from your system for viewing or editing.\n\n")
-        
+        help_text.insert(
+            "end",
+            "\n    Opens an existing Markdown (.md) file from your system for viewing or editing.\n\n",
+        )
+
         help_text.insert("end", "1.3 Save File", "bold_item")
-        help_text.insert("end", "\n    Saves the current Markdown document to the selected file location.\n\n")
-        
+        help_text.insert(
+            "end",
+            "\n    Saves the current Markdown document to the selected file location.\n\n",
+        )
+
         help_text.insert("end", "1.4 Export to HTML", "bold_item")
-        help_text.insert("end", "\n    Converts the current Markdown document into an HTML file for web viewing.\n\n")
-        
+        help_text.insert(
+            "end",
+            "\n    Converts the current Markdown document into an HTML file for web viewing.\n\n",
+        )
+
         help_text.insert("end", "1.5 Export to Word", "bold_item")
-        help_text.insert("end", "\n    Exports the current Markdown document as a Microsoft Word (.docx) file.\n\n")
-        
+        help_text.insert(
+            "end",
+            "\n    Exports the current Markdown document as a Microsoft Word (.docx) file.\n\n",
+        )
+
         help_text.insert("end", "1.6 Export to PDF", "bold_item")
-        help_text.insert("end", "\n    Generates a PDF version of the current Markdown document.\n\n")
-        
+        help_text.insert(
+            "end", "\n    Generates a PDF version of the current Markdown document.\n\n"
+        )
+
         help_text.insert("end", "1.7 Close", "bold_item")
-        help_text.insert("end", "\n    Closes the currently open Markdown document without exiting the application.\n\n")
-        
+        help_text.insert(
+            "end",
+            "\n    Closes the currently open Markdown document without exiting the application.\n\n",
+        )
+
         help_text.insert("end", "1.8 Close All", "bold_item")
-        help_text.insert("end", "\n    Closes all open Markdown documents in the editor.\n\n")
-        
+        help_text.insert(
+            "end", "\n    Closes all open Markdown documents in the editor.\n\n"
+        )
+
         help_text.insert("end", "1.9 Exit", "bold_item")
         help_text.insert("end", "\n    Closes the application completely.\n\n")
 
         # View Menu
         help_text.insert("end", "2. View Menu", "menu_header")
         help_text.insert("end", "\n")
-        
+
         help_text.insert("end", "2.1 Toggle Dark Mode", "bold_item")
-        help_text.insert("end", "\n    Switches the interface between light and dark themes for improved readability.\n\n")
-        
+        help_text.insert(
+            "end",
+            "\n    Switches the interface between light and dark themes for improved readability.\n\n",
+        )
+
         help_text.insert("end", "2.2 Open Preview in Browser", "bold_item")
-        help_text.insert("end", "\n    Opens the rendered Markdown preview in your default web browser.\n\n")
+        help_text.insert(
+            "end",
+            "\n    Opens the rendered Markdown preview in your default web browser.\n\n",
+        )
 
         help_text.insert("end", "2.3 Show AI Agent Panel", "bold_item")
-        help_text.insert("end", "\n    Displays the AI agent interface for interacting with AI-powered features.\n\n")
-        
+        help_text.insert(
+            "end",
+            "\n    Displays the AI agent interface for interacting with AI-powered features.\n\n",
+        )
+
         # Edit Menu
         help_text.insert("end", "3. Edit Menu", "menu_header")
         help_text.insert("end", "\n")
-        
+
         help_text.insert("end", "3.1 Undo", "bold_item")
-        help_text.insert("end", "\n    Reverts the most recent change made in the document.\n\n")
-        
+        help_text.insert(
+            "end", "\n    Reverts the most recent change made in the document.\n\n"
+        )
+
         help_text.insert("end", "3.2 Redo", "bold_item")
         help_text.insert("end", "\n    Restores the most recently undone change.\n\n")
-        
+
         help_text.insert("end", "3.3 Translate with AI", "bold_item")
-        help_text.insert("end", "\n    Uses AI to translate selected text into another language.\n\n")
-        help_text.insert("end", "    3.3.1 Translate Selected Text with AI", "bold_item")
-        help_text.insert("end", "\n        Translates only the selected portion of text using AI.\n\n")
-        help_text.insert("end", "    3.3.2 Translate Full Document with AI", "bold_item")
-        help_text.insert("end", "\n        Translates the entire document using AI.\n\n")
-        
+        help_text.insert(
+            "end", "\n    Uses AI to translate selected text into another language.\n\n"
+        )
+        help_text.insert(
+            "end", "    3.3.1 Translate Selected Text with AI", "bold_item"
+        )
+        help_text.insert(
+            "end",
+            "\n        Translates only the selected portion of text using AI.\n\n",
+        )
+        help_text.insert(
+            "end", "    3.3.2 Translate Full Document with AI", "bold_item"
+        )
+        help_text.insert(
+            "end", "\n        Translates the entire document using AI.\n\n"
+        )
+
         # Settings Menu
         help_text.insert("end", "4. Settings Menu", "menu_header")
         help_text.insert("end", "\n")
-        
+
         help_text.insert("end", "4.1 AI Provider & API Keys", "bold_item")
-        help_text.insert("end", "\n    Configures AI service providers and API keys used for AI-powered features.\n\n")
-        
+        help_text.insert(
+            "end",
+            "\n    Configures AI service providers and API keys used for AI-powered features.\n\n",
+        )
+
         # Tools Menu
         help_text.insert("end", "5. Tools Menu", "menu_header")
         help_text.insert("end", "\n")
-        
-        help_text.insert("end", "5.1 Use Advanced PDF Conversion (Docling)", "bold_item")
-        help_text.insert("end", "\n    Enables enhanced PDF generation using the Docling conversion engine.\n\n")
-        
+
+        help_text.insert(
+            "end", "5.1 Use Advanced PDF Conversion (Docling)", "bold_item"
+        )
+        help_text.insert(
+            "end",
+            "\n    Enables enhanced PDF generation using the Docling conversion engine.\n\n",
+        )
+
         help_text.insert("end", "5.2 PDF Converter Info", "bold_item")
-        help_text.insert("end", "\n    Displays information about the PDF conversion engine used by the application.\n\n")
-        
+        help_text.insert(
+            "end",
+            "\n    Displays information about the PDF conversion engine used by the application.\n\n",
+        )
+
         # Table Menu
         help_text.insert("end", "6. Table Menu", "menu_header")
         help_text.insert("end", "\n")
-        
-        help_text.insert("end", "6.1 Insert Table", "bold_item")
-        help_text.insert("end", "\n    Provide column names and data in the predefined table format to insert a Markdown-formatted table into the document.\n\n")
-        
-        help_text.insert("end", "6.2 Table Syntax Help", "bold_item")
-        help_text.insert("end", "\n    Provides guidance on writing and formatting tables using Markdown syntax.")
-        
-        help_text.config(state=tk.DISABLED)
 
+        help_text.insert("end", "6.1 Insert Table", "bold_item")
+        help_text.insert(
+            "end",
+            "\n    Provide column names and data in the predefined table format to insert a Markdown-formatted table into the document.\n\n",
+        )
+
+        help_text.insert("end", "6.2 Table Syntax Help", "bold_item")
+        help_text.insert(
+            "end",
+            "\n    Provides guidance on writing and formatting tables using Markdown syntax.",
+        )
+
+        help_text.config(state=tk.DISABLED)

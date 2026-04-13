@@ -1,7 +1,6 @@
+import tkinter as tk
 import unittest
 from unittest.mock import patch
-
-import tkinter as tk
 
 from markdown_reader.ui import MarkdownReader
 

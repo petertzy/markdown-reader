@@ -3,7 +3,7 @@ import sys
 import tempfile
 
 
-def get_resource_path(filename): # Potentially unused function?
+def get_resource_path(filename):  # Potentially unused function?
     """
     Gets the filepath of a resource depending on the system's attributes.
 
@@ -11,10 +11,10 @@ def get_resource_path(filename): # Potentially unused function?
 
     :return: A string with the filename joined onto its relevant file path.
     """
-    
-    if hasattr(sys, '_MEIPASS'):
+
+    if hasattr(sys, "_MEIPASS"):
         return os.path.join(sys._MEIPASS, filename)
-    elif getattr(sys, 'frozen', False):
+    elif getattr(sys, "frozen", False):
         return os.path.join(os.path.dirname(sys.executable), filename)
     else:
         return os.path.join(os.path.abspath("."), filename)
@@ -26,8 +26,8 @@ def get_preview_file():
 
     :return: A string containing the file path for the temporary HTML preview file.
     """
-    
+
     preview_path = os.path.join(tempfile.gettempdir(), "markdown_preview.html")
-    with open(preview_path, 'w', encoding='utf-8') as f:
+    with open(preview_path, "w", encoding="utf-8") as f:
         f.write("")
     return preview_path

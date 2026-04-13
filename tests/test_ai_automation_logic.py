@@ -38,7 +38,9 @@ class TestAIAutomationLogic(unittest.TestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(result["proposed_action"]["type"], "replace_document")
-        self.assertEqual(result["proposed_action"]["reason"], "generate_toc_full_document")
+        self.assertEqual(
+            result["proposed_action"]["reason"], "generate_toc_full_document"
+        )
         self.assertIn("## Table of Contents", result["proposed_action"]["content"])
 
     def test_code_block_fallback_closes_unbalanced_fence(self):
@@ -73,7 +75,9 @@ class TestAIAutomationLogic(unittest.TestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(result["proposed_action"]["type"], "replace_document")
-        self.assertEqual(result["proposed_action"]["reason"], "format_rules_full_document")
+        self.assertEqual(
+            result["proposed_action"]["reason"], "format_rules_full_document"
+        )
         self.assertIn("# Title", result["proposed_action"]["content"])
 
     def test_summary_without_selection_still_returns_summary_text(self):
@@ -86,10 +90,14 @@ class TestAIAutomationLogic(unittest.TestCase):
 
         self.assertIsNotNone(result)
         self.assertEqual(result["proposed_action"]["type"], "replace_document")
-        self.assertEqual(result["proposed_action"]["reason"], "generate_summary_full_document")
+        self.assertEqual(
+            result["proposed_action"]["reason"], "generate_summary_full_document"
+        )
         self.assertIn("## Summary", result["proposed_action"]["content"])
         self.assertTrue(result["assistant_message"].startswith("## Summary"))
-        self.assertEqual(result["proposed_action"]["content"], result["assistant_message"])
+        self.assertEqual(
+            result["proposed_action"]["content"], result["assistant_message"]
+        )
 
     def test_summary_without_document_content_returns_no_content_message(self):
         result = build_ai_automation_fallback(
