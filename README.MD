@@ -186,6 +186,90 @@ To automatically format all files:
 uv run ruff format .
 ```
 
+## Running Tests
+
+The project uses Python's built-in `unittest` framework. Tests live in the `tests/` directory and cover AI automation logic, UI helper methods, provider configuration, and agent interaction workflows.
+
+Run the full test suite:
+
+```bash
+uv run python -m unittest discover -s tests
+```
+
+Or with pip:
+
+```bash
+python -m unittest discover -s tests
+```
+
+Run a single test file:
+
+```bash
+uv run python -m unittest tests/test_ai_automation_logic.py
+```
+
+### Test coverage overview
+
+| Test file | What it covers |
+|---|---|
+| `test_ai_automation_logic.py` | Offline fallback logic for TOC generation, summarization, code-block formatting, and task template listing |
+| `test_ai_agent_ui_helpers.py` | UI helper methods: payload validation, chat history migration, audit log capping, suggestion apply/reject |
+| `test_ai_agent_selection_only_integration.py` | Integration path for selection-only mode — verifies correct error handling when no text is selected |
+| `test_ai_provider_config_logic.py` | Provider configuration and API key management logic |
+
+Tests run automatically on every push and pull request via GitHub Actions (see `.github/workflows/python-ci.yml`).
+
+> **macOS note:** `test_ai_agent_ui_helpers.py` and `test_ai_agent_selection_only_integration.py` import `markdown_reader.ui`, which loads WeasyPrint at import time. WeasyPrint requires native system libraries (pango, cairo, gdk-pixbuf). If you see an `OSError: cannot load library 'libgobject-2.0-0'` error, follow the steps in [PrepareForMacUser.md](./doc/PrepareForMacUser.md) first. `test_ai_automation_logic.py` and `test_ai_provider_config_logic.py` have no system library dependencies and can always run.
+
+---
+
+## Development Workflow: uv vs. pip / requirements.txt
+
+This project previously used a `requirements.txt` file and standard `pip` commands. It has since migrated to [`uv`](https://docs.astral.sh/uv/) with `pyproject.toml`. Here is what changed and why.
+
+### The old approach (requirements.txt + pip)
+
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+`requirements.txt` is a flat list of pinned packages. It works, but has limitations:
+
+- No distinction between direct dependencies and transitive ones — everything is listed together.
+- No separation of dev-only dependencies (linters, test runners) from runtime dependencies.
+- No built-in lockfile mechanism — the file must be manually regenerated and tends to drift.
+- `pip` resolves the full dependency graph from scratch on every install, which is slow.
+
+### The new approach (pyproject.toml + uv)
+
+```bash
+uv sync           # install all runtime dependencies from the lockfile
+uv sync --locked --extra dev   # also install dev tools (ruff, ty, pre-commit)
+```
+
+`pyproject.toml` is the modern Python packaging standard (PEP 517/518/621). It consolidates project metadata, runtime dependencies, and tool configuration in one file. Key benefits over `requirements.txt`:
+
+- **Dependency groups**: runtime deps go under `[project.dependencies]`; dev-only tools (Ruff, ty, pre-commit) go under `[project.optional-dependencies] dev`; docs tools under `docs`. You only install what you need.
+- **Lockfile (`uv.lock`)**: records exact versions of every direct and transitive package. `uv sync --locked` guarantees identical environments across all machines and in CI — no more "works on my machine" surprises.
+- **Speed**: `uv` is written in Rust and resolves and installs packages significantly faster than `pip`.
+- **Single source of truth**: tool configuration for Ruff, ty, and isort also lives in `pyproject.toml`, eliminating separate config files.
+
+### When to update the lockfile
+
+If you add or change a dependency in `pyproject.toml`, regenerate the lockfile and commit it:
+
+```bash
+uv lock
+git add pyproject.toml uv.lock
+git commit -m "chore: update dependencies"
+```
+
+CI runs `uv sync --locked`, so a stale `uv.lock` will fail the build — this is intentional and keeps the lockfile honest.
+
+---
+
 ## Submit Changes to Git
 ```bash
 git add .
