@@ -45,24 +45,19 @@ git clone https://github.com/petertzy/markdown-reader.git
 cd markdown-reader
 ```
 
-#### 2. Create a virtual environment (recommended)
+#### 2. Install dependencies
 
-```bash
-python -m venv venv
-source venv/bin/activate  # macOS/Linux
-# .\venv\Scripts\activate  # Windows (cmd/powershell)
-```
-
-#### 3. Install dependencies
-
-For Mac users, you should first complete the preparation steps described in the [PrepareForMacUser](./doc/PrepareForMacUser.md) file.
+For Mac and Linux users, you should first complete the preparation steps described in the [PrepareForMacUser](./doc/PrepareForMacUser.md) file.
 
 For Windows users, WeasyPrint requires additional system libraries. Complete the preparation steps described in the [PrepareForWindowsUser](./doc/PrepareForWindowsUser.md) file before installing dependencies.
 
-With [uv](https://docs.astral.sh/uv/) (recommended):
+It's worth noting that WeasyPrint is not compatible with anaconda so make sure to use a regular python environment.
+
+**With [uv](https://docs.astral.sh/uv/) (recommended):**
 
 ```bash
 uv sync
+source .venv/bin/activate
 ```
 
 If you update dependencies in `pyproject.toml`, regenerate and commit the lockfile:
@@ -73,13 +68,16 @@ uv lock
 
 CI uses `uv sync --locked --extra dev`, so `uv.lock` must stay in sync with `pyproject.toml`.
 
-Or with pip:
+**Or with pip:**
 
 ```bash
+python -m venv venv
+source venv/bin/activate  # macOS/Linux
+# .\venv\Scripts\activate  # Windows (cmd/powershell)
 pip install .
 ```
 
-#### 4. Install pre-commit hooks (recommended)
+#### 3. Install pre-commit hooks (contributing)
 
 This project uses [pre-commit](https://pre-commit.com/) to automatically fix import sorting and code formatting on every commit. Run this once after cloning:
 
