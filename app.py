@@ -8,7 +8,6 @@ from ttkbootstrap.constants import *
 
 from markdown_reader.ui import MarkdownReader
 
-
 def _icon_debug_enabled():
     return os.environ.get("MARKDOWN_READER_DEBUG_ICON", "").strip() == "1"
 

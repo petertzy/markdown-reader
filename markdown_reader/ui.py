@@ -16,6 +16,8 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from markdown_reader.file_handler import drop_file
+from word_count_bar import WordCountBar
+from recent_files import RecentFilesManager
 from markdown_reader.logic import (
     AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES,
     AI_PROVIDER_PRIORITY,
@@ -188,6 +190,9 @@ class MarkdownReader:
 
         # Ensure persisted AI settings are available before initializing UI state.
         load_persisted_ai_settings()
+
+        self.recent_files = RecentFilesManager(settings_path=str(APP_SETTINGS_FILE_PATH))
+        self._tab_bars: dict = {}
 
         self.dark_mode = False
         self.preview_file = get_preview_file()
@@ -434,8 +439,9 @@ class MarkdownReader:
         style = ttkb.Style()
         menubar = tk.Menu(self.root)
         filemenu = tk.Menu(menubar, tearoff=0)
-        filemenu.add_command(label="New", command=self.new_file)
+         filemenu.add_command(label="New", command=self.new_file)
         filemenu.add_command(label="Open File", command=self.open_file)
+        self.recent_files.build_menu(filemenu, open_callback=self._open_recent_file)
         filemenu.add_command(label="Save File", command=self.save_file)
         filemenu.add_separator()
         filemenu.add_command(label="Export to HTML", command=self.export_to_html_dialog)
@@ -1185,10 +1191,16 @@ class MarkdownReader:
         dialogs.Messagebox.show_info(text, "AI Audit Log")
 
     def _on_notebook_tab_changed(self, _event=None):
-        """Refresh AI chat panel when switching tabs."""
-
+        """Refresh AI chat panel and word count bar when switching tabs."""
         self.ai_agent_status_var.set("")
         self._render_current_chat_history()
+        try:
+            idx = self.notebook.index(self.notebook.select())
+            bar = self._tab_bars.get(idx)
+            if bar is not None:
+                bar.refresh()
+        except Exception:
+            pass
 
     def _clear_current_chat_history(self):
         """Clear chat history for the current document."""
@@ -1689,6 +1701,11 @@ class MarkdownReader:
         text_area = ScrolledText(frame, wrap=tk.WORD, font=base_font, undo=True)
         text_area.pack(fill=tk.BOTH, expand=True)
 
+        bar = WordCountBar(frame)
+        bar.pack(side=tk.BOTTOM, fill=tk.X)
+        bar.attach(text_area)
+        self._tab_bars[len(self.editors)] = bar
+
         # Zoom bindings must be widget-level (not bind_all) so "break" can
         # suppress the Text class's built-in scroll and scan-drag handlers.
         text_area.bind("<MouseWheel>", self._on_ctrl_scroll)
@@ -1829,6 +1846,23 @@ class MarkdownReader:
             self.load_file(abs_path)
             self.start_watching(abs_path)
 
+    def _open_recent_file(self, filepath):
+        """
+        Opens a file from the Recent Files menu by path.
+
+        :param string filepath: The absolute path of the file to open.
+        """
+        abs_path = os.path.abspath(filepath)
+        if not os.path.isfile(abs_path):
+            return
+        if abs_path in self.file_paths:
+            index = self.file_paths.index(abs_path)
+            self.notebook.select(index)
+            return
+        self.new_file()
+        self.load_file(abs_path)
+        self.start_watching(abs_path)
+
     def load_file(self, path):
         """
         Loads the file from the given path and converts it to Markdown.
@@ -1883,6 +1917,7 @@ class MarkdownReader:
                 tab_text = os.path.basename(abs_path)
                 self.notebook.tab(idx, text=tab_text)
                 self.current_file_path = abs_path
+                self.recent_files.push(abs_path)
 
             if 0 <= idx < len(self.tab_document_ids):
                 old_doc_id = self.tab_document_ids[idx]
@@ -1996,15 +2031,22 @@ class MarkdownReader:
 
             # Update tab_widgets dictionary
             if hasattr(self, "tab_widgets"):
-                # Remove the closed tab
                 if idx in self.tab_widgets:
                     del self.tab_widgets[idx]
-                # Update indices for remaining tabs
                 new_widgets = {}
                 for key, value in self.tab_widgets.items():
                     new_key = key if key < idx else key - 1
                     new_widgets[new_key] = value
                 self.tab_widgets = new_widgets
+
+            # Re-key word count bars after tab removal
+            new_bars = {}
+            for key, value in self._tab_bars.items():
+                if key == idx:
+                    continue
+                new_bars[key if key < idx else key - 1] = value
+            self._tab_bars = new_bars
+
             self._render_current_chat_history()
 
     def start_watching(self, path):
