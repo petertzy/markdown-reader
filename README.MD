@@ -56,8 +56,16 @@ It's worth noting that WeasyPrint is not compatible with anaconda so make sure t
 **With [uv](https://docs.astral.sh/uv/) (recommended):**
 
 ```bash
-uv sync
+uv sync --python 3.14
 source .venv/bin/activate
+```
+
+If your machine already has Python 3.14 available, this keeps the environment aligned with this project's default `.python-version` and avoids Tk/Pillow compatibility issues seen on some macOS Python 3.11 setups.
+
+If you still have a legacy `venv/` folder from older setup docs, remove it so the project uses only `.venv/`:
+
+```bash
+rm -rf venv
 ```
 
 If you update dependencies in `pyproject.toml`, regenerate and commit the lockfile:
@@ -71,29 +79,47 @@ CI uses `uv sync --locked --extra dev`, so `uv.lock` must stay in sync with `pyp
 **Or with pip:**
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # macOS/Linux
-# .\venv\Scripts\activate  # Windows (cmd/powershell)
+python -m venv .venv
+source .venv/bin/activate  # macOS/Linux
+# .\.venv\Scripts\activate  # Windows (cmd/powershell)
 pip install .
 ```
 
 #### 3. Install pre-commit hooks (contributing)
 
-This project uses [pre-commit](https://pre-commit.com/) to automatically fix import sorting and code formatting on every commit. Run this once after cloning:
+This project uses [pre-commit](https://pre-commit.com/) to automatically fix import sorting and code formatting on every commit.
+
+`pre-commit` is a dev dependency. If you set up your environment with `uv sync --python 3.14` (runtime only), install dev tools first:
 
 ```bash
-pre-commit install
+uv sync --python 3.14 --extra dev
+```
+
+Then register the git hook (run this once after cloning):
+
+```bash
+uv run pre-commit install
 ```
 
 After this, `ruff --fix` and `ruff-format` will run automatically on staged files whenever you `git commit`.
+
+> **Note:** If you see `'pre-commit' not found. Did you forget to activate your virtualenv?` when committing, it means dev dependencies are missing. Run the two commands above to fix it.
 
 ---
 
 ## Running the Application
 
 ```bash
-python app.py
+uv run python app.py
 ```
+
+If you prefer running the virtual environment interpreter directly:
+
+```bash
+./.venv/bin/python app.py
+```
+
+> Tip: On some macOS setups, `python` is aliased to a global interpreter (for example `python -> python3.14`). In that case, `source .venv/bin/activate` may still not use `.venv` when you type `python`. Use `uv run python app.py` (recommended), `./.venv/bin/python app.py`, or run `unalias python` first.
 
 ### How to Use
 
@@ -228,8 +254,8 @@ This project previously used a `requirements.txt` file and standard `pip` comman
 ### The old approach (requirements.txt + pip)
 
 ```bash
-python -m venv venv
-source venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 

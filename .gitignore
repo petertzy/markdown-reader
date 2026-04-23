@@ -6,8 +6,7 @@
 build/
 dist/
 
-# Python virtual environments
-venv/
+# Python virtual environment (project standard)
 .venv/
 
 # Local environment secrets

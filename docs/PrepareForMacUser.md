@@ -6,7 +6,7 @@ brew install cairo pango gdk-pixbuf libffi
 Then reactivate your virtual environment:
 ```bash
 deactivate
-source venv/bin/activate
+source .venv/bin/activate
 ```
 #### If you are using Apple Silicon (M1/M2/M3/M4)
 
