@@ -53,9 +53,9 @@ from markdown_reader.logic import (
     translate_markdown_with_ai,
     update_preview,
 )
+from markdown_reader.recent_files import RecentFilesManager
 from markdown_reader.utils import get_preview_file
-from recent_files import RecentFilesManager
-from word_count_bar import WordCountBar
+from markdown_reader.word_count_bar import WordCountBar
 
 from .plugins.pdf_exporter import export_markdown_to_pdf
 

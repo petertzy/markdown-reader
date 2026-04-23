@@ -5,7 +5,7 @@ Persistent "Recent Files" submenu for the Markdown Reader application.
 
 Integration points (in app.py):
   1. Import:
-         from recent_files import RecentFilesManager
+                 from markdown_reader.recent_files import RecentFilesManager
 
   2. After creating the app window and settings infrastructure, instantiate:
          self.recent_files = RecentFilesManager(settings_path=self._settings_path())

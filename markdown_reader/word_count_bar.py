@@ -5,7 +5,7 @@ Per-tab status bar showing live word count, character count, and estimated
 reading time for the Markdown Reader application.
 
 Integration points (in app.py / the editor module):
-  1. Import: from word_count_bar import WordCountBar
+    1. Import: from markdown_reader.word_count_bar import WordCountBar
   2. When creating a new editor tab, call:
          bar = WordCountBar(tab_frame)
          bar.pack(side="bottom", fill="x")

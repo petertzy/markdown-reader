@@ -4,9 +4,9 @@ test_features.py
 Unit tests for word_count_bar.py and recent_files.py.
 
 Run with:
-    python -m pytest test_features.py -v
+    python -m pytest tests/test_features.py -v
 or:
-    python -m unittest test_features -v
+    python -m unittest tests.test_features -v
 """
 
 import json
@@ -18,10 +18,14 @@ import unittest
 # ---------------------------------------------------------------------------
 # Import the modules under test.
 # ---------------------------------------------------------------------------
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from recent_files import RecentFilesManager, _middle_ellipsis, _safe_write_json
-from word_count_bar import _count_words, _reading_time, _strip_markdown
+from markdown_reader.recent_files import (
+    RecentFilesManager,
+    _middle_ellipsis,
+    _safe_write_json,
+)
+from markdown_reader.word_count_bar import _count_words, _reading_time, _strip_markdown
 
 # ===========================================================================
 # Tests for word_count_bar helpers
