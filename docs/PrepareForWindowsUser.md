@@ -31,7 +31,7 @@ To do this permanently:
 Open a new Command Prompt or PowerShell window (so the updated PATH takes effect), then reactivate your virtual environment:
 
 ```cmd
-.\venv\Scripts\activate
+.\.venv\Scripts\activate
 ```
 
 #### 5. Verify the installation

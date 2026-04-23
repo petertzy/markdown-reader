@@ -20,13 +20,13 @@ import unittest
 # ---------------------------------------------------------------------------
 sys.path.insert(0, os.path.dirname(__file__))
 
-from word_count_bar import _strip_markdown, _count_words, _reading_time
 from recent_files import RecentFilesManager, _middle_ellipsis, _safe_write_json
-
+from word_count_bar import _count_words, _reading_time, _strip_markdown
 
 # ===========================================================================
 # Tests for word_count_bar helpers
 # ===========================================================================
+
 
 class TestStripMarkdown(unittest.TestCase):
     """_strip_markdown should remove syntax tokens without destroying words."""
@@ -151,6 +151,7 @@ class TestReadingTime(unittest.TestCase):
 # Tests for recent_files helpers
 # ===========================================================================
 
+
 class TestMiddleEllipsis(unittest.TestCase):
     """_middle_ellipsis should shorten long strings correctly."""
 
@@ -182,19 +183,20 @@ class TestSafeWriteJson(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_creates_file_with_correct_content(self):
         data = {"key": "value", "num": 42}
         _safe_write_json(self.target, data)
-        with open(self.target, "r") as f:
+        with open(self.target) as f:
             loaded = json.load(f)
         self.assertEqual(loaded, data)
 
     def test_overwrites_existing_file(self):
         _safe_write_json(self.target, {"old": True})
         _safe_write_json(self.target, {"new": True})
-        with open(self.target, "r") as f:
+        with open(self.target) as f:
             loaded = json.load(f)
         self.assertNotIn("old", loaded)
         self.assertTrue(loaded["new"])
@@ -221,6 +223,7 @@ class TestRecentFilesManager(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _manager(self) -> RecentFilesManager:
@@ -280,7 +283,7 @@ class TestRecentFilesManager(unittest.TestCase):
         _safe_write_json(self.settings, {"theme": "dark", "api_key": "abc123"})
         m = self._manager()
         m.push(self.files[0])
-        with open(self.settings, "r") as f:
+        with open(self.settings) as f:
             data = json.load(f)
         self.assertEqual(data.get("theme"), "dark")
         self.assertEqual(data.get("api_key"), "abc123")

@@ -19,6 +19,7 @@ Dependencies: tkinter (stdlib), ttkbootstrap (already in requirements.txt)
 
 import re
 import tkinter as tk
+
 import ttkbootstrap as ttk
 
 # Average silent reading speed (words per minute) used by many editors.
@@ -97,12 +98,12 @@ def _count_words(text: str) -> int:
 
     # CJK Unified Ideographs and common CJK extensions
     cjk_pattern = re.compile(
-        r"[\u4e00-\u9fff"        # CJK Unified Ideographs
-        r"\u3400-\u4dbf"         # CJK Extension A
-        r"\U00020000-\U0002a6df" # CJK Extension B
-        r"\u3040-\u309f"         # Hiragana
-        r"\u30a0-\u30ff"         # Katakana
-        r"\uac00-\ud7af]"        # Hangul Syllables
+        r"[\u4e00-\u9fff"  # CJK Unified Ideographs
+        r"\u3400-\u4dbf"  # CJK Extension A
+        r"\U00020000-\U0002a6df"  # CJK Extension B
+        r"\u3040-\u309f"  # Hiragana
+        r"\u30a0-\u30ff"  # Katakana
+        r"\uac00-\ud7af]"  # Hangul Syllables
     )
 
     # Replace each CJK character with a whitespace-delimited token so that
@@ -223,7 +224,9 @@ class WordCountBar(ttk.Frame):
         stripped = _strip_markdown(full_text)
         word_count = _count_words(stripped)
         char_with = len(full_text)
-        char_without = len(full_text.replace(" ", "").replace("\n", "").replace("\t", ""))
+        char_without = len(
+            full_text.replace(" ", "").replace("\n", "").replace("\t", "")
+        )
         reading = _reading_time(word_count)
 
         parts = [

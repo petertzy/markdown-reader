@@ -16,8 +16,6 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from markdown_reader.file_handler import drop_file
-from word_count_bar import WordCountBar
-from recent_files import RecentFilesManager
 from markdown_reader.logic import (
     AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES,
     AI_PROVIDER_PRIORITY,
@@ -56,6 +54,8 @@ from markdown_reader.logic import (
     update_preview,
 )
 from markdown_reader.utils import get_preview_file
+from recent_files import RecentFilesManager
+from word_count_bar import WordCountBar
 
 from .plugins.pdf_exporter import export_markdown_to_pdf
 
@@ -191,7 +191,9 @@ class MarkdownReader:
         # Ensure persisted AI settings are available before initializing UI state.
         load_persisted_ai_settings()
 
-        self.recent_files = RecentFilesManager(settings_path=str(APP_SETTINGS_FILE_PATH))
+        self.recent_files = RecentFilesManager(
+            settings_path=str(APP_SETTINGS_FILE_PATH)
+        )
         self._tab_bars: dict = {}
 
         self.dark_mode = False
@@ -439,7 +441,7 @@ class MarkdownReader:
         style = ttkb.Style()
         menubar = tk.Menu(self.root)
         filemenu = tk.Menu(menubar, tearoff=0)
-         filemenu.add_command(label="New", command=self.new_file)
+        filemenu.add_command(label="New", command=self.new_file)
         filemenu.add_command(label="Open File", command=self.open_file)
         self.recent_files.build_menu(filemenu, open_callback=self._open_recent_file)
         filemenu.add_command(label="Save File", command=self.save_file)

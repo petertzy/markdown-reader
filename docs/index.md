@@ -48,9 +48,9 @@ cd markdown-reader
 #### 2. Create a virtual environment (recommended)
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # macOS/Linux
-# .\venv\Scripts\activate  # Windows (cmd/powershell)
+python -m venv .venv
+source .venv/bin/activate  # macOS/Linux
+# .\.venv\Scripts\activate  # Windows (cmd/powershell)
 ```
 
 #### 3. Install dependencies
@@ -62,7 +62,8 @@ For Windows users, WeasyPrint requires additional system libraries. Complete the
 With [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
-uv sync
+uv sync --python 3.14
+source .venv/bin/activate
 ```
 
 If you update dependencies in `pyproject.toml`, regenerate and commit the lockfile:
@@ -94,7 +95,7 @@ After this, `ruff --fix` and `ruff-format` will run automatically on staged file
 ## Running the Application
 
 ```bash
-python app.py
+uv run python app.py
 ```
 
 ### How to Use
@@ -230,8 +231,8 @@ This project previously used a `requirements.txt` file and standard `pip` comman
 ### The old approach (requirements.txt + pip)
 
 ```bash
-python -m venv venv
-source venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 

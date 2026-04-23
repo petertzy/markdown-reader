@@ -3933,7 +3933,7 @@ def convert_pdf_to_markdown_docling(pdf_path):
                     _cleanup_docling_object(value, seen)
                 return
 
-            if isinstance(obj, (list, tuple, set)):
+            if isinstance(obj, list | tuple | set):
                 for value in obj:
                     _cleanup_docling_object(value, seen)
                 return
@@ -3949,7 +3949,7 @@ def convert_pdf_to_markdown_docling(pdf_path):
                     getattr(value, "__class__", None), "__module__", ""
                 )
                 if isinstance(
-                    value, (dict, list, tuple, set)
+                    value, dict | list | tuple | set
                 ) or value_module.startswith(("docling", "docling_core")):
                     _cleanup_docling_object(value, seen)
 
@@ -4041,7 +4041,7 @@ def convert_pdf_to_markdown_docling(pdf_path):
                 if value is None:
                     continue
 
-                if isinstance(value, (bytes, bytearray)):
+                if isinstance(value, bytes | bytearray):
                     _write_bytes_file(bytes(value), target_path)
                     return (
                         os.path.exists(target_path) and os.path.getsize(target_path) > 0
@@ -4512,7 +4512,7 @@ def convert_pdf_to_markdown_docling(pdf_path):
 
             # Remove malformed duplicated feature chunk produced by OCR.
             cleaned = re.sub(
-                r"(?mis)^##\s*Features\s+python\s+-m\s+venv\s+venv\s*\n.*?(?=^##\s+Editor Overview\b|^##\s+Preview Overview\b|^##\s+Installation\s*&\s*Usage\b)",
+                r"(?mis)^##\s*Features\s+python\s+-m\s+venv\s+\.venv\s*\n.*?(?=^##\s+Editor Overview\b|^##\s+Preview Overview\b|^##\s+Installation\s*&\s*Usage\b)",
                 "",
                 cleaned,
             )
@@ -4550,13 +4550,13 @@ def convert_pdf_to_markdown_docling(pdf_path):
                 cleaned,
             )
             cleaned = re.sub(
-                r"(?mi)^(\s*python\s+-m\s+venv\s+venv)\s+source\s+venv/bin/activate\s*(#.*)?$",
-                r"\1\nsource venv/bin/activate \2",
+                r"(?mi)^(\s*python\s+-m\s+venv\s+\.venv)\s+source\s+\.venv/bin/activate\s*(#.*)?$",
+                r"\1\nsource .venv/bin/activate \2",
                 cleaned,
             )
             cleaned = re.sub(
-                r"(?mi)^\s*source\s+venv/bin/activate\s*#\s*macos/linux\s*#\s*(\.\\venv\\scripts\\activate\s*#\s*windows\s*\(cmd/powershell\))\s*$",
-                r"source venv/bin/activate  # macOS/Linux\n# \1",
+                r"(?mi)^\s*source\s+\.venv/bin/activate\s*#\s*macos/linux\s*#\s*(\.\\\.venv\\scripts\\activate\s*#\s*windows\s*\(cmd/powershell\))\s*$",
+                r"source .venv/bin/activate  # macOS/Linux\n# \1",
                 cleaned,
             )
             cleaned = re.sub(

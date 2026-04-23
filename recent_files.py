@@ -34,11 +34,9 @@ from __future__ import annotations
 
 import json
 import os
-import pathlib
 import tempfile
 import tkinter as tk
-from typing import Callable
-
+from collections.abc import Callable
 
 # Maximum number of recent paths to remember.
 _MAX_ENTRIES = 10
@@ -60,7 +58,7 @@ def _middle_ellipsis(path: str, max_len: int = _MAX_DISPLAY_LEN) -> str:
     if len(path) <= max_len:
         return path
     half = (max_len - 1) // 2
-    return path[:half] + "…" + path[-(max_len - half - 1):]
+    return path[:half] + "…" + path[-(max_len - half - 1) :]
 
 
 def _safe_write_json(filepath: str, data: dict) -> None:
@@ -202,7 +200,7 @@ class RecentFilesManager:
             self._entries = []
             return
         try:
-            with open(self._settings_path, "r", encoding="utf-8") as f:
+            with open(self._settings_path, encoding="utf-8") as f:
                 data = json.load(f)
             raw: list = data.get(_SETTINGS_KEY, [])
             if not isinstance(raw, list):
@@ -228,7 +226,7 @@ class RecentFilesManager:
         data: dict = {}
         if os.path.isfile(self._settings_path):
             try:
-                with open(self._settings_path, "r", encoding="utf-8") as f:
+                with open(self._settings_path, encoding="utf-8") as f:
                     data = json.load(f)
             except (json.JSONDecodeError, OSError):
                 data = {}
