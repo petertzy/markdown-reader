@@ -9,6 +9,16 @@ dist/
 # Python virtual environment (project standard)
 .venv/
 
+# Frontend dependencies and build artifacts
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Tauri/Rust build artifacts
+frontend/src-tauri/target/
+frontend/src-tauri/gen/
+frontend/src-tauri/binaries/
+
 # Local environment secrets
 .env
 .env.local
@@ -26,7 +36,5 @@ document.html
 
 LICENCE.pdf
 .gitignore
-
-scripts
 
 site/
