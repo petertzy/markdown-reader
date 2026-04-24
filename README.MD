@@ -1,5 +1,7 @@
 # Markdown Reader
 
+<img width="1320" height="723" alt="Image" src="https://github.com/user-attachments/assets/01271258-68f1-4b34-ae08-c94daf80af43" />
+
 Modern Markdown editor with a Next.js UI, FastAPI backend, AI features, and desktop packaging via Tauri.
 
 Planning notes: [scripts/ProjectPlan.md](scripts/ProjectPlan.md)
