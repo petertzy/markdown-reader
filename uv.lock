@@ -1315,6 +1315,7 @@ docs = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "pre-commit" },
     { name = "pyinstaller" },
 ]
 
@@ -1349,7 +1350,10 @@ requires-dist = [
 provides-extras = ["docs", "dev"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pyinstaller", specifier = ">=6.20.0" }]
+dev = [
+    { name = "pre-commit", specifier = ">=4.5.1" },
+    { name = "pyinstaller", specifier = ">=6.20.0" },
+]
 
 [[package]]
 name = "markdown2"

@@ -55,6 +55,14 @@ uv sync
 cd frontend && npm install
 ```
 
+> **Note for contributors:** `pre-commit` is required for git hooks (code linting/formatting runs on every commit).
+> If you see `No module named pre_commit` when committing, run:
+>
+> ```bash
+> uv add --dev pre-commit
+> uv run pre-commit install
+> ```
+
 ### 2) Configure frontend env
 
 ```bash

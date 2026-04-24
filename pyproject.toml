@@ -82,6 +82,7 @@ indent-style = "space"
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.5.1",
     "pyinstaller>=6.20.0",
 ]
 # ty is Astral's type checker (https://github.com/astral-sh/ty).
