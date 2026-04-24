@@ -16,7 +16,8 @@
 // Detect Tauri environment without importing the full @tauri-apps/api eagerly
 // (the module is only available inside Tauri's webview).
 const isTauri =
-  typeof window !== "undefined" && "__TAURI__" in window;
+  typeof window !== "undefined" &&
+  ("__TAURI__" in window || "__TAURI_INTERNALS__" in window);
 
 let _resolvedBaseUrl: string | null = null;
 

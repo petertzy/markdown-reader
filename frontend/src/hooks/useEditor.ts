@@ -15,12 +15,19 @@ export type Tab = {
   id: string;
   label: string;       // Display name (filename)
   filePath: string | null;
+  browserHandle?: FileSystemFileHandle | null;
   content: string;
   dirty: boolean;
 };
 
-function makeTab(id: string, label = "Untitled", content = "", filePath: string | null = null): Tab {
-  return { id, label, content, filePath, dirty: false };
+function makeTab(
+  id: string,
+  label = "Untitled",
+  content = "",
+  filePath: string | null = null,
+  browserHandle: FileSystemFileHandle | null = null
+): Tab {
+  return { id, label, content, filePath, browserHandle, dirty: false };
 }
 
 let _tabCounter = 0;
@@ -67,10 +74,11 @@ export function useEditor() {
   const handleContentChange = useCallback(
     (value: string | undefined) => {
       const v = value ?? "";
+      if (v === activeTab.content) return;
       updateTab(activeTabId, { content: v, dirty: true });
       refreshPreview(v);
     },
-    [activeTabId, updateTab, refreshPreview]
+    [activeTab, activeTabId, updateTab, refreshPreview]
   );
 
   // ── file ops ───────────────────────────────────────────────────────────────
@@ -87,7 +95,7 @@ export function useEditor() {
         const { content } = await Files.read(filePath);
         const label = filePath.split(/[/\\]/).pop() ?? filePath;
         const id = nextTabId();
-        const newTab = makeTab(id, label, content, filePath);
+        const newTab = makeTab(id, label, content, filePath, null);
         setTabs((prev) => [...prev, newTab]);
         setActiveTabId(id);
         refreshPreview(content, filePath);
@@ -103,10 +111,15 @@ export function useEditor() {
   );
 
   const openTextAsTab = useCallback(
-    (label: string, content: string, filePath: string | null = null) => {
+    (
+      label: string,
+      content: string,
+      filePath: string | null = null,
+      browserHandle: FileSystemFileHandle | null = null
+    ) => {
       const id = nextTabId();
       const tabLabel = label.trim() || "Untitled";
-      const newTab = makeTab(id, tabLabel, content, filePath);
+      const newTab = makeTab(id, tabLabel, content, filePath, browserHandle);
       setTabs((prev) => [...prev, newTab]);
       setActiveTabId(id);
       refreshPreview(content, filePath ?? undefined);
@@ -116,10 +129,38 @@ export function useEditor() {
 
   const saveFile = useCallback(
     async (filePath?: string) => {
-      const path = filePath ?? activeTab.filePath;
+      let path = filePath ?? activeTab.filePath;
+
+      // For tabs opened without absolute path, try to resolve an existing path
+      // without opening any dialog.
+      if (!path) {
+        const byName = recentFiles.filter((p) => (p.split(/[/\\]/).pop() ?? "") === activeTab.label);
+        if (byName.length === 1) {
+          path = byName[0];
+        } else {
+          const candidates = [activeTab.label, `./${activeTab.label}`];
+          for (const candidate of candidates) {
+            try {
+              await Files.read(candidate);
+              path = candidate;
+              break;
+            } catch {
+              // Keep trying other candidates.
+            }
+          }
+        }
+      }
+
       if (path) {
         await Files.write(path, activeTab.content);
-        updateTab(activeTabId, { dirty: false, filePath: path, label: path.split(/[/\\]/).pop() ?? path });
+        updateTab(activeTabId, {
+          dirty: false,
+          filePath: path,
+          label: path.split(/[/\\]/).pop() ?? path,
+        });
+        Files.addRecent(path)
+          .then(({ entries }) => setRecentFiles(entries))
+          .catch(console.error);
         return;
       }
 
@@ -127,72 +168,36 @@ export function useEditor() {
       const rawLabel = activeTab.label.trim() || "Untitled";
       const suggestedName = /\.[A-Za-z0-9]+$/.test(rawLabel) ? rawLabel : `${rawLabel}.md`;
 
-      // In Tauri desktop mode, use native save dialog and persist via backend API.
-      const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
-      if (isTauri) {
-        try {
-          const { save } = await import("@tauri-apps/plugin-dialog");
-          const target = await save({
-            defaultPath: suggestedName,
-            filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
-          });
-
-          if (!target) return;
-
-          const resolvedPath = Array.isArray(target) ? target[0] : target;
-          await Files.write(resolvedPath, activeTab.content);
-          updateTab(activeTabId, {
-            dirty: false,
-            filePath: resolvedPath,
-            label: resolvedPath.split(/[/\\]/).pop() ?? resolvedPath,
-          });
-          Files.addRecent(resolvedPath)
-            .then(({ entries }) => setRecentFiles(entries))
-            .catch(console.error);
-        } catch {
-          // No dialog capability in runtime: silently no-op.
-        }
-        return;
-      }
-
-      // In browser mode, use the native file save picker when available.
-      const maybePicker = (window as Window & {
-        showSaveFilePicker?: (options?: {
-          suggestedName?: string;
-          types?: Array<{ description?: string; accept: Record<string, string[]> }>;
-        }) => Promise<{
-          createWritable: () => Promise<{
-            write: (data: string) => Promise<void>;
-            close: () => Promise<void>;
-          }>;
-          name?: string;
-        }>;
-      }).showSaveFilePicker;
-
-      if (!maybePicker) return;
-
+      // Try Tauri native save dialog first (desktop mode).
       try {
-        const handle = await maybePicker({
-          suggestedName,
-          types: [
-            {
-              description: "Markdown files",
-              accept: {
-                "text/markdown": [".md", ".markdown"],
-                "text/plain": [".txt"],
-              },
-            },
-          ],
+        const { save } = await import("@tauri-apps/plugin-dialog");
+        const target = await save({
+          defaultPath: suggestedName,
+          filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
         });
-        const writable = await handle.createWritable();
-        await writable.write(activeTab.content);
-        await writable.close();
-        updateTab(activeTabId, { dirty: false, label: handle.name || suggestedName });
+
+        if (!target) return;
+
+        const resolvedPath = Array.isArray(target) ? target[0] : target;
+        await Files.write(resolvedPath, activeTab.content);
+        updateTab(activeTabId, {
+          dirty: false,
+          filePath: resolvedPath,
+          browserHandle: null,
+          label: resolvedPath.split(/[/\\]/).pop() ?? resolvedPath,
+        });
+        Files.addRecent(resolvedPath)
+          .then(({ entries }) => setRecentFiles(entries))
+          .catch(console.error);
+        return;
       } catch {
-        // No picker capability (or picker cancelled): silently no-op.
+        // Not running with Tauri dialog capability.
       }
+
+      // Outside Tauri dialog capability, do nothing silently.
+      return;
     },
-    [activeTab, activeTabId, updateTab]
+    [activeTab, activeTabId, recentFiles, updateTab]
   );
 
   const newTab = useCallback(() => {

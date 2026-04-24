@@ -56,10 +56,28 @@ export default function HomePage() {
   // the native dialog directly without the Tauri API.  In Tauri mode this
   // would be replaced by window.__TAURI__.dialog.open().
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isLikelyTauriRuntime =
+    typeof window !== "undefined" &&
+    ("__TAURI_INTERNALS__" in window || "__TAURI__" in window || window.navigator.userAgent.includes("Tauri"));
 
-  const handleOpenFile = () => {
-    fileInputRef.current?.click();
-  };
+  const handleOpenFile = useCallback(async () => {
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
+      });
+      if (!selected) return;
+      const filePath = Array.isArray(selected) ? selected[0] : selected;
+      await editor.openFile(filePath);
+    } catch {
+      // In desktop runtime, avoid browser picker fallback to prevent permission dialogs.
+      if (isLikelyTauriRuntime) return;
+
+      // Browser mode fallback.
+      fileInputRef.current?.click();
+    }
+  }, [editor, isLikelyTauriRuntime]);
 
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -126,7 +144,7 @@ export default function HomePage() {
       {/* Toolbar */}
       <div className="relative">
         <Toolbar
-          onOpenFile={handleOpenFile}
+          onOpenFile={() => { void handleOpenFile(); }}
           onSaveFile={() => { void handleSaveFile(); }}
           onExport={handleExport}
           onToggleDark={() => editor.setDarkMode((d) => !d)}
