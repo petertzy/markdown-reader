@@ -117,9 +117,80 @@ export function useEditor() {
   const saveFile = useCallback(
     async (filePath?: string) => {
       const path = filePath ?? activeTab.filePath;
-      if (!path) return;
-      await Files.write(path, activeTab.content);
-      updateTab(activeTabId, { dirty: false, filePath: path, label: path.split(/[/\\]/).pop() ?? path });
+      if (path) {
+        await Files.write(path, activeTab.content);
+        updateTab(activeTabId, { dirty: false, filePath: path, label: path.split(/[/\\]/).pop() ?? path });
+        return;
+      }
+
+      // Save As flow: ask user for a destination when the tab has no path yet.
+      const rawLabel = activeTab.label.trim() || "Untitled";
+      const suggestedName = /\.[A-Za-z0-9]+$/.test(rawLabel) ? rawLabel : `${rawLabel}.md`;
+
+      // In Tauri desktop mode, use native save dialog and persist via backend API.
+      const isTauri = typeof window !== "undefined" && "__TAURI__" in window;
+      if (isTauri) {
+        try {
+          const { save } = await import("@tauri-apps/plugin-dialog");
+          const target = await save({
+            defaultPath: suggestedName,
+            filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
+          });
+
+          if (!target) return;
+
+          const resolvedPath = Array.isArray(target) ? target[0] : target;
+          await Files.write(resolvedPath, activeTab.content);
+          updateTab(activeTabId, {
+            dirty: false,
+            filePath: resolvedPath,
+            label: resolvedPath.split(/[/\\]/).pop() ?? resolvedPath,
+          });
+          Files.addRecent(resolvedPath)
+            .then(({ entries }) => setRecentFiles(entries))
+            .catch(console.error);
+        } catch {
+          // No dialog capability in runtime: silently no-op.
+        }
+        return;
+      }
+
+      // In browser mode, use the native file save picker when available.
+      const maybePicker = (window as Window & {
+        showSaveFilePicker?: (options?: {
+          suggestedName?: string;
+          types?: Array<{ description?: string; accept: Record<string, string[]> }>;
+        }) => Promise<{
+          createWritable: () => Promise<{
+            write: (data: string) => Promise<void>;
+            close: () => Promise<void>;
+          }>;
+          name?: string;
+        }>;
+      }).showSaveFilePicker;
+
+      if (!maybePicker) return;
+
+      try {
+        const handle = await maybePicker({
+          suggestedName,
+          types: [
+            {
+              description: "Markdown files",
+              accept: {
+                "text/markdown": [".md", ".markdown"],
+                "text/plain": [".txt"],
+              },
+            },
+          ],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(activeTab.content);
+        await writable.close();
+        updateTab(activeTabId, { dirty: false, label: handle.name || suggestedName });
+      } catch {
+        // No picker capability (or picker cancelled): silently no-op.
+      }
     },
     [activeTab, activeTabId, updateTab]
   );

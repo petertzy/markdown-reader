@@ -23,6 +23,14 @@ export default function HomePage() {
   const [showAIPanel, setShowAIPanel] = useState(false);
   const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
 
+  const handleSaveFile = useCallback(async () => {
+    try {
+      await editor.saveFile();
+    } catch (err) {
+      alert(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [editor]);
+
   // Load recent files on mount and initialise preview
   useEffect(() => {
     editor.loadRecentFiles();
@@ -37,12 +45,12 @@ export default function HomePage() {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
-        editor.saveFile();
+        void handleSaveFile();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [editor]);
+  }, [handleSaveFile]);
 
   // "Open file" — uses a hidden file-input because Tauri/browser can't call
   // the native dialog directly without the Tauri API.  In Tauri mode this
@@ -119,7 +127,7 @@ export default function HomePage() {
       <div className="relative">
         <Toolbar
           onOpenFile={handleOpenFile}
-          onSaveFile={() => editor.saveFile()}
+          onSaveFile={() => { void handleSaveFile(); }}
           onExport={handleExport}
           onToggleDark={() => editor.setDarkMode((d) => !d)}
           onToggleAIPanel={() => setShowAIPanel((v) => !v)}

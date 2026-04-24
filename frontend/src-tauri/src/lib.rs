@@ -18,6 +18,7 @@ pub fn run() {
     let port_state = Arc::new(Mutex::new(None::<u16>));
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(BackendPort(port_state))
         .invoke_handler(tauri::generate_handler![get_backend_port])
