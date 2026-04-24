@@ -14,9 +14,12 @@ Planning notes: [scripts/ProjectPlan.md](scripts/ProjectPlan.md)
 
 ### Development mode
 
-- Frontend: Next.js on `http://localhost:3000`
-- Backend: FastAPI on `http://127.0.0.1:8000`
-- Recommended start command: `./scripts/dev.sh`
+- Launches a real Tauri desktop window instead of a browser tab
+- Frontend still runs from the Next.js dev server on `http://localhost:3000`
+- Backend runs from the FastAPI dev server on `http://127.0.0.1:8000`
+- Recommended start command: `./scripts/dev-tauri.sh`
+- In this mode, the Tauri shell talks to the fixed dev backend on port `8000`
+- The packaged Python sidecar is not used in debug mode
 
 ### Desktop (packaged) mode
 
@@ -36,7 +39,7 @@ MarkdownReader/
 ├── backend/                    # FastAPI app and routers
 ├── frontend/                   # Next.js + Tauri desktop shell
 ├── markdown_reader/            # Existing Python business logic (preserved)
-├── scripts/dev.sh              # One-command dev startup
+├── scripts/dev-tauri.sh        # Recommended native dev startup
 ├── tests/                      # Unit/integration tests
 ├── README_OLD.MD               # Legacy tkinter-era documentation
 └── pyproject.toml
@@ -76,17 +79,17 @@ cp frontend/.env.local.example frontend/.env.local
 ### 3) Start services
 
 ```bash
-./scripts/dev.sh
+./scripts/dev-tauri.sh
 ```
 
 Open:
 
-- Frontend: http://localhost:3000
 - Backend docs: http://127.0.0.1:8000/docs
+- Tauri native app window: launched automatically by `./scripts/dev-tauri.sh`
 
 ### 4) Stop services
 
-Press `Ctrl+C` in the terminal running `./scripts/dev.sh`.
+Press `Ctrl+C` in the terminal running `./scripts/dev-tauri.sh`.
 
 ---
 

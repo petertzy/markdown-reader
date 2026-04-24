@@ -24,14 +24,17 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![get_backend_port])
         .setup(|app| {
             if cfg!(debug_assertions) {
+                *app.state::<BackendPort>().0.lock().unwrap() = Some(8000);
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
                         .level(log::LevelFilter::Info)
                         .build(),
-                )?
+                )?;
+
+                return Ok(());
             }
 
-            // Spawn sidecar and capture its stdout to learn which port it picked.
+            // In packaged mode, spawn sidecar and capture its stdout to learn which port it picked.
             let sidecar = app
                 .shell()
                 .sidecar("markdown-reader-backend")

@@ -73,12 +73,22 @@ export function useEditor() {
   // ── content change ─────────────────────────────────────────────────────────
   const handleContentChange = useCallback(
     (value: string | undefined) => {
-      const v = value ?? "";
-      if (v === activeTab.content) return;
-      updateTab(activeTabId, { content: v, dirty: true });
-      refreshPreview(v);
+      if (typeof value !== "string") return;
+      const v = value;
+      let changed = false;
+
+      setTabs((prev) =>
+        prev.map((t) => {
+          if (t.id !== activeTabId) return t;
+          if (t.content === v) return t;
+          changed = true;
+          return { ...t, content: v, dirty: true };
+        })
+      );
+
+      if (changed) refreshPreview(v);
     },
-    [activeTab, activeTabId, updateTab, refreshPreview]
+    [activeTabId, refreshPreview]
   );
 
   // ── file ops ───────────────────────────────────────────────────────────────
@@ -129,27 +139,7 @@ export function useEditor() {
 
   const saveFile = useCallback(
     async (filePath?: string) => {
-      let path = filePath ?? activeTab.filePath;
-
-      // For tabs opened without absolute path, try to resolve an existing path
-      // without opening any dialog.
-      if (!path) {
-        const byName = recentFiles.filter((p) => (p.split(/[/\\]/).pop() ?? "") === activeTab.label);
-        if (byName.length === 1) {
-          path = byName[0];
-        } else {
-          const candidates = [activeTab.label, `./${activeTab.label}`];
-          for (const candidate of candidates) {
-            try {
-              await Files.read(candidate);
-              path = candidate;
-              break;
-            } catch {
-              // Keep trying other candidates.
-            }
-          }
-        }
-      }
+      const path = filePath ?? activeTab.filePath;
 
       if (path) {
         await Files.write(path, activeTab.content);
@@ -164,40 +154,10 @@ export function useEditor() {
         return;
       }
 
-      // Save As flow: ask user for a destination when the tab has no path yet.
-      const rawLabel = activeTab.label.trim() || "Untitled";
-      const suggestedName = /\.[A-Za-z0-9]+$/.test(rawLabel) ? rawLabel : `${rawLabel}.md`;
-
-      // Try Tauri native save dialog first (desktop mode).
-      try {
-        const { save } = await import("@tauri-apps/plugin-dialog");
-        const target = await save({
-          defaultPath: suggestedName,
-          filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
-        });
-
-        if (!target) return;
-
-        const resolvedPath = Array.isArray(target) ? target[0] : target;
-        await Files.write(resolvedPath, activeTab.content);
-        updateTab(activeTabId, {
-          dirty: false,
-          filePath: resolvedPath,
-          browserHandle: null,
-          label: resolvedPath.split(/[/\\]/).pop() ?? resolvedPath,
-        });
-        Files.addRecent(resolvedPath)
-          .then(({ entries }) => setRecentFiles(entries))
-          .catch(console.error);
-        return;
-      } catch {
-        // Not running with Tauri dialog capability.
-      }
-
-      // Outside Tauri dialog capability, do nothing silently.
+      // No explicit path available: do nothing silently.
       return;
     },
-    [activeTab, activeTabId, recentFiles, updateTab]
+    [activeTab, activeTabId, updateTab]
   );
 
   const newTab = useCallback(() => {
