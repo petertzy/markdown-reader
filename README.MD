@@ -2,6 +2,8 @@
 
 <img width="1320" height="723" alt="Image" src="https://github.com/user-attachments/assets/01271258-68f1-4b34-ae08-c94daf80af43" />
 
+---
+
 Modern Markdown editor with a Next.js UI, FastAPI backend, AI features, and desktop packaging via Tauri.
 
 Planning notes: [scripts/ProjectPlan.md](scripts/ProjectPlan.md)
@@ -134,6 +136,10 @@ npx tauri build --bundles app
 Output path (macOS):
 
 - `frontend/src-tauri/target/release/bundle/macos/Markdown Reader.app`
+
+---
+
+<img width="264" height="139" alt="Image" src="https://github.com/user-attachments/assets/18091038-758b-40cd-ad1f-08700a4e8b92" />
 
 ---
 
