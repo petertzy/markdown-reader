@@ -16,14 +16,11 @@ import EditorPane from "@/components/EditorPane";
 import PreviewPane from "@/components/PreviewPane";
 import AIPanel from "@/components/AIPanel";
 import StatusBar from "@/components/StatusBar";
-import RecentFilesMenu from "@/components/RecentFilesMenu";
-import { Files } from "@/lib/api";
 
 export default function HomePage() {
   const editor = useEditor();
-  const [showPreview, setShowPreview] = useState(true);
+  const [showPreview] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(false);
-  const [showRecent, setShowRecent] = useState(false);
   const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
 
   // Load recent files on mount and initialise preview
@@ -61,13 +58,8 @@ export default function HomePage() {
     if (!file) return;
     // For browser mode read directly; for Tauri we'd have a native path
     const text = await file.text();
-    const name = file.name;
-    // In pure browser we don't have an absolute path — use the filename as label
-    const id = `tab-upload-${Date.now()}`;
-    editor.newTab();
-    setTimeout(() => {
-      editor.handleContentChange(text);
-    }, 0);
+    // In pure browser we don't have an absolute path — use filename as tab label.
+    editor.openTextAsTab(file.name, text, null);
     e.target.value = "";
   };
 

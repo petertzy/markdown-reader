@@ -102,6 +102,18 @@ export function useEditor() {
     [tabs, refreshPreview]
   );
 
+  const openTextAsTab = useCallback(
+    (label: string, content: string, filePath: string | null = null) => {
+      const id = nextTabId();
+      const tabLabel = label.trim() || "Untitled";
+      const newTab = makeTab(id, tabLabel, content, filePath);
+      setTabs((prev) => [...prev, newTab]);
+      setActiveTabId(id);
+      refreshPreview(content, filePath ?? undefined);
+    },
+    [refreshPreview]
+  );
+
   const saveFile = useCallback(
     async (filePath?: string) => {
       const path = filePath ?? activeTab.filePath;
@@ -174,6 +186,7 @@ export function useEditor() {
     setFontSize,
     handleContentChange,
     openFile,
+    openTextAsTab,
     saveFile,
     newTab,
     closeTab,
