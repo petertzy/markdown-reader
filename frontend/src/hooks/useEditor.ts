@@ -154,7 +154,35 @@ export function useEditor() {
         return;
       }
 
-      // No explicit path available: do nothing silently.
+      const rawLabel = activeTab.label.trim() || "Untitled";
+      const suggestedName = /\.[A-Za-z0-9]+$/.test(rawLabel) ? rawLabel : `${rawLabel}.md`;
+
+      try {
+        const { save } = await import("@tauri-apps/plugin-dialog");
+        const selected = await save({
+          defaultPath: suggestedName,
+          filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
+        });
+
+        if (!selected) return;
+
+        const resolvedPath = Array.isArray(selected) ? selected[0] : selected;
+        await Files.write(resolvedPath, activeTab.content);
+        updateTab(activeTabId, {
+          dirty: false,
+          filePath: resolvedPath,
+          browserHandle: null,
+          label: resolvedPath.split(/[/\\]/).pop() ?? resolvedPath,
+        });
+        Files.addRecent(resolvedPath)
+          .then(({ entries }) => setRecentFiles(entries))
+          .catch(console.error);
+        return;
+      } catch {
+        // Outside Tauri native runtime, keep silent.
+      }
+
+      // No explicit path available and no native save dialog capability.
       return;
     },
     [activeTab, activeTabId, updateTab]
