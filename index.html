@@ -1,0 +1,1393 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+      
+        <link rel="next" href="MathRenderingTestFile/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Markdown Reader Docs</title>
+      
+    
+    
+      <link rel="stylesheet" href="assets/stylesheets/main.484c7ddc.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    <body dir="ltr">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#markdown-reader" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="." title="Markdown Reader Docs" class="md-header__button md-logo" aria-label="Markdown Reader Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Markdown Reader Docs
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Home
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="." title="Markdown Reader Docs" class="md-nav__button md-logo" aria-label="Markdown Reader Docs" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Markdown Reader Docs
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="." class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#editor-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Editor Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#preview-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Preview Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation &amp; Usage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installation &amp; Usage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-clone-the-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Clone the repository
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-create-a-virtual-environment-recommended" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Create a virtual environment (recommended)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-install-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Install dependencies
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-install-pre-commit-hooks-recommended" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Install pre-commit hooks (recommended)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-the-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running the Application
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running the Application">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-to-use" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to Use
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#packaging-as-a-macos-app-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Packaging as a macOS App (Optional)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Packaging as a macOS App (Optional)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#build-the-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build the App
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exit-the-virtual-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exit the Virtual Environment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#code-formatting-ruff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Code Formatting (Ruff)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Code Formatting (Ruff)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#check-formatting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Check formatting
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fix-formatting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fix formatting
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running Tests
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running Tests">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#test-coverage-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test coverage overview
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development-workflow-uv-vs-pip-requirementstxt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Development Workflow: uv vs. pip / requirements.txt
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Development Workflow: uv vs. pip / requirements.txt">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-old-approach-requirementstxt-pip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The old approach (requirements.txt + pip)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-new-approach-pyprojecttoml-uv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The new approach (pyproject.toml + uv)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-to-update-the-lockfile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to update the lockfile
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#submit-changes-to-git" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Submit Changes to Git
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#technical-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Technical Details
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#system-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System Requirements:
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ai-powered-translation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AI-powered translation:
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#license" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        License
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#contributing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Contributing
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="MathRenderingTestFile/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Math Rendering Test File
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="PrepareForMacUser/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prepare For Mac User
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="PrepareForWindowsUser/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Prepare For Windows User
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#editor-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Editor Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#preview-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Preview Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation-usage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation &amp; Usage
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installation &amp; Usage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-clone-the-repository" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Clone the repository
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-create-a-virtual-environment-recommended" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Create a virtual environment (recommended)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-install-dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Install dependencies
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-install-pre-commit-hooks-recommended" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Install pre-commit hooks (recommended)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-the-application" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running the Application
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running the Application">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-to-use" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to Use
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#packaging-as-a-macos-app-optional" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Packaging as a macOS App (Optional)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Packaging as a macOS App (Optional)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#build-the-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build the App
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exit-the-virtual-environment" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Exit the Virtual Environment
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#code-formatting-ruff" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Code Formatting (Ruff)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Code Formatting (Ruff)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#check-formatting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Check formatting
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#fix-formatting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fix formatting
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running Tests
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running Tests">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#test-coverage-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Test coverage overview
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#development-workflow-uv-vs-pip-requirementstxt" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Development Workflow: uv vs. pip / requirements.txt
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Development Workflow: uv vs. pip / requirements.txt">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-old-approach-requirementstxt-pip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The old approach (requirements.txt + pip)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-new-approach-pyprojecttoml-uv" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The new approach (pyproject.toml + uv)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#when-to-update-the-lockfile" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When to update the lockfile
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#submit-changes-to-git" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Submit Changes to Git
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#technical-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Technical Details
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#system-requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System Requirements:
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ai-powered-translation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AI-powered translation:
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#license" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        License
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#contributing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Contributing
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="markdown-reader">Markdown Reader</h1>
+<p>Markdown Reader is a clean and intuitive Markdown editor/reader with real-time preview support and dark mode toggle. It is compatible with macOS and Windows desktop environments and built with pure Python and Tkinter.</p>
+<hr />
+<h2 id="features">Features</h2>
+<ul>
+<li>Tabbed Markdown editing with real-time HTML preview.</li>
+<li><strong>AI-Powered Translation</strong>: Translate Markdown documents while preserving formatting (supports OpenAI Compatible, OpenRouter, OpenAI, and Anthropic).</li>
+<li><strong>Built-in AI Agent Chat</strong>: A dockable in-app chat panel can read current document context and suggest/apply edits.</li>
+<li><strong>AI Task Automation Templates</strong>: Run reusable templates for formatting, TOC generation, summaries, and code-block cleanup.</li>
+<li><strong>Approval/Reject Workflow</strong>: Every AI-proposed change can be explicitly applied or rejected from the panel.</li>
+<li><strong>AI Audit Trail</strong>: Proposed/applied/rejected/undone AI actions are logged for auditing and rollback tracking.</li>
+<li><strong>API Key Management</strong>: Missing or rejected provider keys trigger an in-app dialog, and keys are saved in the OS credential store.</li>
+<li><strong>Progressive Translation Rendering</strong>: Long translations are split into smaller chunks, inserted into the editor as they complete, auto-scrolled into view, and tracked with a progress bar.</li>
+<li>Dark mode toggle.</li>
+<li><strong>Advanced Table Editor</strong>: Interactive table insertion with customizable rows and columns.</li>
+<li><strong>Dual PDF Conversion</strong>: Fast PyMuPDF mode or advanced <a href="https://github.com/docling-project/docling">Docling</a> mode for complex documents.</li>
+<li>Built with pure Python, Tkinter, and ttkbootstrap — cross-platform.</li>
+<li>Can be bundled as a macOS app using <code>py2app</code>.</li>
+<li>Opens preview automatically and avoids multiple browser tabs for a smoother experience.</li>
+<li>Multi-provider AI failover: Automatically switches to fallback providers on rate-limit/auth/server errors.</li>
+</ul>
+<hr />
+<h2 id="editor-overview">Editor Overview</h2>
+<p><img width="1428" height="737" alt="Image" src="https://github.com/user-attachments/assets/4f584f5b-dd1a-4d74-9a99-ca2cd90a9994" /></p>
+<hr />
+<h2 id="preview-overview">Preview Overview</h2>
+<p><img width="1417" height="474" alt="Image" src="https://github.com/user-attachments/assets/9a0006ed-d269-428b-a41f-e512cc7ba9c9" /></p>
+<hr />
+<h2 id="installation-usage">Installation &amp; Usage</h2>
+<h4 id="1-clone-the-repository">1. Clone the repository</h4>
+<pre><code class="language-bash">git clone https://github.com/petertzy/markdown-reader.git
+cd markdown-reader
+</code></pre>
+<h4 id="2-create-a-virtual-environment-recommended">2. Create a virtual environment (recommended)</h4>
+<pre><code class="language-bash">python -m venv .venv
+source .venv/bin/activate  # macOS/Linux
+# .\.venv\Scripts\activate  # Windows (cmd/powershell)
+</code></pre>
+<h4 id="3-install-dependencies">3. Install dependencies</h4>
+<p>For Mac users, you should first complete the preparation steps described in the <a href="./doc/PrepareForMacUser.md">PrepareForMacUser</a> file.</p>
+<p>For Windows users, WeasyPrint requires additional system libraries. Complete the preparation steps described in the <a href="./doc/PrepareForWindowsUser.md">PrepareForWindowsUser</a> file before installing dependencies.</p>
+<p>With <a href="https://docs.astral.sh/uv/">uv</a> (recommended):</p>
+<pre><code class="language-bash">uv sync --python 3.14
+source .venv/bin/activate
+</code></pre>
+<p>If you update dependencies in <code>pyproject.toml</code>, regenerate and commit the lockfile:</p>
+<pre><code class="language-bash">uv lock
+</code></pre>
+<p>CI uses <code>uv sync --locked --extra dev</code>, so <code>uv.lock</code> must stay in sync with <code>pyproject.toml</code>.</p>
+<p>Or with pip:</p>
+<pre><code class="language-bash">pip install .
+</code></pre>
+<h4 id="4-install-pre-commit-hooks-recommended">4. Install pre-commit hooks (recommended)</h4>
+<p>This project uses <a href="https://pre-commit.com/">pre-commit</a> to automatically fix import sorting and code formatting on every commit. Run this once after cloning:</p>
+<pre><code class="language-bash">pre-commit install
+</code></pre>
+<p>After this, <code>ruff --fix</code> and <code>ruff-format</code> will run automatically on staged files whenever you <code>git commit</code>.</p>
+<hr />
+<h2 id="running-the-application">Running the Application</h2>
+<pre><code class="language-bash">uv run python app.py
+</code></pre>
+<h3 id="how-to-use">How to Use</h3>
+<ul>
+<li><strong>Open File</strong>: Choose <code>.md</code>, <code>.markdown</code>, <code>.html</code>, <code>.htm</code>, or <code>.pdf</code> from the "File → Open File" menu.</li>
+<li><strong>Open with Double-Click</strong>: Double-clicking a <code>.md</code> file opens it directly with the app and displays the document with a real-time preview.</li>
+<li><strong>Editor-Only Mode</strong>: To open a <code>.md</code> file in the editor without automatically generating a web preview, configure the double-click behavior via "Settings → Open Behavior → Editor Only".</li>
+<li><strong>Dark Mode</strong>: Toggle via "View → Toggle Dark Mode".</li>
+<li><strong>Preview</strong>: Automatically opens in your web browser, only one tab is opened per session.</li>
+<li><strong>AI Translation</strong>: </li>
+<li>Translate selected text: "Edit → Translate with AI → Translate Selected Text with AI"</li>
+<li>Translate full document: "Edit → Translate with AI → Translate Full Document with AI"</li>
+<li>Select source and target languages from dropdown menus</li>
+<li>Configure provider/model/API keys: "Settings → AI Provider &amp; API Keys..."</li>
+<li>If a key is missing or rejected, the app prompts for the correct provider key and stores it in the OS credential store</li>
+<li>Large translations appear progressively in the editor with automatic scrolling and a visible progress bar</li>
+<li><strong>AI Agent Chat Panel</strong>:</li>
+<li>Show/hide: "View → Show AI Agent Panel"</li>
+<li>You can type natural-language requests directly in the chat box; no special command syntax is required</li>
+<li>The AI agent can automatically prepare edit suggestions for tasks such as summaries, formatting, TOC generation, and code-block fixes</li>
+<li>Typical chat requests:<ul>
+<li><code>generate summary</code></li>
+<li><code>generate table of contents</code></li>
+<li><code>format this section</code></li>
+<li><code>format code blocks and correct syntax</code></li>
+</ul>
+</li>
+<li>Supports commands like "format this section", "generate summary", and "generate table of contents"</li>
+<li>Built-in automation templates can trigger repetitive editor tasks quickly</li>
+<li>Can format and fix Markdown code blocks (including unclosed fences)</li>
+<li>Context scope toggle: "Full document" or "Selection only"</li>
+<li>Uses current document and/or selected text as context based on the selected scope</li>
+<li>Workflow: send a natural-language request -&gt; review AI preview -&gt; click "Apply Suggestion" to apply</li>
+<li>AI suggestions can be applied or rejected with confirmation and validation checks</li>
+<li>"Undo AI Task" allows one-click rollback of the latest applied AI change</li>
+<li>"Audit Log" shows recent AI automation events for traceability</li>
+<li>Chat history is stored per document and restored automatically</li>
+<li><strong>Table Insertion</strong>: Use "Table → Insert Table" to create custom tables with interactive cell editing.</li>
+<li><strong>PDF Conversion Modes</strong>: </li>
+<li>Fast mode (default): Uses PyMuPDF for quick extraction</li>
+<li>Advanced mode: Enable "Tools → Use Advanced PDF Conversion (Docling)" for complex documents</li>
+<li>View mode info: "Tools → PDF Converter Info"</li>
+</ul>
+<hr />
+<h2 id="packaging-as-a-macos-app-optional">Packaging as a macOS App (Optional)</h2>
+<p>To bundle this app as a <code>.app</code>, use the included <code>setup.py</code> script:</p>
+<h3 id="build-the-app">Build the App</h3>
+<pre><code class="language-bash">rm -rf build dist
+python setup.py py2app
+</code></pre>
+<p>The generated app will be located in the <code>dist/</code> folder. You can launch it by double-clicking. To use it like a regular app, move it to your Applications folder.</p>
+<hr />
+<h2 id="exit-the-virtual-environment">Exit the Virtual Environment</h2>
+<pre><code class="language-bash">deactivate
+</code></pre>
+<h2 id="code-formatting-ruff">Code Formatting (Ruff)</h2>
+<p>This project uses <strong>Ruff</strong> to ensure consistent code formatting across all contributions.</p>
+<p>Before submitting changes, please check and format your code.</p>
+<h3 id="check-formatting">Check formatting</h3>
+<pre><code class="language-bash">uv run ruff format --check .
+</code></pre>
+<p>If any files are not properly formatted, you will see output like:</p>
+<pre><code class="language-text">Would reformat: some_file.py
+</code></pre>
+<p>This means the file does not match the required formatting style.</p>
+<h3 id="fix-formatting">Fix formatting</h3>
+<p>To automatically format all files:</p>
+<pre><code class="language-bash">uv run ruff format .
+</code></pre>
+<h2 id="running-tests">Running Tests</h2>
+<p>The project uses Python's built-in <code>unittest</code> framework. Tests live in the <code>tests/</code> directory and cover AI automation logic, UI helper methods, provider configuration, and agent interaction workflows.</p>
+<p>Run the full test suite:</p>
+<pre><code class="language-bash">uv run python -m unittest discover -s tests
+</code></pre>
+<p>Or with pip:</p>
+<pre><code class="language-bash">python -m unittest discover -s tests
+</code></pre>
+<p>Run a single test file:</p>
+<pre><code class="language-bash">uv run python -m unittest tests/test_ai_automation_logic.py
+</code></pre>
+<h3 id="test-coverage-overview">Test coverage overview</h3>
+<table>
+<thead>
+<tr>
+<th>Test file</th>
+<th>What it covers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_ai_automation_logic.py</code></td>
+<td>Offline fallback logic for TOC generation, summarization, code-block formatting, and task template listing</td>
+</tr>
+<tr>
+<td><code>test_ai_agent_ui_helpers.py</code></td>
+<td>UI helper methods: payload validation, chat history migration, audit log capping, suggestion apply/reject</td>
+</tr>
+<tr>
+<td><code>test_ai_agent_selection_only_integration.py</code></td>
+<td>Integration path for selection-only mode — verifies correct error handling when no text is selected</td>
+</tr>
+<tr>
+<td><code>test_ai_provider_config_logic.py</code></td>
+<td>Provider configuration and API key management logic</td>
+</tr>
+</tbody>
+</table>
+<p>Tests run automatically on every push and pull request via GitHub Actions (see <code>.github/workflows/python-ci.yml</code>).</p>
+<blockquote>
+<p><strong>macOS note:</strong> <code>test_ai_agent_ui_helpers.py</code> and <code>test_ai_agent_selection_only_integration.py</code> import <code>markdown_reader.ui</code>, which loads WeasyPrint at import time. WeasyPrint requires native system libraries (pango, cairo, gdk-pixbuf). If you see an <code>OSError: cannot load library 'libgobject-2.0-0'</code> error, follow the steps in <a href="PrepareForMacUser/">PrepareForMacUser.md</a> first. <code>test_ai_automation_logic.py</code> and <code>test_ai_provider_config_logic.py</code> have no system library dependencies and can always run.</p>
+</blockquote>
+<hr />
+<h2 id="development-workflow-uv-vs-pip-requirementstxt">Development Workflow: uv vs. pip / requirements.txt</h2>
+<p>This project previously used a <code>requirements.txt</code> file and standard <code>pip</code> commands. It has since migrated to <a href="https://docs.astral.sh/uv/"><code>uv</code></a> with <code>pyproject.toml</code>. Here is what changed and why.</p>
+<h3 id="the-old-approach-requirementstxt-pip">The old approach (requirements.txt + pip)</h3>
+<pre><code class="language-bash">python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+</code></pre>
+<p><code>requirements.txt</code> is a flat list of pinned packages. It works, but has limitations:</p>
+<ul>
+<li>No distinction between direct dependencies and transitive ones — everything is listed together.</li>
+<li>No separation of dev-only dependencies (linters, test runners) from runtime dependencies.</li>
+<li>No built-in lockfile mechanism — the file must be manually regenerated and tends to drift.</li>
+<li><code>pip</code> resolves the full dependency graph from scratch on every install, which is slow.</li>
+</ul>
+<h3 id="the-new-approach-pyprojecttoml-uv">The new approach (pyproject.toml + uv)</h3>
+<pre><code class="language-bash">uv sync           # install all runtime dependencies from the lockfile
+uv sync --locked --extra dev   # also install dev tools (ruff, ty, pre-commit)
+</code></pre>
+<p><code>pyproject.toml</code> is the modern Python packaging standard (PEP 517/518/621). It consolidates project metadata, runtime dependencies, and tool configuration in one file. Key benefits over <code>requirements.txt</code>:</p>
+<ul>
+<li><strong>Dependency groups</strong>: runtime deps go under <code>[project.dependencies]</code>; dev-only tools (Ruff, ty, pre-commit) go under <code>[project.optional-dependencies] dev</code>; docs tools under <code>docs</code>. You only install what you need.</li>
+<li><strong>Lockfile (<code>uv.lock</code>)</strong>: records exact versions of every direct and transitive package. <code>uv sync --locked</code> guarantees identical environments across all machines and in CI — no more "works on my machine" surprises.</li>
+<li><strong>Speed</strong>: <code>uv</code> is written in Rust and resolves and installs packages significantly faster than <code>pip</code>.</li>
+<li><strong>Single source of truth</strong>: tool configuration for Ruff, ty, and isort also lives in <code>pyproject.toml</code>, eliminating separate config files.</li>
+</ul>
+<h3 id="when-to-update-the-lockfile">When to update the lockfile</h3>
+<p>If you add or change a dependency in <code>pyproject.toml</code>, regenerate the lockfile and commit it:</p>
+<pre><code class="language-bash">uv lock
+git add pyproject.toml uv.lock
+git commit -m &quot;chore: update dependencies&quot;
+</code></pre>
+<p>CI runs <code>uv sync --locked</code>, so a stale <code>uv.lock</code> will fail the build — this is intentional and keeps the lockfile honest.</p>
+<hr />
+<h2 id="submit-changes-to-git">Submit Changes to Git</h2>
+<pre><code class="language-bash">git add .
+git commit -m &quot;Update&quot;  # Replace &quot;Update&quot; with a meaningful commit message
+git push
+</code></pre>
+<h2 id="technical-details">Technical Details</h2>
+<ul>
+<li>GUI: <code>tkinter</code>, <code>ttkbootstrap</code></li>
+<li>Markdown Engine: <code>markdown2</code></li>
+<li>HTML Preview: Dynamically generated HTML opened in the default browser</li>
+<li>File Conversion: <code>html2text</code> for HTML, <code>PyMuPDF</code> and <code>docling</code> for PDF import (<code>pypdf</code> is used as a fallback when PyMuPDF is unavailable)</li>
+<li>PDF Export: <code>weasyprint</code></li>
+<li>AI Translation: <code>requests</code> for API communication with OpenAI Compatible, OpenRouter, OpenAI, and Anthropic</li>
+<li>Configuration: Per-user settings JSON for provider/model (macOS <code>~/Library/Application Support/MarkdownReader/settings.json</code>; Windows <code>%APPDATA%/MarkdownReader/settings.json</code>; Linux <code>~/.config/markdown-reader/settings.json</code>) plus OS credential storage for API keys (<code>keyring</code>)</li>
+<li>Auto-failover: Automatically switches AI providers when the primary provider returns rate-limit/auth/server errors</li>
+</ul>
+<hr />
+<h2 id="system-requirements">System Requirements:</h2>
+<p>Python &gt;= 3.10</p>
+<hr />
+<h2 id="ai-powered-translation">AI-powered translation:</h2>
+<p>To enable AI-powered translation features, you need to set up API keys:</p>
+<ol>
+<li>Open <code>Settings -&gt; AI Provider &amp; API Keys...</code>.</li>
+<li>Choose provider and model.</li>
+<li>Enter API key and save.</li>
+<li>If you choose <code>OpenAI Compatible</code>, you can also choose a Base URL option (<code>Navidia</code> or <code>Groq</code>).</li>
+</ol>
+<p>The app stores provider and model in a per-user JSON file:</p>
+<ul>
+<li>macOS: <code>~/Library/Application Support/MarkdownReader/settings.json</code></li>
+<li>Windows: <code>%APPDATA%/MarkdownReader/settings.json</code></li>
+<li>Linux: <code>~/.config/markdown-reader/settings.json</code></li>
+</ul>
+<p><strong>How to get API keys:</strong>
+- <strong>OpenRouter</strong> (recommended for free tier): <a href="https://openrouter.ai/">openrouter.ai</a>
+- <strong>OpenAI</strong>: <a href="https://platform.openai.com/">platform.openai.com</a>
+- <strong>Anthropic</strong>: <a href="https://console.anthropic.com/">console.anthropic.com</a>
+- <strong>OpenAI Compatible</strong>: Create an API key from your chosen compatible provider console, then select the matching Base URL preset in this app:
+  - <strong>Navidia preset</strong>: <a href="https://build.nvidia.com/">NVIDIA Integrate</a>
+  - <strong>Groq preset</strong>: <a href="https://console.groq.com/keys">Groq Console</a></p>
+<p>API keys are saved in the OS credential store (Keychain on macOS, Credential Manager on Windows, Secret Service/KWallet on Linux when available).</p>
+<p>The app will automatically switch to a fallback provider when the primary provider returns rate-limit/auth/server errors.</p>
+<hr />
+<h2 id="license">License</h2>
+<p>This project is licensed under the <strong>MIT License</strong>.<br />
+See the <a href="LICENSE.md">LICENSE</a> file for the full text.</p>
+<hr />
+<h2 id="contributing">Contributing</h2>
+<p>All contributions are welcome, including:</p>
+<ul>
+<li>Bug reports</li>
+<li>Feature suggestions</li>
+<li>Pull requests</li>
+<li>Documentation improvements</li>
+</ul>
+<p>Please see our <a href="CONTRIBUTING.md">CONTRIBUTING</a> guide for more details on how to get started, submit changes, or report issues.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": [], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
