@@ -91,7 +91,25 @@ export default function HomePage() {
 
   const handleExport = async (format: "html" | "pdf" | "docx") => {
     try {
-      const result = await editor.exportAs(format);
+      // For HTML, prompt user to choose save location
+      let outputPath: string | undefined;
+      if (format === "html") {
+        try {
+          const { save } = await import("@tauri-apps/plugin-dialog");
+          const selected = await save({
+            defaultPath: `${editor.activeTab.label.replace(/\.[^/.]+$/, "") || "document"}.html`,
+            filters: [{ name: "HTML files", extensions: ["html"] }],
+          });
+          if (!selected) return; // User cancelled
+          outputPath = Array.isArray(selected) ? selected[0] : selected;
+        } catch {
+          // In browser mode, fallback to download (no save dialog)
+          alert("HTML export requires Tauri desktop app for save dialog. Use download instead.");
+          return;
+        }
+      }
+      // For PDF/DOCX, export directly (backend handles temp file for now)
+      const result = await editor.exportAs(format, outputPath);
       if (result) {
         alert(`Exported to:\n${result.path}`);
       }
