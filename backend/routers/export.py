@@ -85,7 +85,9 @@ def export_docx(payload: ExportPayload):
     # We use a minimal stub that shells out to the existing logic.  The legacy
     # export_to_docx() function requires a MarkdownReader 'app' object, so we
     # create a lightweight adapter.
-    from markdown_reader.logic import export_to_docx
+    import markdown_reader.logic as legacy_logic
+
+    export_to_docx = legacy_logic.export_to_docx
 
     out_path = _make_output_path(payload.output_path, ".docx")
     parent = os.path.dirname(out_path)
@@ -113,8 +115,18 @@ def export_docx(payload: ExportPayload):
 
     adapter.editors = [_FakeTextArea()]
 
+    # Disable any legacy GUI message boxes from the backend export path.
+    def _noop(*args, **kwargs):
+        return None
+
+    if hasattr(legacy_logic, "messagebox"):
+        legacy_logic.messagebox.showinfo = _noop
+        legacy_logic.messagebox.showerror = _noop
+
     try:
-        export_to_docx(adapter, out_path)
+        success = export_to_docx(adapter, out_path)
+        if not success:
+            raise RuntimeError("DOCX export failed")
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return {"path": out_path}
