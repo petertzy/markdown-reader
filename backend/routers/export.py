@@ -123,14 +123,23 @@ def export_docx(payload: ExportPayload):
 @router.post("/pdf")
 def export_pdf(payload: ExportPayload):
     """Export Markdown to PDF via WeasyPrint and return the output file path."""
+    from backend.renderer import render_markdown
     from markdown_reader.plugins.pdf_exporter import export_markdown_to_pdf
+
+    html = render_markdown(
+        payload.content,
+        base_dir=payload.base_dir,
+        dark_mode=payload.dark_mode,
+        font_family=payload.font_family,
+        font_size=payload.font_size,
+    )
 
     out_path = _make_output_path(payload.output_path, ".pdf")
     parent = os.path.dirname(out_path)
     if parent:
         os.makedirs(parent, exist_ok=True)
     try:
-        export_markdown_to_pdf(payload.content, out_path, base_dir=payload.base_dir)
+        export_markdown_to_pdf(html, out_path, base_url=payload.base_dir)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return {"path": out_path}
