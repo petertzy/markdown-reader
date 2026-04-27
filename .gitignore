@@ -38,3 +38,5 @@ LICENCE.pdf
 .gitignore
 
 site/
+
+.github/workflows
