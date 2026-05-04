@@ -16,6 +16,30 @@ import EditorPane from "@/components/EditorPane";
 import PreviewPane from "@/components/PreviewPane";
 import AIPanel from "@/components/AIPanel";
 import StatusBar from "@/components/StatusBar";
+import { Files } from "@/lib/api";
+
+const OPEN_FILE_EXTENSIONS = ["md", "markdown", "txt", "html", "htm", "pdf", "docx"];
+const CONVERTIBLE_EXTENSIONS = new Set(["html", "htm", "pdf", "docx"]);
+
+function fileExtension(name: string) {
+  return name.split(".").pop()?.toLowerCase() ?? "";
+}
+
+function convertedMarkdownLabel(name: string) {
+  const withoutExtension = name.replace(/\.[^/.]+$/, "");
+  return `${withoutExtension || "converted"}.md`;
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return window.btoa(binary);
+}
 
 export default function HomePage() {
   const editor = useEditor();
@@ -61,32 +85,60 @@ export default function HomePage() {
     ("__TAURI_INTERNALS__" in window || "__TAURI__" in window || window.navigator.userAgent.includes("Tauri"));
 
   const handleOpenFile = useCallback(async () => {
+    let filePath: string | null = null;
+
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const selected = await open({
         multiple: false,
-        filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
+        filters: [
+          { name: "Supported documents", extensions: OPEN_FILE_EXTENSIONS },
+          { name: "Markdown", extensions: ["md", "markdown", "txt"] },
+          { name: "Convertible documents", extensions: ["html", "htm", "pdf", "docx"] },
+        ],
       });
       if (!selected) return;
-      const filePath = Array.isArray(selected) ? selected[0] : selected;
-      await editor.openFile(filePath);
+      filePath = Array.isArray(selected) ? selected[0] : selected;
     } catch {
       // In desktop runtime, avoid browser picker fallback to prevent permission dialogs.
       if (isLikelyTauriRuntime) return;
 
       // Browser mode fallback.
       fileInputRef.current?.click();
+      return;
+    }
+
+    if (!filePath) return;
+
+    try {
+      await editor.openFile(filePath);
+    } catch (err) {
+      alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, [editor, isLikelyTauriRuntime]);
 
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // For browser mode read directly; for Tauri we'd have a native path
-    const text = await file.text();
-    // In pure browser we don't have an absolute path — use filename as tab label.
-    editor.openTextAsTab(file.name, text, null);
-    e.target.value = "";
+    try {
+      const ext = fileExtension(file.name);
+      if (CONVERTIBLE_EXTENSIONS.has(ext)) {
+        const content_base64 = arrayBufferToBase64(await file.arrayBuffer());
+        const { markdown } = await Files.convertToMarkdown({
+          filename: file.name,
+          content_base64,
+        });
+        editor.openTextAsTab(convertedMarkdownLabel(file.name), markdown, null, null, true);
+      } else {
+        // In pure browser we do not have an absolute path, so use filename as tab label.
+        const text = await file.text();
+        editor.openTextAsTab(file.name, text, null);
+      }
+    } catch (err) {
+      alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      e.target.value = "";
+    }
   };
 
   const handleExport = async (format: "html" | "pdf" | "docx") => {
@@ -96,11 +148,6 @@ export default function HomePage() {
         const { save } = await import("@tauri-apps/plugin-dialog");
         const extension = format === "pdf" ? "pdf" : format === "docx" ? "docx" : "html";
         const defaultName = `${editor.activeTab.label.replace(/\.[^/.]+$/, "") || "document"}.${extension}`;
-        const filters = [
-          { name: "HTML files", extensions: ["html"] },
-          { name: "PDF files", extensions: ["pdf"] },
-          { name: "Word files", extensions: ["docx"] },
-        ];
         const selected = await save({
           defaultPath: defaultName,
           filters: [{ name: `${extension.toUpperCase()} files`, extensions: [extension] }],
@@ -160,7 +207,7 @@ export default function HomePage() {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".md,.txt,.html,.pdf"
+        accept=".md,.markdown,.txt,.html,.htm,.pdf,.docx"
         className="hidden"
         onChange={handleFileInputChange}
       />

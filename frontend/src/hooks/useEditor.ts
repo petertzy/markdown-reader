@@ -20,6 +20,18 @@ export type Tab = {
   dirty: boolean;
 };
 
+const CONVERTIBLE_EXTENSIONS = new Set(["pdf", "html", "htm", "docx"]);
+
+function fileExtension(name: string) {
+  return name.split(".").pop()?.toLowerCase() ?? "";
+}
+
+function convertedMarkdownLabel(name: string) {
+  const baseName = name.split(/[/\\]/).pop() ?? name;
+  const withoutExtension = baseName.replace(/\.[^/.]+$/, "");
+  return `${withoutExtension || "converted"}.md`;
+}
+
 function makeTab(
   id: string,
   label = "Untitled",
@@ -94,6 +106,27 @@ export function useEditor() {
   // ── file ops ───────────────────────────────────────────────────────────────
   const openFile = useCallback(
     async (filePath: string) => {
+      const ext = fileExtension(filePath);
+
+      if (CONVERTIBLE_EXTENSIONS.has(ext)) {
+        try {
+          const { markdown } = await Files.convertToMarkdown({ path: filePath });
+          const label = convertedMarkdownLabel(filePath);
+          const id = nextTabId();
+          const newTab = { ...makeTab(id, label, markdown, null, null), dirty: true };
+          setTabs((prev) => [...prev, newTab]);
+          setActiveTabId(id);
+          refreshPreview(markdown);
+          Files.addRecent(filePath)
+            .then(({ entries }) => setRecentFiles(entries))
+            .catch(console.error);
+        } catch (err) {
+          console.error("Failed to convert file:", err);
+          throw err;
+        }
+        return;
+      }
+
       // Check if already open
       const existing = tabs.find((t) => t.filePath === filePath);
       if (existing) {
@@ -125,11 +158,12 @@ export function useEditor() {
       label: string,
       content: string,
       filePath: string | null = null,
-      browserHandle: FileSystemFileHandle | null = null
+      browserHandle: FileSystemFileHandle | null = null,
+      dirty = false
     ) => {
       const id = nextTabId();
       const tabLabel = label.trim() || "Untitled";
-      const newTab = makeTab(id, tabLabel, content, filePath, browserHandle);
+      const newTab = { ...makeTab(id, tabLabel, content, filePath, browserHandle), dirty };
       setTabs((prev) => [...prev, newTab]);
       setActiveTabId(id);
       refreshPreview(content, filePath ?? undefined);
