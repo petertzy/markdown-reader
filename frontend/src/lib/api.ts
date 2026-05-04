@@ -76,6 +76,12 @@ export type FileEntry = {
   extension: string;
 };
 
+export type ConvertToMarkdownPayload = {
+  path?: string;
+  filename?: string;
+  content_base64?: string;
+};
+
 export const Files = {
   read: (path: string) =>
     apiFetch<{ path: string; content: string }>(
@@ -86,6 +92,12 @@ export const Files = {
     apiFetch<{ path: string; written: boolean }>(`/api/files/write`, {
       method: "POST",
       body: JSON.stringify({ path, content }),
+    }),
+
+  convertToMarkdown: (payload: ConvertToMarkdownPayload) =>
+    apiFetch<{ markdown: string }>("/api/files/convert-to-markdown", {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 
   list: (path: string, extensions?: string) => {

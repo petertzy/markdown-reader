@@ -9,6 +9,7 @@ or:
     python -m unittest tests.test_features -v
 """
 
+import base64
 import json
 import os
 import sys
@@ -20,6 +21,7 @@ import unittest
 # ---------------------------------------------------------------------------
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+from backend.routers.files import ConvertToMarkdownPayload, convert_to_markdown
 from markdown_reader.recent_files import (
     RecentFilesManager,
     _middle_ellipsis,
@@ -332,6 +334,42 @@ class TestRecentFilesManager(unittest.TestCase):
         normalised = os.path.normpath(os.path.abspath(path))
         count = m.entries.count(normalised)
         self.assertLessEqual(count, 1)
+
+
+class TestConvertToMarkdown(unittest.TestCase):
+    """File conversion endpoint helpers should return Markdown content."""
+
+    def test_converts_html_upload_to_markdown(self):
+        html = b"<h1>Title</h1><p>Hello <strong>world</strong>.</p>"
+        payload = ConvertToMarkdownPayload(
+            filename="sample.html",
+            content_base64=base64.b64encode(html).decode("ascii"),
+        )
+
+        result = convert_to_markdown(payload)
+
+        self.assertIn("Title", result["markdown"])
+        self.assertIn("Hello", result["markdown"])
+
+    def test_converts_docx_path_to_markdown(self):
+        from docx import Document
+
+        tmpdir = tempfile.mkdtemp()
+        path = os.path.join(tmpdir, "sample.docx")
+        try:
+            document = Document()
+            document.add_heading("Doc Title", level=1)
+            document.add_paragraph("Body text")
+            document.save(path)
+
+            result = convert_to_markdown(ConvertToMarkdownPayload(path=path))
+
+            self.assertIn("# Doc Title", result["markdown"])
+            self.assertIn("Body text", result["markdown"])
+        finally:
+            import shutil
+
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 if __name__ == "__main__":

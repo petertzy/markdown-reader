@@ -6,8 +6,10 @@ File system CRUD endpoints + recent-files management.
 
 from __future__ import annotations
 
+import base64
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
@@ -17,7 +19,11 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from markdown_reader.logic import APP_SETTINGS_FILE_PATH
+from markdown_reader.logic import (
+    APP_SETTINGS_FILE_PATH,
+    convert_html_to_markdown,
+    convert_pdf_to_markdown,
+)
 from markdown_reader.recent_files import RecentFilesManager
 
 router = APIRouter()
@@ -39,6 +45,12 @@ def _get_recent() -> RecentFilesManager:
 class WritePayload(BaseModel):
     path: str
     content: str
+
+
+class ConvertToMarkdownPayload(BaseModel):
+    path: str | None = None
+    filename: str | None = None
+    content_base64: str | None = None
 
 
 class FileEntry(BaseModel):
@@ -77,6 +89,126 @@ def write_file(payload: WritePayload):
         return {"path": path, "written": True}
     except OSError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+def _docx_paragraph_to_markdown(paragraph) -> str:
+    text = paragraph.text.strip()
+    if not text:
+        return ""
+
+    style_name = (paragraph.style.name if paragraph.style else "").lower()
+    if style_name.startswith("heading"):
+        level_text = style_name.replace("heading", "").strip()
+        try:
+            level = max(1, min(6, int(level_text)))
+        except ValueError:
+            level = 1
+        return f"{'#' * level} {text}"
+
+    if "list bullet" in style_name:
+        return f"- {text}"
+
+    if "list number" in style_name:
+        return f"1. {text}"
+
+    return text
+
+
+def _convert_docx_to_markdown(path: str) -> str:
+    try:
+        from docx import Document
+    except ImportError as exc:
+        raise RuntimeError("python-docx is required to convert DOCX files.") from exc
+
+    document = Document(path)
+    lines: list[str] = []
+
+    for paragraph in document.paragraphs:
+        line = _docx_paragraph_to_markdown(paragraph)
+        if line:
+            lines.append(line)
+            lines.append("")
+
+    for table in document.tables:
+        for row in table.rows:
+            cells = [cell.text.strip().replace("\n", " ") for cell in row.cells]
+            lines.append("| " + " | ".join(cells) + " |")
+        lines.append("")
+
+    markdown = "\n".join(lines).strip()
+    return markdown
+
+
+def _convert_local_file_to_markdown(path: str, filename: str | None = None) -> str:
+    ext = Path(filename or path).suffix.lower()
+
+    if ext in {".md", ".markdown", ".txt"}:
+        with open(path, encoding="utf-8", errors="replace") as file_obj:
+            return file_obj.read()
+
+    if ext in {".html", ".htm"}:
+        with open(path, encoding="utf-8", errors="replace") as file_obj:
+            return convert_html_to_markdown(file_obj.read())
+
+    if ext == ".pdf":
+        return convert_pdf_to_markdown(path)
+
+    if ext == ".docx":
+        return _convert_docx_to_markdown(path)
+
+    raise HTTPException(
+        status_code=400, detail=f"Unsupported file type: {ext or 'unknown'}"
+    )
+
+
+@router.post("/convert-to-markdown")
+def convert_to_markdown(payload: ConvertToMarkdownPayload):
+    """Convert a supported local or uploaded file into Markdown."""
+    if payload.path:
+        if not os.path.isfile(payload.path):
+            raise HTTPException(
+                status_code=404, detail=f"File not found: {payload.path}"
+            )
+        try:
+            markdown = _convert_local_file_to_markdown(payload.path, payload.filename)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        return {"markdown": markdown}
+
+    if not payload.content_base64 or not payload.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Either path or filename with content_base64 is required.",
+        )
+
+    suffix = Path(payload.filename).suffix.lower()
+    try:
+        file_bytes = base64.b64decode(payload.content_base64)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400, detail="Invalid base64 file content."
+        ) from exc
+
+    tmp_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+            tmp_file.write(file_bytes)
+            tmp_path = tmp_file.name
+
+        markdown = _convert_local_file_to_markdown(tmp_path, payload.filename)
+        return {"markdown": markdown}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 @router.get("/list")
