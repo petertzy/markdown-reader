@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import os
 import sys
+from dotenv import load_dotenv
+load_dotenv()
 
 # Ensure the project root is importable
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

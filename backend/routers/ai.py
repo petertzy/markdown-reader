@@ -216,7 +216,6 @@ def automation_logs(limit: int = 100):
 
 @router.post("/translate")
 def translate(payload: TranslatePayload):
-    """Translate Markdown content via AI."""
     try:
         result = translate_markdown_with_ai(
             payload.content, payload.source_language, payload.target_language
@@ -224,11 +223,14 @@ def translate(payload: TranslatePayload):
     except TranslationConfigError as exc:
         raise HTTPException(
             status_code=422,
-            detail={
-                "message": str(exc),
-                "provider": getattr(exc, "provider_name", None),
-            },
+            detail={"message": str(exc), "provider": getattr(exc, "provider_name", None)},
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+    if isinstance(result, tuple):
+        result = result[0]
+    if isinstance(result, dict):
+        result = result.get("translated_markdown") or result.get("translated") or str(result)
+
     return {"translated": result}
