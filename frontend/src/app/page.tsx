@@ -46,6 +46,7 @@ export default function HomePage() {
   const [showPreview] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(false);
   const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
+  const dragCounterRef = useRef(0);
 
   const handleSaveFile = useCallback(async () => {
     try {
@@ -198,10 +199,81 @@ export default function HomePage() {
     return mono.getModel()?.getValueInRange(sel) ?? "";
   };
 
+  // ── Drag-and-drop file handling ────────────────────────────────────────────
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current += 1;
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounterRef.current -= 1;
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }, []);
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      dragCounterRef.current = 0;
+
+      const items = e.dataTransfer.items;
+      const files = Array.from(e.dataTransfer.files);
+
+      if (files.length === 0) return;
+
+      // In Tauri mode, the dropped items are file paths
+      if (isLikelyTauriRuntime) {
+        for (const file of files) {
+          const path = file.path;
+          if (path && fileExtension(path).toLowerCase() in { md: 1, markdown: 1, txt: 1, html: 1, htm: 1, pdf: 1, docx: 1 }) {
+            try {
+              await editor.openFile(path);
+            } catch (err) {
+              alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+        }
+      } else {
+        // Browser mode — read file contents
+        for (const file of files) {
+          const ext = fileExtension(file.name);
+          if (CONVERTIBLE_EXTENSIONS.has(ext)) {
+            try {
+              const content_base64 = arrayBufferToBase64(await file.arrayBuffer());
+              const { markdown } = await Files.convertToMarkdown({
+                filename: file.name,
+                content_base64,
+              });
+              editor.openTextAsTab(convertedMarkdownLabel(file.name), markdown, null, null, true);
+            } catch (err) {
+              alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          } else {
+            try {
+              const text = await file.text();
+              editor.openTextAsTab(file.name, text, null);
+            } catch (err) {
+              alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+        }
+      }
+    },
+    [editor, isLikelyTauriRuntime]
+  );
+
   return (
     <div
       className={`flex flex-col h-screen overflow-hidden ${editor.darkMode ? "dark" : ""}`}
       style={{ background: editor.darkMode ? "#1e1e1e" : "#fff" }}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
     >
       {/* Hidden file input for open-file */}
       <input
