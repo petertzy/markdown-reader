@@ -13,11 +13,19 @@
  * This means NO hard-coded port leaks into the packaged desktop app.
  */
 
-// Detect Tauri environment without importing the full @tauri-apps/api eagerly
-// (the module is only available inside Tauri's webview).
-const isTauri =
-  typeof window !== "undefined" &&
-  ("__TAURI__" in window || "__TAURI_INTERNALS__" in window);
+// Detect Tauri without relying only on globals. Tauri v2 may not expose
+// window.__TAURI__ unless withGlobalTauri is enabled, while packaged pages are
+// served from tauri.localhost and usually include "Tauri" in the user agent.
+function isTauriRuntime() {
+  if (typeof window === "undefined") return false;
+
+  return (
+    "__TAURI__" in window ||
+    "__TAURI_INTERNALS__" in window ||
+    window.location.hostname === "tauri.localhost" ||
+    window.navigator.userAgent.includes("Tauri")
+  );
+}
 
 let _resolvedBaseUrl: string | null = null;
 
@@ -28,18 +36,29 @@ let _resolvedBaseUrl: string | null = null;
 export async function getBaseUrl(): Promise<string> {
   if (_resolvedBaseUrl) return _resolvedBaseUrl;
 
-  if (isTauri) {
+  if (isTauriRuntime()) {
     const { invoke } = await import("@tauri-apps/api/core");
-    // Retry for up to 30 × 500 ms = 15 s while the sidecar initialises.
-    for (let attempt = 0; attempt < 30; attempt++) {
+    // PyInstaller onefile sidecars can take a while to unpack on first launch.
+    // Wait for both the announced port and an accepting HTTP server.
+    for (let attempt = 0; attempt < 120; attempt++) {
       const port = await invoke<number | null>("get_backend_port");
       if (port) {
-        _resolvedBaseUrl = `http://127.0.0.1:${port}`;
-        return _resolvedBaseUrl;
+        const candidate = `http://127.0.0.1:${port}`;
+        try {
+          const health = await fetch(`${candidate}/api/health`, {
+            cache: "no-store",
+          });
+          if (health.ok) {
+            _resolvedBaseUrl = candidate;
+            return _resolvedBaseUrl;
+          }
+        } catch {
+          // The Rust host has received the port, but Uvicorn is not listening yet.
+        }
       }
       await new Promise((r) => setTimeout(r, 500));
     }
-    throw new Error("Backend sidecar did not announce its port within 15 s.");
+    throw new Error("Backend sidecar did not become ready within 60 s.");
   }
 
   // Browser / dev mode

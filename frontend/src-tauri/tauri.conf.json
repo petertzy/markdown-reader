@@ -29,6 +29,23 @@
     "externalBin": [
       "binaries/markdown-reader-backend"
     ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "md",
+          "markdown"
+        ],
+        "name": "Markdown Document",
+        "description": "Markdown document",
+        "role": "Editor",
+        "mimeType": "text/markdown",
+        "contentTypes": [
+          "net.daringfireball.markdown",
+          "public.plain-text"
+        ],
+        "rank": "Owner"
+      }
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

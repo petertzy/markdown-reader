@@ -148,6 +148,7 @@ export function useEditor() {
           .catch(console.error);
       } catch (err) {
         console.error("Failed to open file:", err);
+        throw err;
       }
     },
     [tabs, refreshPreview]

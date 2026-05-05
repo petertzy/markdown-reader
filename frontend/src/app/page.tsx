@@ -102,7 +102,10 @@ export default function HomePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isLikelyTauriRuntime =
     typeof window !== "undefined" &&
-    ("__TAURI_INTERNALS__" in window || "__TAURI__" in window || window.navigator.userAgent.includes("Tauri"));
+    ("__TAURI_INTERNALS__" in window ||
+      "__TAURI__" in window ||
+      window.location.hostname === "tauri.localhost" ||
+      window.navigator.userAgent.includes("Tauri"));
 
   const handleOpenFile = useCallback(async () => {
     let filePath: string | null = null;
@@ -273,6 +276,39 @@ export default function HomePage() {
         } else {
           unlisten = cleanup;
         }
+      })
+      .catch(console.error);
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [isLikelyTauriRuntime, openDroppedPaths]);
+
+  useEffect(() => {
+    if (!isLikelyTauriRuntime) return;
+
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    const openPaths = (paths: string[]) => {
+      if (paths.length > 0) {
+        void openDroppedPaths(paths);
+      }
+    };
+
+    import("@tauri-apps/api/event")
+      .then(({ listen }) => listen<string[]>("open-file-paths", (event) => openPaths(event.payload)))
+      .then((cleanup) => {
+        if (cancelled) {
+          cleanup();
+        } else {
+          unlisten = cleanup;
+        }
+        return import("@tauri-apps/api/core");
+      })
+      .then(({ invoke }) => invoke<string[]>("take_pending_open_files"))
+      .then((paths) => {
+        if (!cancelled) openPaths(paths);
       })
       .catch(console.error);
 

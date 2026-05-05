@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Markdown Reader app icon">
+  <defs>
+    <linearGradient id="background" x1="128" y1="72" x2="896" y2="952" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#122033"/>
+      <stop offset="0.52" stop-color="#1f4f5f"/>
+      <stop offset="1" stop-color="#2fa487"/>
+    </linearGradient>
+    <linearGradient id="page" x1="296" y1="206" x2="726" y2="818" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e8f1f4"/>
+    </linearGradient>
+    <linearGradient id="fold" x1="646" y1="220" x2="776" y2="350" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d9e7ec"/>
+      <stop offset="1" stop-color="#b9d0d8"/>
+    </linearGradient>
+    <filter id="shadow" x="152" y="130" width="720" height="790" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="28" stdDeviation="34" flood-color="#07111d" flood-opacity="0.32"/>
+    </filter>
+    <filter id="markShadow" x="255" y="356" width="520" height="300" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0c2230" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="226" fill="url(#background)"/>
+  <path d="M189 737C309 800 423 828 512 821c153-13 264-91 345-228 13-22 39 2 28 25-81 172-221 285-397 300-116 10-247-23-366-89-23-13-10-55 20-43 16 6 31 10 47 15Z" fill="#f4c84d" opacity="0.94"/>
+  <path d="M225 215c69-61 166-99 288-99 136 0 246 46 326 132 20 22-9 53-34 35-77-55-164-82-261-82-120 0-219 40-293 107-29 27-59-65-26-93Z" fill="#41d6c3" opacity="0.86"/>
+
+  <g filter="url(#shadow)">
+    <path d="M293 188h361l134 137v456c0 46-37 83-83 83H293c-46 0-83-37-83-83V271c0-46 37-83 83-83Z" fill="url(#page)"/>
+    <path d="M650 190v99c0 38 31 69 69 69h69L650 190Z" fill="url(#fold)"/>
+    <path d="M651 190v99c0 38 31 69 69 69h68" fill="none" stroke="#a7c2cb" stroke-width="18" stroke-linecap="round" stroke-linejoin="round" opacity="0.52"/>
+  </g>
+
+  <g filter="url(#markShadow)" fill="#143246">
+    <path d="M307 443c0-21 17-38 38-38h335c21 0 38 17 38 38v168c0 21-17 38-38 38H345c-21 0-38-17-38-38V443Zm74 143h49v-82l50 66h14l50-66v82h49V468h-47l-59 76-59-76h-47v118Zm254 0 52-59h-35v-59h-47v59h-35l52 59h13Z"/>
+  </g>
+
+  <rect x="308" y="704" width="304" height="32" rx="16" fill="#9bb9c2" opacity="0.56"/>
+  <rect x="308" y="762" width="228" height="32" rx="16" fill="#9bb9c2" opacity="0.44"/>
+</svg>
