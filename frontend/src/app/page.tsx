@@ -16,13 +16,18 @@ import EditorPane from "@/components/EditorPane";
 import PreviewPane from "@/components/PreviewPane";
 import AIPanel from "@/components/AIPanel";
 import StatusBar from "@/components/StatusBar";
-import { Files } from "@/lib/api";
+import { Export, Files, type ExportPayload } from "@/lib/api";
 
 const OPEN_FILE_EXTENSIONS = ["md", "markdown", "txt", "html", "htm", "pdf", "docx"];
 const CONVERTIBLE_EXTENSIONS = new Set(["html", "htm", "pdf", "docx"]);
+const SUPPORTED_FILE_EXTENSIONS = new Set(OPEN_FILE_EXTENSIONS);
 
 function fileExtension(name: string) {
   return name.split(".").pop()?.toLowerCase() ?? "";
+}
+
+function isSupportedFile(name: string) {
+  return SUPPORTED_FILE_EXTENSIONS.has(fileExtension(name));
 }
 
 function convertedMarkdownLabel(name: string) {
@@ -41,12 +46,26 @@ function arrayBufferToBase64(buffer: ArrayBuffer) {
   return window.btoa(binary);
 }
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function HomePage() {
   const editor = useEditor();
   const [showPreview] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(false);
   const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const dragCounterRef = useRef(0);
+  const openFileRef = useRef(editor.openFile);
+  const openTextAsTabRef = useRef(editor.openTextAsTab);
+  const lastDroppedPathsRef = useRef<{ signature: string; at: number } | null>(null);
 
   const handleSaveFile = useCallback(async () => {
     try {
@@ -145,10 +164,11 @@ export default function HomePage() {
   const handleExport = async (format: "html" | "pdf" | "docx") => {
     try {
       let outputPath: string | undefined;
+      const extension = format === "pdf" ? "pdf" : format === "docx" ? "docx" : "html";
+      const defaultName = `${editor.activeTab.label.replace(/\.[^/.]+$/, "") || "document"}.${extension}`;
+
       try {
         const { save } = await import("@tauri-apps/plugin-dialog");
-        const extension = format === "pdf" ? "pdf" : format === "docx" ? "docx" : "html";
-        const defaultName = `${editor.activeTab.label.replace(/\.[^/.]+$/, "") || "document"}.${extension}`;
         const selected = await save({
           defaultPath: defaultName,
           filters: [{ name: `${extension.toUpperCase()} files`, extensions: [extension] }],
@@ -157,7 +177,14 @@ export default function HomePage() {
         outputPath = Array.isArray(selected) ? selected[0] : selected;
       } catch {
         if (format === "html") {
-          alert("HTML export requires Tauri desktop app for save dialog. Use the browser download path instead.");
+          const payload: ExportPayload = {
+            content: editor.activeTab.content,
+            base_dir: editor.activeTab.filePath?.replace(/[^/\\]+$/, ""),
+            dark_mode: editor.darkMode,
+            font_size: editor.fontSize,
+          };
+          const blob = await Export.downloadHtml(payload);
+          downloadBlob(blob, defaultName);
           return;
         }
         alert("PDF/DOCX export requires Tauri desktop app for save dialog.");
@@ -199,6 +226,62 @@ export default function HomePage() {
     return mono.getModel()?.getValueInRange(sel) ?? "";
   };
 
+  useEffect(() => {
+    openFileRef.current = editor.openFile;
+    openTextAsTabRef.current = editor.openTextAsTab;
+  }, [editor.openFile, editor.openTextAsTab]);
+
+  const openDroppedPaths = useCallback(
+    async (paths: string[]) => {
+      const supportedPaths = paths.filter(isSupportedFile);
+      if (supportedPaths.length === 0) return;
+
+      const signature = supportedPaths.join("\n");
+      const previousDrop = lastDroppedPathsRef.current;
+      const now = Date.now();
+      if (previousDrop?.signature === signature && now - previousDrop.at < 750) return;
+      lastDroppedPathsRef.current = { signature, at: now };
+
+      for (const path of supportedPaths) {
+        try {
+          await openFileRef.current(path);
+        } catch (err) {
+          alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!isLikelyTauriRuntime) return;
+
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+
+    import("@tauri-apps/api/webview")
+      .then(({ getCurrentWebview }) =>
+        getCurrentWebview().onDragDropEvent((event) => {
+          if (event.payload.type === "drop") {
+            void openDroppedPaths(event.payload.paths);
+          }
+        })
+      )
+      .then((cleanup) => {
+        if (cancelled) {
+          cleanup();
+        } else {
+          unlisten = cleanup;
+        }
+      })
+      .catch(console.error);
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [isLikelyTauriRuntime, openDroppedPaths]);
+
   // ── Drag-and-drop file handling ────────────────────────────────────────────
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -220,26 +303,23 @@ export default function HomePage() {
       e.preventDefault();
       dragCounterRef.current = 0;
 
-      const items = e.dataTransfer.items;
       const files = Array.from(e.dataTransfer.files);
 
       if (files.length === 0) return;
 
-      // In Tauri mode, the dropped items are file paths
+      // In Tauri mode, the native webview event is the reliable source of paths.
+      // Keep this fallback for runtimes that still expose a File.path value.
       if (isLikelyTauriRuntime) {
-        for (const file of files) {
-          const path = file.path;
-          if (path && fileExtension(path).toLowerCase() in { md: 1, markdown: 1, txt: 1, html: 1, htm: 1, pdf: 1, docx: 1 }) {
-            try {
-              await editor.openFile(path);
-            } catch (err) {
-              alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
-            }
-          }
-        }
+        const paths = files
+          .map((file) => (file as File & { path?: string }).path)
+          .filter((path): path is string => Boolean(path));
+        await openDroppedPaths(paths);
+        return;
       } else {
         // Browser mode — read file contents
         for (const file of files) {
+          if (!isSupportedFile(file.name)) continue;
+
           const ext = fileExtension(file.name);
           if (CONVERTIBLE_EXTENSIONS.has(ext)) {
             try {
@@ -248,14 +328,14 @@ export default function HomePage() {
                 filename: file.name,
                 content_base64,
               });
-              editor.openTextAsTab(convertedMarkdownLabel(file.name), markdown, null, null, true);
+              openTextAsTabRef.current(convertedMarkdownLabel(file.name), markdown, null, null, true);
             } catch (err) {
               alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
             }
           } else {
             try {
               const text = await file.text();
-              editor.openTextAsTab(file.name, text, null);
+              openTextAsTabRef.current(file.name, text, null);
             } catch (err) {
               alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
             }
@@ -263,7 +343,7 @@ export default function HomePage() {
         }
       }
     },
-    [editor, isLikelyTauriRuntime]
+    [isLikelyTauriRuntime, openDroppedPaths]
   );
 
   return (
