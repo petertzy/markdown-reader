@@ -13,7 +13,11 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
+import time
+
 from dotenv import load_dotenv
+
 load_dotenv()
 
 # Ensure the project root is importable
@@ -40,6 +44,7 @@ app.add_middleware(
         "http://localhost:3000",  # Next.js dev server
         "http://localhost:3001",
         "tauri://localhost",  # Tauri webview
+        "http://tauri.localhost",
         "https://tauri.localhost",
     ],
     allow_credentials=True,
@@ -67,6 +72,30 @@ def _find_free_port() -> int:
         return s.getsockname()[1]
 
 
+def _start_parent_watchdog() -> None:
+    """Exit the sidecar if the Tauri host process is gone."""
+    parent_pid = os.environ.get("MARKDOWN_READER_PARENT_PID")
+    if not parent_pid:
+        return
+
+    try:
+        pid = int(parent_pid)
+    except ValueError:
+        return
+
+    def watch_parent() -> None:
+        while True:
+            time.sleep(2)
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                os._exit(0)
+            except PermissionError:
+                continue
+
+    threading.Thread(target=watch_parent, daemon=True).start()
+
+
 def main() -> None:
     """Entry point used by pyproject.toml [project.scripts] and the Tauri sidecar.
 
@@ -74,16 +103,12 @@ def main() -> None:
     host process can read the dynamically assigned port and pass it to the
     web-view — no hard-coded port number anywhere.
     """
+    _start_parent_watchdog()
     port = _find_free_port()
     # Flush immediately so the Tauri stdout reader sees it without delay.
     print(f"BACKEND_PORT={port}", flush=True)
-    uvicorn.run("backend.main:app", host="127.0.0.1", port=port, reload=False)
+    uvicorn.run(app, host="127.0.0.1", port=port, reload=False)
 
 
 if __name__ == "__main__":
     main()
-
-
-def main():
-    """Entry point for the 'markdown-reader-backend' script."""
-    uvicorn.run("backend.main:app", host="127.0.0.1", port=8000, reload=False)
