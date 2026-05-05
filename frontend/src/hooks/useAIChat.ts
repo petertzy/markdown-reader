@@ -20,25 +20,15 @@ export function useAIChat() {
   const [error, setError] = useState<string | null>(null);
 
   const sendMessage = useCallback(
-    async (
-      userMessage: string,
-      documentText = "",
-      selectedText = ""
-    ) => {
+    async (userMessage: string, documentText = "", selectedText = "") => {
       if (!userMessage.trim()) return;
 
-      const userMsg: ChatMessage = {
-        id: msgId(),
-        role: "user",
-        content: userMessage,
-      };
-
+      const userMsg: ChatMessage = { id: msgId(), role: "user", content: userMessage };
       setMessages((prev) => [...prev, userMsg]);
       setLoading(true);
       setError(null);
 
       const history = messages.map((m) => ({ role: m.role, content: m.content }));
-
       const payload: AgentChatPayload = {
         message: userMessage,
         document_text: documentText,
@@ -58,8 +48,7 @@ export function useAIChat() {
         setMessages((prev) => [...prev, assistantMsg]);
         return result;
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        setError(msg);
+        setError(err instanceof Error ? err.message : String(err));
       } finally {
         setLoading(false);
       }
@@ -67,10 +56,44 @@ export function useAIChat() {
     [messages]
   );
 
+  const translate = useCallback(
+    async (
+      content: string,
+      sourceLang: string,
+      targetLang: string
+    ): Promise<string | null> => {
+      setLoading(true);
+      setError(null);
+      const userMsg: ChatMessage = {
+        id: msgId(),
+        role: "user",
+        content: `Translate ${sourceLang === "auto" ? "" : `from ${sourceLang} `}to ${targetLang}:\n\n${content.slice(0, 120)}${content.length > 120 ? "…" : ""}`,
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      try {
+        const result = await AI.translate(content, sourceLang, targetLang);
+        const assistantMsg: ChatMessage = {
+          id: msgId(),
+          role: "assistant",
+          content: `Translation complete (→ ${targetLang}).`,
+          proposedAction: { type: "replace_document", content: result.translated, reason: "translated" },
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+        return result.translated;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
   const clearHistory = useCallback(() => {
     setMessages([]);
     setError(null);
   }, []);
 
-  return { messages, loading, error, sendMessage, clearHistory };
+  return { messages, loading, error, sendMessage, translate, clearHistory };
 }
