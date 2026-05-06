@@ -189,7 +189,11 @@ export default function AIPanel({
 
   const insertBelow = () => {
     if (translatedPreview && onApplyAction) {
-      onApplyAction("insert_below", translatedPreview);
+      const actionType =
+        translateScope === "selection" && selectedText
+          ? "insert_below_selection"
+          : "insert_below_document";
+      onApplyAction(actionType, translatedPreview);
       setTranslatedPreview(null);
     }
   };
