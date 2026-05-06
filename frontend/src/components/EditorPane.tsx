@@ -48,6 +48,7 @@ export default function EditorPane({ value, onChange, darkMode, fontSize, onMoun
           glyphMargin: false,
           overviewRulerLanes: 0,
           quickSuggestions: false,
+          automaticLayout: true,
         }}
       />
     </div>
