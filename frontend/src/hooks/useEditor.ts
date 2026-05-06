@@ -87,20 +87,18 @@ export function useEditor() {
     (value: string | undefined) => {
       if (typeof value !== "string") return;
       const v = value;
-      let changed = false;
+      if (activeTab.content === v) return;
 
       setTabs((prev) =>
         prev.map((t) => {
           if (t.id !== activeTabId) return t;
-          if (t.content === v) return t;
-          changed = true;
           return { ...t, content: v, dirty: true };
         })
       );
 
-      if (changed) refreshPreview(v);
+      refreshPreview(v, activeTab.filePath ?? undefined);
     },
-    [activeTabId, refreshPreview]
+    [activeTab.content, activeTab.filePath, activeTabId, refreshPreview]
   );
 
   // ── file ops ───────────────────────────────────────────────────────────────

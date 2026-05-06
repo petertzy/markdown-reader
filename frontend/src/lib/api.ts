@@ -221,8 +221,32 @@ export type AgentResponse = {
   used_provider: string;
 };
 
+export type AIProviderInfo = {
+  display_name: string;
+  env_var: string;
+  model: string;
+  default_models: string[];
+  key_configured: boolean;
+};
+
+export type OpenAICompatibleBaseUrlOption = {
+  key: string;
+  label: string;
+  url: string;
+};
+
+export type AISettings = {
+  ai_provider: string;
+  ai_models?: Record<string, string>;
+  providers: Record<string, AIProviderInfo>;
+  provider_order: string[];
+  openai_compatible_base_url_choice: string;
+  openai_compatible_base_url_options: OpenAICompatibleBaseUrlOption[];
+  secure_key_storage_available: boolean;
+};
+
 export const AI = {
-  getSettings: () => apiFetch<Record<string, unknown>>("/api/ai/settings"),
+  getSettings: () => apiFetch<AISettings>("/api/ai/settings"),
 
   setProvider: (provider: string) =>
     apiFetch<{ provider: string }>(
@@ -251,6 +275,18 @@ export const AI = {
   getModels: (provider: string, base_url_override = "") =>
     apiFetch<{ provider: string; models: string[] }>(
       `/api/ai/models/${provider}${base_url_override ? `?base_url_override=${encodeURIComponent(base_url_override)}` : ""}`
+    ),
+
+  fetchModelsWithKey: (provider: string, api_key: string, base_url_override = "") =>
+    apiFetch<{ provider: string; models: string[] }>("/api/ai/models", {
+      method: "POST",
+      body: JSON.stringify({ provider, api_key, base_url_override }),
+    }),
+
+  setOpenAICompatibleBaseUrlChoice: (choice_key: string) =>
+    apiFetch<{ choice: string }>(
+      "/api/ai/settings/openai-compatible/base-url-choice",
+      { method: "POST", body: JSON.stringify({ choice_key }) }
     ),
 
   chat: (payload: AgentChatPayload) =>

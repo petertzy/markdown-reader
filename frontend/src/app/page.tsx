@@ -71,10 +71,8 @@ export default function HomePage() {
   const editor = useEditor();
   const [showPreview] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(false);
-  const isLikelyTauriRuntime = isLikelyDesktopRuntime();
-  const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">(
-    isLikelyTauriRuntime ? "starting" : "ready"
-  );
+  const [isLikelyTauriRuntime, setIsLikelyTauriRuntime] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">("ready");
   const [backendMessage, setBackendMessage] = useState<string | null>(null);
   const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const dragCounterRef = useRef(0);
@@ -93,10 +91,12 @@ export default function HomePage() {
   // Warm the packaged sidecar on mount so the first user action is not silent.
   useEffect(() => {
     let cancelled = false;
+    const detectedTauriRuntime = isLikelyDesktopRuntime();
+    setIsLikelyTauriRuntime(detectedTauriRuntime);
 
     async function initialiseBackend() {
       try {
-        if (isLikelyTauriRuntime) {
+        if (detectedTauriRuntime) {
           setBackendStatus("starting");
           await getBaseUrl();
         }
@@ -241,6 +241,10 @@ export default function HomePage() {
     (type: string, content: string) => {
       if (type === "replace_document") {
         editor.handleContentChange(content);
+      } else if (type === "insert_below_document") {
+        const currentContent = editor.activeTab.content;
+        const separator = currentContent.endsWith("\n") ? "\n" : "\n\n";
+        editor.handleContentChange(`${currentContent}${separator}${content}`);
       } else if (type === "replace_selection") {
         const mono = monacoRef.current;
         if (mono) {
@@ -250,6 +254,27 @@ export default function HomePage() {
           } else {
             editor.handleContentChange(content);
           }
+        }
+      } else if (type === "insert_below_selection" || type === "insert_below") {
+        const mono = monacoRef.current;
+        const model = mono?.getModel();
+        const sel = mono?.getSelection();
+        if (mono && model && sel && !sel.isEmpty()) {
+          const selectedText = model.getValueInRange(sel);
+          const separator = selectedText.endsWith("\n") ? "\n" : "\n\n";
+          const range = {
+            startLineNumber: sel.endLineNumber,
+            startColumn: sel.endColumn,
+            endLineNumber: sel.endLineNumber,
+            endColumn: sel.endColumn,
+          };
+          mono.executeEdits("ai-insert-below", [
+            { range, text: `${separator}${content}` },
+          ]);
+        } else {
+          const currentContent = editor.activeTab.content;
+          const separator = currentContent.endsWith("\n") ? "\n" : "\n\n";
+          editor.handleContentChange(`${currentContent}${separator}${content}`);
         }
       }
     },
