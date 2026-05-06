@@ -33,6 +33,7 @@ export default function AIPanel({
   const [settings, setSettings] = useState<AISettings | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [modelsFetching, setModelsFetching] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [provider, setProvider] = useState("openai_compatible");
   const [baseUrlChoice, setBaseUrlChoice] = useState("navidia");
@@ -62,7 +63,7 @@ export default function AIPanel({
     setProvider(nextProvider);
     setBaseUrlChoice(nextSettings.openai_compatible_base_url_choice || "navidia");
     setModel(nextModel);
-    setModelOptions(nextSettings.providers[nextProvider]?.default_models ?? []);
+    setModelOptions(Array.from(new Set(nextSettings.providers[nextProvider]?.default_models ?? [])));
     setApiKey("");
   };
 
@@ -84,22 +85,27 @@ export default function AIPanel({
         ? settings?.openai_compatible_base_url_options.find((item) => item.key === nextBaseChoice)?.url ?? ""
         : "";
     setSettingsMessage(null);
+    setModelsFetching(true);
     try {
       const result = apiKey.trim()
         ? await AI.fetchModelsWithKey(nextProvider, apiKey.trim(), baseUrl)
         : await AI.getModels(nextProvider, baseUrl);
-      setModelOptions(result.models);
-      if (result.models.length > 0 && !result.models.includes(model)) {
-        setModel(result.models[0]);
+      const models = Array.from(new Set(result.models));
+      setModelOptions(models);
+      if (models.length > 0 && !models.includes(model)) {
+        setModel(models[0]);
       }
+      setSettingsMessage(`${models.length} models available.`);
     } catch (err) {
       setSettingsMessage(err instanceof Error ? err.message : String(err));
+    } finally {
+      setModelsFetching(false);
     }
   };
 
   const handleProviderChange = (nextProvider: string) => {
     setProvider(nextProvider);
-    const nextModels = settings?.providers[nextProvider]?.default_models ?? [];
+    const nextModels = Array.from(new Set(settings?.providers[nextProvider]?.default_models ?? []));
     setModelOptions(nextModels);
     setModel(settings?.providers[nextProvider]?.model || nextModels[0] || "");
     setApiKey("");
@@ -420,24 +426,28 @@ export default function AIPanel({
 
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-500 dark:text-gray-400">Model</label>
-                <input
+                <select
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
-                  list="ai-model-options"
                   className="text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
-                />
-                <datalist id="ai-model-options">
+                >
+                  {model && !modelOptions.includes(model) && (
+                    <option value={model}>{model}</option>
+                  )}
                   {modelOptions.map((item) => (
-                    <option key={item} value={item} />
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
                   ))}
-                </datalist>
+                </select>
               </div>
 
               <button
                 onClick={() => { void refreshModelOptions(); }}
-                className="py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-[#2d2d2d] text-gray-700 dark:text-gray-300"
+                disabled={modelsFetching}
+                className="py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-[#2d2d2d] text-gray-700 dark:text-gray-300 disabled:opacity-40"
               >
-                Fetch Models
+                {modelsFetching ? "Fetching..." : "Fetch Models"}
               </button>
 
               <div className="flex flex-col gap-1">
