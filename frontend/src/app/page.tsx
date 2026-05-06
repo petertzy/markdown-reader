@@ -14,7 +14,7 @@ import TabBar from "@/components/TabBar";
 import Toolbar from "@/components/Toolbar";
 import EditorPane from "@/components/EditorPane";
 import PreviewPane from "@/components/PreviewPane";
-import AIPanel, { type Tab as AIPanelTab } from "@/components/AIPanel";
+import AIPanel from "@/components/AIPanel";
 import StatusBar from "@/components/StatusBar";
 import { Export, Files, getBaseUrl, type ExportPayload } from "@/lib/api";
 
@@ -71,8 +71,6 @@ export default function HomePage() {
   const editor = useEditor();
   const [showPreview] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(false);
-  const [requestedAITab, setRequestedAITab] = useState<AIPanelTab>("chat");
-  const [aiTabRequestId, setAITabRequestId] = useState(0);
   const [isLikelyTauriRuntime, setIsLikelyTauriRuntime] = useState(false);
   const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">("ready");
   const [backendMessage, setBackendMessage] = useState<string | null>(null);
@@ -283,12 +281,6 @@ export default function HomePage() {
     [editor]
   );
 
-  const openAITab = useCallback((tab: AIPanelTab) => {
-    setRequestedAITab(tab);
-    setAITabRequestId((value) => value + 1);
-    setShowAIPanel(true);
-  }, []);
-
   const getSelectedText = () => {
     const mono = monacoRef.current;
     if (!mono) return "";
@@ -475,12 +467,7 @@ export default function HomePage() {
           onSaveFile={() => { void handleSaveFile(); }}
           onExport={handleExport}
           onToggleDark={() => editor.setDarkMode((d) => !d)}
-          onToggleAIPanel={() => {
-            setRequestedAITab("chat");
-            setAITabRequestId((value) => value + 1);
-            setShowAIPanel((v) => !v);
-          }}
-          onOpenAISettings={() => openAITab("settings")}
+          onToggleAIPanel={() => setShowAIPanel((v) => !v)}
           darkMode={editor.darkMode}
           fontSize={editor.fontSize}
           onFontSizeChange={editor.setFontSize}
@@ -531,8 +518,6 @@ export default function HomePage() {
             documentText={editor.activeTab.content}
             selectedText={getSelectedText()}
             onApplyAction={handleAIApplyAction}
-            requestedTab={requestedAITab}
-            tabRequestId={aiTabRequestId}
           />
         )}
       </div>

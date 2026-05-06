@@ -8,8 +8,6 @@ type Props = {
   documentText: string;
   selectedText?: string;
   onApplyAction?: (type: string, content: string) => void;
-  requestedTab?: Tab;
-  tabRequestId?: number;
 };
 
 const LANGUAGES = [
@@ -18,17 +16,15 @@ const LANGUAGES = [
   "Italian", "Dutch", "Polish", "Turkish",
 ];
 
-export type Tab = "chat" | "translate" | "settings";
+type Tab = "chat" | "translate" | "settings";
 
 export default function AIPanel({
   documentText,
   selectedText = "",
   onApplyAction,
-  requestedTab,
-  tabRequestId = 0,
 }: Props) {
   const { messages, loading, error, sendMessage, translate, clearHistory } = useAIChat();
-  const [tab, setTab] = useState<Tab>(requestedTab ?? "chat");
+  const [tab, setTab] = useState<Tab>("chat");
   const [input, setInput] = useState("");
   const [sourceLang, setSourceLang] = useState("Auto Detect");
   const [targetLang, setTargetLang] = useState("English");
@@ -48,10 +44,6 @@ export default function AIPanel({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  useEffect(() => {
-    if (requestedTab) setTab(requestedTab);
-  }, [requestedTab, tabRequestId]);
 
   useEffect(() => {
     if (tab !== "settings" || settings) return;
