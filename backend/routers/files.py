@@ -7,9 +7,11 @@ File system CRUD endpoints + recent-files management.
 from __future__ import annotations
 
 import base64
+import json
 import os
 import sys
 import tempfile
+from importlib import import_module
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
@@ -19,24 +21,71 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from markdown_reader.logic import (
-    APP_SETTINGS_FILE_PATH,
-    convert_html_to_markdown,
-    convert_pdf_to_markdown,
-)
-from markdown_reader.recent_files import RecentFilesManager
-
 router = APIRouter()
 
-# Singleton recent-files manager (shared across requests)
-_recent: RecentFilesManager | None = None
+_RECENT_FILES_KEY = "recent_files"
+_MAX_RECENT_FILES = 10
 
 
-def _get_recent() -> RecentFilesManager:
-    global _recent
-    if _recent is None:
-        _recent = RecentFilesManager(str(APP_SETTINGS_FILE_PATH))
-    return _recent
+def _settings_file_path() -> Path:
+    """Return the shared desktop settings file path without importing legacy UI code."""
+    if sys.platform == "darwin":
+        base_dir = Path.home() / "Library" / "Application Support" / "MarkdownReader"
+    elif sys.platform.startswith("win"):
+        appdata = os.environ.get("APPDATA", "").strip()
+        base_dir = (
+            Path(appdata) / "MarkdownReader"
+            if appdata
+            else Path.home() / "AppData" / "Roaming" / "MarkdownReader"
+        )
+    else:
+        base_dir = Path.home() / ".config" / "markdown-reader"
+    return base_dir / "settings.json"
+
+
+def _read_settings() -> dict:
+    path = _settings_file_path()
+    if not path.exists():
+        return {}
+    try:
+        with open(path, encoding="utf-8") as file_obj:
+            data = json.load(file_obj)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _write_settings(data: dict) -> None:
+    path = _settings_file_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as file_obj:
+            json.dump(data, file_obj, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, path)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _get_recent_entries() -> list[str]:
+    settings = _read_settings()
+    entries = settings.get(_RECENT_FILES_KEY, [])
+    if not isinstance(entries, list):
+        return []
+    return [
+        entry for entry in entries if isinstance(entry, str) and os.path.exists(entry)
+    ][:_MAX_RECENT_FILES]
+
+
+def _set_recent_entries(entries: list[str]) -> list[str]:
+    settings = _read_settings()
+    settings[_RECENT_FILES_KEY] = entries[:_MAX_RECENT_FILES]
+    _write_settings(settings)
+    return settings[_RECENT_FILES_KEY]
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -116,7 +165,7 @@ def _docx_paragraph_to_markdown(paragraph) -> str:
 
 def _convert_docx_to_markdown(path: str) -> str:
     try:
-        from docx import Document
+        Document = import_module("docx").Document
     except ImportError as exc:
         raise RuntimeError("python-docx is required to convert DOCX files.") from exc
 
@@ -147,11 +196,15 @@ def _convert_local_file_to_markdown(path: str, filename: str | None = None) -> s
             return file_obj.read()
 
     if ext in {".html", ".htm"}:
+        logic = import_module("markdown_reader.logic")
+
         with open(path, encoding="utf-8", errors="replace") as file_obj:
-            return convert_html_to_markdown(file_obj.read())
+            return logic.convert_html_to_markdown(file_obj.read())
 
     if ext == ".pdf":
-        return convert_pdf_to_markdown(path)
+        logic = import_module("markdown_reader.logic")
+
+        return logic.convert_pdf_to_markdown(path)
 
     if ext == ".docx":
         return _convert_docx_to_markdown(path)
@@ -254,18 +307,20 @@ def list_files(
 @router.get("/recent")
 def get_recent_files():
     """Return the most-recently-opened file paths."""
-    return {"entries": _get_recent().entries}
+    return {"entries": _get_recent_entries()}
 
 
 @router.post("/recent")
 def add_recent_file(path: str = Query(...)):
     """Record a file as most-recently-opened."""
-    _get_recent().push(path)
-    return {"entries": _get_recent().entries}
+    normalized = os.path.normpath(os.path.abspath(path))
+    entries = [entry for entry in _get_recent_entries() if entry != normalized]
+    entries.insert(0, normalized)
+    return {"entries": _set_recent_entries(entries)}
 
 
 @router.delete("/recent")
 def clear_recent_files():
     """Clear all recent-file entries."""
-    _get_recent().clear()
+    _set_recent_entries([])
     return {"entries": []}

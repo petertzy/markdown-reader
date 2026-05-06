@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import sys
+from importlib import import_module
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -17,12 +18,7 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from backend.renderer import render_markdown
-from markdown_reader.logic import (
-    convert_html_to_markdown,
-    convert_pdf_to_markdown,
-    convert_pdf_to_markdown_docling,
-)
-from markdown_reader.word_count_bar import _count_words, _reading_time, _strip_markdown
+from backend.word_count import count_words, reading_time, strip_markdown
 
 router = APIRouter()
 
@@ -66,8 +62,10 @@ def render(payload: RenderPayload):
 @router.post("/convert/html")
 def html_to_markdown(payload: HtmlToMarkdownPayload):
     """Convert an HTML string to Markdown."""
+    logic = import_module("markdown_reader.logic")
+
     try:
-        result = convert_html_to_markdown(payload.html)
+        result = logic.convert_html_to_markdown(payload.html)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return {"markdown": result}
@@ -76,13 +74,15 @@ def html_to_markdown(payload: HtmlToMarkdownPayload):
 @router.post("/convert/pdf")
 def pdf_to_markdown(payload: PdfToMarkdownPayload):
     """Convert a local PDF file to Markdown."""
+    logic = import_module("markdown_reader.logic")
+
     if not os.path.isfile(payload.path):
         raise HTTPException(status_code=404, detail=f"File not found: {payload.path}")
     try:
         if payload.use_docling:
-            result = convert_pdf_to_markdown_docling(payload.path)
+            result = logic.convert_pdf_to_markdown_docling(payload.path)
         else:
-            result = convert_pdf_to_markdown(payload.path)
+            result = logic.convert_pdf_to_markdown(payload.path)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return {"markdown": result}
@@ -91,8 +91,8 @@ def pdf_to_markdown(payload: PdfToMarkdownPayload):
 @router.post("/wordcount")
 def word_count(payload: RenderPayload):
     """Return word count statistics for the given Markdown text."""
-    stripped = _strip_markdown(payload.content)
-    words = _count_words(stripped)
+    stripped = strip_markdown(payload.content)
+    words = count_words(stripped)
     chars_with = len(payload.content)
     chars_without = len(
         payload.content.replace(" ", "").replace("\n", "").replace("\t", "")
@@ -101,5 +101,5 @@ def word_count(payload: RenderPayload):
         "words": words,
         "chars_with_spaces": chars_with,
         "chars_without_spaces": chars_without,
-        "reading_time": _reading_time(words),
+        "reading_time": reading_time(words),
     }

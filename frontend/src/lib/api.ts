@@ -31,7 +31,8 @@ let _resolvedBaseUrl: string | null = null;
 
 /**
  * Returns the backend base URL, resolving it once and caching the result.
- * In Tauri the first call may take up to ~5 s while the sidecar starts.
+ * In Tauri the first call may take several seconds while the packaged sidecar
+ * unpacks and starts.
  */
 export async function getBaseUrl(): Promise<string> {
   if (_resolvedBaseUrl) return _resolvedBaseUrl;

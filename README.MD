@@ -115,7 +115,7 @@ npm install -D @tauri-apps/cli @tauri-apps/api
 
 ```bash
 cd ..
-uv run pyinstaller -F -n markdown-reader-backend backend/main.py
+uv run pyinstaller markdown-reader-backend.spec
 ```
 
 ### 3) Copy sidecar binary into Tauri

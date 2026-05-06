@@ -16,7 +16,7 @@ import EditorPane from "@/components/EditorPane";
 import PreviewPane from "@/components/PreviewPane";
 import AIPanel from "@/components/AIPanel";
 import StatusBar from "@/components/StatusBar";
-import { Export, Files, type ExportPayload } from "@/lib/api";
+import { Export, Files, getBaseUrl, type ExportPayload } from "@/lib/api";
 
 const OPEN_FILE_EXTENSIONS = ["md", "markdown", "txt", "html", "htm", "pdf", "docx"];
 const CONVERTIBLE_EXTENSIONS = new Set(["html", "htm", "pdf", "docx"]);
@@ -57,10 +57,25 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function isLikelyDesktopRuntime() {
+  return (
+    typeof window !== "undefined" &&
+    ("__TAURI_INTERNALS__" in window ||
+      "__TAURI__" in window ||
+      window.location.hostname === "tauri.localhost" ||
+      window.navigator.userAgent.includes("Tauri"))
+  );
+}
+
 export default function HomePage() {
   const editor = useEditor();
   const [showPreview] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(false);
+  const isLikelyTauriRuntime = isLikelyDesktopRuntime();
+  const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">(
+    isLikelyTauriRuntime ? "starting" : "ready"
+  );
+  const [backendMessage, setBackendMessage] = useState<string | null>(null);
   const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const dragCounterRef = useRef(0);
   const openFileRef = useRef(editor.openFile);
@@ -75,12 +90,36 @@ export default function HomePage() {
     }
   }, [editor]);
 
-  // Load recent files on mount and initialise preview
+  // Warm the packaged sidecar on mount so the first user action is not silent.
   useEffect(() => {
-    editor.loadRecentFiles();
-    if (editor.activeTab.content) {
-      editor.refreshPreview(editor.activeTab.content);
+    let cancelled = false;
+
+    async function initialiseBackend() {
+      try {
+        if (isLikelyTauriRuntime) {
+          setBackendStatus("starting");
+          await getBaseUrl();
+        }
+        if (cancelled) return;
+        setBackendStatus("ready");
+        setBackendMessage(null);
+        await editor.loadRecentFiles();
+        if (!cancelled && editor.activeTab.content) {
+          editor.refreshPreview(editor.activeTab.content);
+        }
+      } catch (err) {
+        console.error(err);
+        if (!cancelled) {
+          setBackendStatus("error");
+          setBackendMessage(err instanceof Error ? err.message : String(err));
+        }
+      }
     }
+
+    void initialiseBackend();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -100,14 +139,10 @@ export default function HomePage() {
   // the native dialog directly without the Tauri API.  In Tauri mode this
   // would be replaced by window.__TAURI__.dialog.open().
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isLikelyTauriRuntime =
-    typeof window !== "undefined" &&
-    ("__TAURI_INTERNALS__" in window ||
-      "__TAURI__" in window ||
-      window.location.hostname === "tauri.localhost" ||
-      window.navigator.userAgent.includes("Tauri"));
 
   const handleOpenFile = useCallback(async () => {
+    if (isLikelyTauriRuntime && backendStatus !== "ready") return;
+
     let filePath: string | null = null;
 
     try {
@@ -138,7 +173,7 @@ export default function HomePage() {
     } catch (err) {
       alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [editor, isLikelyTauriRuntime]);
+  }, [backendStatus, editor, isLikelyTauriRuntime]);
 
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -412,6 +447,8 @@ export default function HomePage() {
           fontSize={editor.fontSize}
           onFontSizeChange={editor.setFontSize}
           showAIPanel={showAIPanel}
+          backendStatus={backendStatus}
+          backendMessage={backendMessage}
         />
         {/* Recent files trigger sits inside a relative container in Toolbar, but
             we render the dropdown here at page level for simplicity */}
@@ -442,7 +479,13 @@ export default function HomePage() {
         />
 
         {/* Preview */}
-        {showPreview && <PreviewPane html={editor.previewHtml} />}
+        {showPreview && (
+          <PreviewPane
+            html={editor.previewHtml}
+            loading={isLikelyTauriRuntime && backendStatus === "starting"}
+            error={backendStatus === "error" ? backendMessage : null}
+          />
+        )}
 
         {/* AI Panel */}
         {showAIPanel && (

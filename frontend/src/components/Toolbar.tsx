@@ -16,6 +16,8 @@ type Props = {
   fontSize: number;
   onFontSizeChange: (size: number) => void;
   showAIPanel: boolean;
+  backendStatus?: "starting" | "ready" | "error";
+  backendMessage?: string | null;
 };
 
 export default function Toolbar({
@@ -28,14 +30,20 @@ export default function Toolbar({
   fontSize,
   onFontSizeChange,
   showAIPanel,
+  backendStatus = "ready",
+  backendMessage = null,
 }: Props) {
+  const backendBusy = backendStatus === "starting";
+  const backendFailed = backendStatus === "error";
+  const backendDisabled = backendBusy || backendFailed;
+
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-[#252526] border-b border-gray-200 dark:border-gray-700 shrink-0 text-sm">
       {/* File ops */}
-      <button onClick={onOpenFile} className={btnCls} title="Open file">
+      <button onClick={onOpenFile} className={buttonClass(backendDisabled)} title="Open file" disabled={backendDisabled}>
         📂 Open
       </button>
-      <button onClick={onSaveFile} className={btnCls} title="Save (Ctrl+S)">
+      <button onClick={onSaveFile} className={buttonClass(backendDisabled)} title="Save (Ctrl+S)" disabled={backendDisabled}>
         💾 Save
       </button>
 
@@ -44,7 +52,7 @@ export default function Toolbar({
       {/* Export */}
       <span className="text-gray-400 text-xs">Export:</span>
       {(["html", "pdf", "docx"] as const).map((fmt) => (
-        <button key={fmt} onClick={() => onExport(fmt)} className={btnCls}>
+        <button key={fmt} onClick={() => onExport(fmt)} className={buttonClass(backendDisabled)} disabled={backendDisabled}>
           {fmt.toUpperCase()}
         </button>
       ))}
@@ -58,6 +66,17 @@ export default function Toolbar({
       <button onClick={() => onFontSizeChange(Math.min(32, fontSize + 1))} className={btnCls}>A+</button>
 
       <div className="flex-1" />
+
+      {backendBusy && (
+        <span className="text-xs text-amber-600 dark:text-amber-300 whitespace-nowrap">
+          Starting local engine...
+        </span>
+      )}
+      {backendFailed && (
+        <span className="text-xs text-red-600 dark:text-red-300 truncate max-w-[220px]" title={backendMessage ?? undefined}>
+          Local engine unavailable
+        </span>
+      )}
 
       {/* Toggles */}
       <button
@@ -76,3 +95,9 @@ export default function Toolbar({
 
 const btnCls =
   "px-2 py-0.5 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2d2d2d] transition-colors";
+
+function buttonClass(disabled: boolean) {
+  return disabled
+    ? `${btnCls} opacity-40 cursor-not-allowed hover:bg-transparent dark:hover:bg-transparent`
+    : btnCls;
+}

@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+from importlib import import_module
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -83,7 +84,8 @@ def download_html(payload: ExportPayload):
 def export_docx(payload: ExportPayload):
     """Export Markdown to DOCX and return the output file path."""
     from backend.renderer import render_markdown
-    from markdown_reader.plugins.docx_exporter import export_html_to_docx
+
+    docx_exporter = import_module("markdown_reader.plugins.docx_exporter")
 
     html = render_markdown(
         payload.content,
@@ -99,7 +101,7 @@ def export_docx(payload: ExportPayload):
         os.makedirs(parent, exist_ok=True)
 
     try:
-        export_html_to_docx(html, out_path, base_dir=payload.base_dir)
+        docx_exporter.export_html_to_docx(html, out_path, base_dir=payload.base_dir)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return {"path": out_path}
@@ -109,7 +111,8 @@ def export_docx(payload: ExportPayload):
 def export_pdf(payload: ExportPayload):
     """Export Markdown to PDF via WeasyPrint and return the output file path."""
     from backend.renderer import render_markdown
-    from markdown_reader.plugins.pdf_exporter import export_markdown_to_pdf
+
+    pdf_exporter = import_module("markdown_reader.plugins.pdf_exporter")
 
     html = render_markdown(
         payload.content,
@@ -124,7 +127,7 @@ def export_pdf(payload: ExportPayload):
     if parent:
         os.makedirs(parent, exist_ok=True)
     try:
-        export_markdown_to_pdf(html, out_path, base_url=payload.base_dir)
+        pdf_exporter.export_markdown_to_pdf(html, out_path, base_url=payload.base_dir)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return {"path": out_path}
