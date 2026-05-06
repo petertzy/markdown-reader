@@ -18,13 +18,12 @@ if _ROOT not in sys.path:
 
 import markdown2
 
-# Borrow pure helper functions from logic.py
-from markdown_reader.logic import (
-    _get_math_styles,
-    _get_mathjax_script,
-    _protect_math,
-    _restore_math,
+from backend.render_helpers import (
     fix_image_paths,
+    get_math_styles,
+    get_mathjax_script,
+    protect_math,
+    restore_math,
 )
 
 
@@ -63,7 +62,7 @@ def render_markdown(
         text = fix_image_paths(text, base_dir)
 
     # Protect math before markdown processing
-    protected, math_replacements = _protect_math(text)
+    protected, math_replacements = protect_math(text)
 
     try:
         html_content = markdown2.markdown(
@@ -75,7 +74,7 @@ def render_markdown(
                 "break-on-newline",
             ],
         )
-        html_content = _restore_math(html_content, math_replacements)
+        html_content = restore_math(html_content, math_replacements)
     except Exception:
         import traceback
 
@@ -116,7 +115,7 @@ def render_markdown(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    {_get_math_styles()}
+    {get_math_styles()}
     .copy-button {{
       position: absolute;
       top: 8px;
@@ -226,7 +225,7 @@ def render_markdown(
       }});
     }});
   </script>
-  {_get_mathjax_script()}
+  {get_mathjax_script()}
 </head>
 <body>
   {html_content}

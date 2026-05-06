@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import sys
+from importlib import import_module
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -17,33 +18,12 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from markdown_reader.logic import (
-    AI_PROVIDER_PRIORITY,
-    TranslationConfigError,
-    delete_secure_ai_api_key,
-    fetch_available_models,
-    get_ai_automation_task_templates,
-    get_ai_provider_display_name,
-    get_ai_provider_env_var,
-    get_ai_provider_model,
-    get_openai_compatible_base_url_choice,
-    get_openai_compatible_base_url_options,
-    get_openai_compatible_storage_key_name,
-    get_provider_default_models,
-    get_secure_ai_api_key,
-    load_ai_automation_logs,
-    load_ai_chat_histories,
-    load_persisted_ai_settings,
-    request_ai_agent_response,
-    save_ai_chat_histories,
-    set_ai_provider_model,
-    set_current_ai_provider,
-    set_openai_compatible_base_url_choice,
-    set_secure_ai_api_key,
-    translate_markdown_with_ai,
-)
-
 router = APIRouter()
+
+
+def _logic():
+    """Import the legacy AI logic only when an AI endpoint is used."""
+    return import_module("markdown_reader.logic")
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -82,15 +62,16 @@ class TranslatePayload(BaseModel):
 @router.get("/settings")
 def get_ai_settings():
     """Return all persisted AI provider settings."""
-    settings = load_persisted_ai_settings()
+    logic = _logic()
+    settings = logic.load_persisted_ai_settings() or {}
     # Augment with display names and env var names
-    for provider in AI_PROVIDER_PRIORITY:
+    for provider in logic.AI_PROVIDER_PRIORITY:
         settings.setdefault("providers", {})
         settings["providers"][provider] = {
-            "display_name": get_ai_provider_display_name(provider),
-            "env_var": get_ai_provider_env_var(provider),
-            "model": get_ai_provider_model(provider),
-            "default_models": get_provider_default_models(provider),
+            "display_name": logic.get_ai_provider_display_name(provider),
+            "env_var": logic.get_ai_provider_env_var(provider),
+            "model": logic.get_ai_provider_model(provider),
+            "default_models": logic.get_provider_default_models(provider),
         }
     return settings
 
@@ -98,64 +79,66 @@ def get_ai_settings():
 @router.post("/settings/provider")
 def set_provider(provider: str):
     """Set the active AI provider."""
-    if provider not in AI_PROVIDER_PRIORITY:
+    logic = _logic()
+    if provider not in logic.AI_PROVIDER_PRIORITY:
         raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
-    set_current_ai_provider(provider)
+    logic.set_current_ai_provider(provider)
     return {"provider": provider}
 
 
 @router.post("/settings/model")
 def set_model(payload: ProviderModelPayload):
     """Set the model for a given provider."""
-    set_ai_provider_model(payload.provider, payload.model)
+    _logic().set_ai_provider_model(payload.provider, payload.model)
     return {"provider": payload.provider, "model": payload.model}
 
 
 @router.post("/settings/apikey")
 def save_api_key(payload: ApiKeyPayload):
     """Store an API key securely for the given provider."""
-    set_secure_ai_api_key(payload.provider, payload.api_key)
+    _logic().set_secure_ai_api_key(payload.provider, payload.api_key)
     return {"provider": payload.provider, "saved": True}
 
 
 @router.delete("/settings/apikey/{provider}")
 def remove_api_key(provider: str):
     """Delete the stored API key for the given provider."""
-    delete_secure_ai_api_key(provider)
+    _logic().delete_secure_ai_api_key(provider)
     return {"provider": provider, "deleted": True}
 
 
 @router.get("/settings/openai-compatible/base-url-options")
 def openai_compatible_base_url_options():
-    return get_openai_compatible_base_url_options()
+    return _logic().get_openai_compatible_base_url_options()
 
 
 @router.get("/settings/openai-compatible/base-url-choice")
 def openai_compatible_base_url_choice():
-    return {"choice": get_openai_compatible_base_url_choice()}
+    return {"choice": _logic().get_openai_compatible_base_url_choice()}
 
 
 @router.post("/settings/openai-compatible/base-url-choice")
 def set_openai_compatible_base_url(payload: BaseUrlChoicePayload):
-    set_openai_compatible_base_url_choice(payload.choice_key)
+    _logic().set_openai_compatible_base_url_choice(payload.choice_key)
     return {"choice": payload.choice_key}
 
 
 @router.get("/models/{provider}")
 def get_models(provider: str, base_url_override: str = ""):
     """Fetch available models for a provider (live API call)."""
-    api_key = get_secure_ai_api_key(
-        get_openai_compatible_storage_key_name()
+    logic = _logic()
+    api_key = logic.get_secure_ai_api_key(
+        logic.get_openai_compatible_storage_key_name()
         if provider == "openai_compatible"
         else provider
     )
     try:
-        models = fetch_available_models(
+        models = logic.fetch_available_models(
             provider, api_key, base_url_override=base_url_override
         )
     except Exception:
         # Fall back to default list when the API is unreachable
-        models = get_provider_default_models(provider)
+        models = logic.get_provider_default_models(provider)
     return {"provider": provider, "models": models}
 
 
@@ -165,14 +148,15 @@ def get_models(provider: str, base_url_override: str = ""):
 @router.post("/chat")
 def ai_chat(payload: AgentChatPayload):
     """Send a message to the AI agent and return a structured response."""
+    logic = _logic()
     try:
-        result = request_ai_agent_response(
+        result = logic.request_ai_agent_response(
             payload.message,
             document_text=payload.document_text,
             selected_text=payload.selected_text,
             chat_history=payload.chat_history,
         )
-    except TranslationConfigError as exc:
+    except logic.TranslationConfigError as exc:
         raise HTTPException(
             status_code=422,
             detail={
@@ -189,26 +173,26 @@ def ai_chat(payload: AgentChatPayload):
 @router.get("/chat/history")
 def get_chat_history():
     """Load all persisted AI chat histories."""
-    return {"histories": load_ai_chat_histories()}
+    return {"histories": _logic().load_ai_chat_histories()}
 
 
 @router.post("/chat/history")
 def save_chat_history(histories: list[dict[str, Any]]):
     """Persist AI chat histories."""
-    save_ai_chat_histories(histories)
+    _logic().save_ai_chat_histories(histories)
     return {"saved": True}
 
 
 @router.get("/automation/templates")
 def automation_templates():
     """Return built-in AI automation task templates."""
-    return {"templates": get_ai_automation_task_templates()}
+    return {"templates": _logic().get_ai_automation_task_templates()}
 
 
 @router.get("/automation/logs")
 def automation_logs(limit: int = 100):
     """Return AI automation audit log entries."""
-    return {"logs": load_ai_automation_logs(limit=limit)}
+    return {"logs": _logic().load_ai_automation_logs(limit=limit)}
 
 
 # ── Translation endpoint ───────────────────────────────────────────────────────
@@ -216,14 +200,18 @@ def automation_logs(limit: int = 100):
 
 @router.post("/translate")
 def translate(payload: TranslatePayload):
+    logic = _logic()
     try:
-        result = translate_markdown_with_ai(
+        result = logic.translate_markdown_with_ai(
             payload.content, payload.source_language, payload.target_language
         )
-    except TranslationConfigError as exc:
+    except logic.TranslationConfigError as exc:
         raise HTTPException(
             status_code=422,
-            detail={"message": str(exc), "provider": getattr(exc, "provider_name", None)},
+            detail={
+                "message": str(exc),
+                "provider": getattr(exc, "provider_name", None),
+            },
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -231,6 +219,8 @@ def translate(payload: TranslatePayload):
     if isinstance(result, tuple):
         result = result[0]
     if isinstance(result, dict):
-        result = result.get("translated_markdown") or result.get("translated") or str(result)
+        result = (
+            result.get("translated_markdown") or result.get("translated") or str(result)
+        )
 
     return {"translated": result}
