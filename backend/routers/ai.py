@@ -43,6 +43,12 @@ class BaseUrlChoicePayload(BaseModel):
     choice_key: str
 
 
+class FetchModelsPayload(BaseModel):
+    provider: str
+    api_key: str = ""
+    base_url_override: str = ""
+
+
 class AgentChatPayload(BaseModel):
     message: str
     document_text: str = ""
@@ -63,16 +69,38 @@ class TranslatePayload(BaseModel):
 def get_ai_settings():
     """Return all persisted AI provider settings."""
     logic = _logic()
-    settings = logic.load_persisted_ai_settings() or {}
-    # Augment with display names and env var names
+    logic.load_persisted_ai_settings()
+    settings = logic._load_app_settings()
+    providers = {}
     for provider in logic.AI_PROVIDER_PRIORITY:
-        settings.setdefault("providers", {})
-        settings["providers"][provider] = {
+        key_slot = provider
+        env_var = logic.get_ai_provider_env_var(provider)
+        if provider == "openai_compatible":
+            choice = logic.get_openai_compatible_base_url_choice()
+            key_slot = logic.get_openai_compatible_storage_key_name(choice)
+            env_var = logic.get_openai_compatible_env_var(choice)
+        providers[provider] = {
             "display_name": logic.get_ai_provider_display_name(provider),
-            "env_var": logic.get_ai_provider_env_var(provider),
+            "env_var": env_var,
             "model": logic.get_ai_provider_model(provider),
             "default_models": logic.get_provider_default_models(provider),
+            "key_configured": bool(
+                (os.getenv(env_var, "").strip() if env_var else "")
+                or logic.get_secure_ai_api_key(key_slot)
+            ),
         }
+    settings["providers"] = providers
+    settings["provider_order"] = list(logic.AI_PROVIDER_PRIORITY)
+    settings["ai_provider"] = logic._normalize_provider_name(
+        os.getenv("AI_PROVIDER", "") or settings.get("ai_provider", "")
+    )
+    settings["openai_compatible_base_url_choice"] = (
+        logic.get_openai_compatible_base_url_choice()
+    )
+    settings["openai_compatible_base_url_options"] = (
+        logic.get_openai_compatible_base_url_options()
+    )
+    settings["secure_key_storage_available"] = logic.is_secure_key_storage_available()
     return settings
 
 
@@ -96,7 +124,11 @@ def set_model(payload: ProviderModelPayload):
 @router.post("/settings/apikey")
 def save_api_key(payload: ApiKeyPayload):
     """Store an API key securely for the given provider."""
-    _logic().set_secure_ai_api_key(payload.provider, payload.api_key)
+    logic = _logic()
+    provider = payload.provider
+    if provider == "openai_compatible":
+        provider = logic.get_openai_compatible_storage_key_name()
+    logic.set_secure_ai_api_key(provider, payload.api_key)
     return {"provider": payload.provider, "saved": True}
 
 
@@ -127,11 +159,15 @@ def set_openai_compatible_base_url(payload: BaseUrlChoicePayload):
 def get_models(provider: str, base_url_override: str = ""):
     """Fetch available models for a provider (live API call)."""
     logic = _logic()
-    api_key = logic.get_secure_ai_api_key(
-        logic.get_openai_compatible_storage_key_name()
-        if provider == "openai_compatible"
-        else provider
-    )
+    key_slot = provider
+    if provider == "openai_compatible":
+        key_slot = logic.get_openai_compatible_storage_key_name()
+        override = (base_url_override or "").strip()
+        for option in logic.get_openai_compatible_base_url_options():
+            if override.rstrip("/") == str(option["url"]).rstrip("/"):
+                key_slot = logic.get_openai_compatible_storage_key_name(option["key"])
+                break
+    api_key = logic.get_secure_ai_api_key(key_slot)
     try:
         models = logic.fetch_available_models(
             provider, api_key, base_url_override=base_url_override
@@ -140,6 +176,23 @@ def get_models(provider: str, base_url_override: str = ""):
         # Fall back to default list when the API is unreachable
         models = logic.get_provider_default_models(provider)
     return {"provider": provider, "models": models}
+
+
+@router.post("/models")
+def fetch_models_with_key(payload: FetchModelsPayload):
+    """Fetch available models using a supplied key without persisting it."""
+    logic = _logic()
+    try:
+        models = logic.fetch_available_models(
+            payload.provider,
+            payload.api_key,
+            base_url_override=payload.base_url_override,
+        )
+    except Exception:
+        models = logic.get_provider_default_models(
+            payload.provider, base_url_override=payload.base_url_override
+        )
+    return {"provider": payload.provider, "models": models}
 
 
 # ── Chat / automation endpoints ────────────────────────────────────────────────

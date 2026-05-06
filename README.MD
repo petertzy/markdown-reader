@@ -166,6 +166,26 @@ Interactive docs (dev mode):
 
 ---
 
+## AI Provider Configuration
+
+AI features can be configured from the app toolbar via `AI Settings`, or from
+the `Settings` tab inside the AI panel.
+
+Supported providers:
+
+- OpenAI Compatible
+- OpenRouter
+- OpenAI
+- Anthropic
+
+The settings UI lets users choose the active provider, select a model, fetch
+available models, save or delete API keys, and choose an OpenAI Compatible base
+URL preset when applicable. Provider and model choices are saved in the
+per-user settings file, while API keys are saved through the system credential
+store when available.
+
+---
+
 ## Notes About Ports
 
 - In development mode, fixed ports (`3000` and `8000`) are used for convenience.

@@ -12,6 +12,7 @@ type Props = {
   onExport: (format: "html" | "pdf" | "docx") => void;
   onToggleDark: () => void;
   onToggleAIPanel: () => void;
+  onOpenAISettings: () => void;
   darkMode: boolean;
   fontSize: number;
   onFontSizeChange: (size: number) => void;
@@ -26,6 +27,7 @@ export default function Toolbar({
   onExport,
   onToggleDark,
   onToggleAIPanel,
+  onOpenAISettings,
   darkMode,
   fontSize,
   onFontSizeChange,
@@ -85,6 +87,9 @@ export default function Toolbar({
         title="AI Assistant"
       >
         🤖 AI
+      </button>
+      <button onClick={onOpenAISettings} className={btnCls} title="AI provider settings">
+        AI Settings
       </button>
       <button onClick={onToggleDark} className={btnCls} title="Toggle dark mode">
         {darkMode ? "☀️" : "🌙"}

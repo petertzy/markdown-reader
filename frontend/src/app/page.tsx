@@ -14,7 +14,7 @@ import TabBar from "@/components/TabBar";
 import Toolbar from "@/components/Toolbar";
 import EditorPane from "@/components/EditorPane";
 import PreviewPane from "@/components/PreviewPane";
-import AIPanel from "@/components/AIPanel";
+import AIPanel, { type Tab as AIPanelTab } from "@/components/AIPanel";
 import StatusBar from "@/components/StatusBar";
 import { Export, Files, getBaseUrl, type ExportPayload } from "@/lib/api";
 
@@ -71,10 +71,10 @@ export default function HomePage() {
   const editor = useEditor();
   const [showPreview] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(false);
-  const isLikelyTauriRuntime = isLikelyDesktopRuntime();
-  const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">(
-    isLikelyTauriRuntime ? "starting" : "ready"
-  );
+  const [requestedAITab, setRequestedAITab] = useState<AIPanelTab>("chat");
+  const [aiTabRequestId, setAITabRequestId] = useState(0);
+  const [isLikelyTauriRuntime, setIsLikelyTauriRuntime] = useState(false);
+  const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">("ready");
   const [backendMessage, setBackendMessage] = useState<string | null>(null);
   const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const dragCounterRef = useRef(0);
@@ -93,10 +93,12 @@ export default function HomePage() {
   // Warm the packaged sidecar on mount so the first user action is not silent.
   useEffect(() => {
     let cancelled = false;
+    const detectedTauriRuntime = isLikelyDesktopRuntime();
+    setIsLikelyTauriRuntime(detectedTauriRuntime);
 
     async function initialiseBackend() {
       try {
-        if (isLikelyTauriRuntime) {
+        if (detectedTauriRuntime) {
           setBackendStatus("starting");
           await getBaseUrl();
         }
@@ -255,6 +257,12 @@ export default function HomePage() {
     },
     [editor]
   );
+
+  const openAITab = useCallback((tab: AIPanelTab) => {
+    setRequestedAITab(tab);
+    setAITabRequestId((value) => value + 1);
+    setShowAIPanel(true);
+  }, []);
 
   const getSelectedText = () => {
     const mono = monacoRef.current;
@@ -442,7 +450,12 @@ export default function HomePage() {
           onSaveFile={() => { void handleSaveFile(); }}
           onExport={handleExport}
           onToggleDark={() => editor.setDarkMode((d) => !d)}
-          onToggleAIPanel={() => setShowAIPanel((v) => !v)}
+          onToggleAIPanel={() => {
+            setRequestedAITab("chat");
+            setAITabRequestId((value) => value + 1);
+            setShowAIPanel((v) => !v);
+          }}
+          onOpenAISettings={() => openAITab("settings")}
           darkMode={editor.darkMode}
           fontSize={editor.fontSize}
           onFontSizeChange={editor.setFontSize}
@@ -493,6 +506,8 @@ export default function HomePage() {
             documentText={editor.activeTab.content}
             selectedText={getSelectedText()}
             onApplyAction={handleAIApplyAction}
+            requestedTab={requestedAITab}
+            tabRequestId={aiTabRequestId}
           />
         )}
       </div>
