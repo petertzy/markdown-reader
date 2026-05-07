@@ -168,8 +168,7 @@ Interactive docs (dev mode):
 
 ## AI Provider Configuration
 
-AI features can be configured from the app toolbar via `AI Settings`, or from
-the `Settings` tab inside the AI panel.
+AI features can be configured from the app toolbar through the `Settings` tab in the AI panel.
 
 Supported providers:
 
