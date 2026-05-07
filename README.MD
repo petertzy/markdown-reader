@@ -1,6 +1,6 @@
 # Markdown Reader
 
-<img width="1320" height="723" alt="Image" src="https://github.com/user-attachments/assets/01271258-68f1-4b34-ae08-c94daf80af43" />
+<img width="996" height="582" alt="Image" src="https://github.com/user-attachments/assets/7ba4f2f4-e04e-4542-87e6-066237a4915e" />
 
 ---
 
