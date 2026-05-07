@@ -14,6 +14,7 @@ import TabBar from "@/components/TabBar";
 import Toolbar from "@/components/Toolbar";
 import EditorPane from "@/components/EditorPane";
 import PreviewPane from "@/components/PreviewPane";
+import SplitPane from "@/components/SplitPane";
 import AIPanel from "@/components/AIPanel";
 import StatusBar from "@/components/StatusBar";
 import { Export, Files, getBaseUrl, type ExportPayload } from "@/lib/api";
@@ -494,23 +495,26 @@ export default function HomePage() {
 
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Editor */}
-        <EditorPane
-          value={editor.activeTab.content}
-          onChange={editor.handleContentChange}
-          darkMode={editor.darkMode}
-          fontSize={editor.fontSize}
-          onMount={(e) => { monacoRef.current = e; }}
+        <SplitPane
+          left={
+            <EditorPane
+              value={editor.activeTab.content}
+              onChange={editor.handleContentChange}
+              darkMode={editor.darkMode}
+              fontSize={editor.fontSize}
+              onMount={(e) => { monacoRef.current = e; }}
+            />
+          }
+          right={
+            showPreview ? (
+              <PreviewPane
+                html={editor.previewHtml}
+                loading={isLikelyTauriRuntime && backendStatus === "starting"}
+                error={backendStatus === "error" ? backendMessage : null}
+              />
+            ) : null
+          }
         />
-
-        {/* Preview */}
-        {showPreview && (
-          <PreviewPane
-            html={editor.previewHtml}
-            loading={isLikelyTauriRuntime && backendStatus === "starting"}
-            error={backendStatus === "error" ? backendMessage : null}
-          />
-        )}
 
         {/* AI Panel */}
         {showAIPanel && (
