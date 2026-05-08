@@ -33,13 +33,31 @@ export default function MenuBar({ groups, shortcuts }: Props) {
   );
 
   useEffect(() => {
-    const close = (event: MouseEvent) => {
+    const closeOnOutsidePointerDown = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) {
         setOpenMenu(null);
       }
     };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenMenu(null);
+      }
+    };
+
+    const closeOnBlur = () => {
+      setOpenMenu(null);
+    };
+
+    window.addEventListener("pointerdown", closeOnOutsidePointerDown, true);
+    window.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("blur", closeOnBlur);
+
+    return () => {
+      window.removeEventListener("pointerdown", closeOnOutsidePointerDown, true);
+      window.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("blur", closeOnBlur);
+    };
   }, []);
 
   return (
