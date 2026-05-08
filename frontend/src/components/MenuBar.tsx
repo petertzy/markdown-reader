@@ -67,7 +67,7 @@ export default function MenuBar({ groups, shortcuts }: Props) {
           </button>
           {openMenu === group.label && (
             <div
-              className="absolute left-0 top-full z-50 mt-0.5 min-w-[220px] overflow-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-[#252526]"
+              className="absolute left-0 top-full z-50 mt-0.5 max-h-[calc(100vh-3rem)] min-w-[220px] overflow-y-auto overflow-x-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-[#252526]"
               role="menu"
             >
               {group.items.map((item, index) => {

@@ -22,7 +22,10 @@ export type ActionId =
   | "format.normal"
   | "table.insert"
   | "view.toggleDarkMode"
-  | "view.toggleAIPanel";
+  | "view.toggleAIPanel"
+  | "view.fullEditor"
+  | "view.balancedSplit"
+  | "view.fullPreview";
 
 export type ShortcutBinding = {
   key: string;
@@ -105,6 +108,24 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
     label: "Toggle AI Agent Panel",
     scope: "global",
     bindings: [primary("a", { shift: true })],
+  },
+  {
+    id: "view.fullEditor",
+    label: "Full Width Editor",
+    scope: "global",
+    bindings: [primaryAlt("ArrowLeft")],
+  },
+  {
+    id: "view.balancedSplit",
+    label: "Balanced Split View",
+    scope: "global",
+    bindings: [primaryAlt("ArrowDown")],
+  },
+  {
+    id: "view.fullPreview",
+    label: "Full Width Preview",
+    scope: "global",
+    bindings: [primaryAlt("ArrowRight")],
   },
 ];
 

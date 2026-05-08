@@ -79,6 +79,7 @@ export default function HomePage() {
   const editor = useEditor();
   const [showPreview] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(false);
+  const [split, setSplit] = useState(50);
   const [isLikelyTauriRuntime, setIsLikelyTauriRuntime] = useState(false);
   const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">("ready");
   const [backendMessage, setBackendMessage] = useState<string | null>(null);
@@ -314,6 +315,9 @@ export default function HomePage() {
       "table.insert": insertTable,
       "view.toggleDarkMode": () => editor.setDarkMode((dark) => !dark),
       "view.toggleAIPanel": () => setShowAIPanel((visible) => !visible),
+      "view.fullEditor": () => setSplit(100),
+      "view.balancedSplit": () => setSplit(50),
+      "view.fullPreview": () => setSplit(0),
     }),
     [
       applyHeading,
@@ -375,6 +379,10 @@ export default function HomePage() {
         items: [
           { id: "view.toggleDarkMode", label: "Toggle Dark Mode", onSelect: actions["view.toggleDarkMode"] },
           { id: "view.toggleAIPanel", label: "Show AI Agent Panel", onSelect: actions["view.toggleAIPanel"] },
+          "separator",
+          { id: "view.fullEditor", label: "Full Width Editor", onSelect: actions["view.fullEditor"] },
+          { id: "view.balancedSplit", label: "Balanced Split View", onSelect: actions["view.balancedSplit"] },
+          { id: "view.fullPreview", label: "Full Width Preview", onSelect: actions["view.fullPreview"] },
         ],
       },
       {
@@ -673,6 +681,8 @@ export default function HomePage() {
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
         <SplitPane
+          split={split}
+          onSplitChange={setSplit}
           left={
             <EditorPane
               value={editor.activeTab.content}
