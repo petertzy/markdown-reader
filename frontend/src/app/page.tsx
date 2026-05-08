@@ -7,17 +7,24 @@
  * PreviewPane, AIPanel, and StatusBar.
  */
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import { useEditor } from "@/hooks/useEditor";
 import TabBar from "@/components/TabBar";
 import Toolbar from "@/components/Toolbar";
+import MenuBar, { type MenuGroup } from "@/components/MenuBar";
 import EditorPane from "@/components/EditorPane";
 import PreviewPane from "@/components/PreviewPane";
 import SplitPane from "@/components/SplitPane";
 import AIPanel from "@/components/AIPanel";
 import StatusBar from "@/components/StatusBar";
 import { Export, Files, getBaseUrl, type ExportPayload } from "@/lib/api";
+import {
+  resolveShortcutDefinitions,
+  shortcutMatchesEvent,
+  isEditableTarget,
+  type ActionId,
+} from "@/lib/keyboardShortcuts";
 
 const OPEN_FILE_EXTENSIONS = ["md", "markdown", "txt", "html", "htm", "pdf", "docx"];
 const CONVERTIBLE_EXTENSIONS = new Set(["html", "htm", "pdf", "docx"]);
@@ -72,6 +79,7 @@ export default function HomePage() {
   const editor = useEditor();
   const [showPreview] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(false);
+  const [split, setSplit] = useState(50);
   const [isLikelyTauriRuntime, setIsLikelyTauriRuntime] = useState(false);
   const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">("ready");
   const [backendMessage, setBackendMessage] = useState<string | null>(null);
@@ -88,6 +96,63 @@ export default function HomePage() {
       alert(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, [editor]);
+
+  const runMonacoAction = useCallback((actionId: string) => {
+    const mono = monacoRef.current;
+    if (!mono) return;
+    mono.focus();
+    mono.trigger("keyboard-shortcut", actionId, null);
+  }, []);
+
+  const replaceSelection = useCallback(
+    (source: string, transform: (selectedText: string) => { text: string; cursorOffset?: number }) => {
+      const mono = monacoRef.current;
+      const selection = mono?.getSelection();
+      const model = mono?.getModel();
+      if (!mono || !selection || !model) return;
+
+      const selectedText = selection.isEmpty() ? "" : model.getValueInRange(selection);
+      const { text, cursorOffset } = transform(selectedText);
+      const startOffset = model.getOffsetAt(selection.getStartPosition());
+      mono.executeEdits(source, [{ range: selection, text, forceMoveMarkers: true }]);
+      if (selection.isEmpty() && typeof cursorOffset === "number") {
+        mono.setPosition(model.getPositionAt(startOffset + cursorOffset));
+      }
+      mono.focus();
+    },
+    []
+  );
+
+  const wrapSelection = useCallback(
+    (source: string, before: string, after = before) => {
+      replaceSelection(source, (selectedText) => ({
+        text: `${before}${selectedText}${after}`,
+        cursorOffset: before.length,
+      }));
+    },
+    [replaceSelection]
+  );
+
+  const applyHeading = useCallback(
+    (level: 0 | 1 | 2 | 3) => {
+      replaceSelection("heading", (selectedText) => {
+        const content = selectedText || "Heading";
+        const hashes = level === 0 ? "" : `${"#".repeat(level)} `;
+        const normalized = content
+          .split("\n")
+          .map((line) => `${hashes}${line.replace(/^#{1,6}\s+/, "")}`)
+          .join("\n");
+        return { text: normalized, cursorOffset: normalized.length };
+      });
+    },
+    [replaceSelection]
+  );
+
+  const insertTable = useCallback(() => {
+    replaceSelection("insert-table", () => ({
+      text: "| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |",
+    }));
+  }, [replaceSelection]);
 
   // Warm the packaged sidecar on mount so the first user action is not silent.
   useEffect(() => {
@@ -123,18 +188,6 @@ export default function HomePage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Keyboard shortcut: Ctrl/Cmd+S → save
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-        e.preventDefault();
-        void handleSaveFile();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleSaveFile]);
 
   // "Open file" — uses a hidden file-input because Tauri/browser can't call
   // the native dialog directly without the Tauri API.  In Tauri mode this
@@ -200,7 +253,7 @@ export default function HomePage() {
     }
   };
 
-  const handleExport = async (format: "html" | "pdf" | "docx") => {
+  const handleExport = useCallback(async (format: "html" | "pdf" | "docx") => {
     try {
       let outputPath: string | undefined;
       const extension = format === "pdf" ? "pdf" : format === "docx" ? "docx" : "html";
@@ -236,7 +289,138 @@ export default function HomePage() {
     } catch (err) {
       alert(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-  };
+  }, [editor]);
+
+  const actions = useMemo<Record<ActionId, () => void>>(
+    () => ({
+      "file.new": editor.newTab,
+      "file.open": () => { void handleOpenFile(); },
+      "file.save": () => { void handleSaveFile(); },
+      "file.closeTab": () => editor.closeTab(editor.activeTabId),
+      "file.closeAllTabs": editor.closeAllTabs,
+      "file.exportHtml": () => { void handleExport("html"); },
+      "file.exportPdf": () => { void handleExport("pdf"); },
+      "file.exportDocx": () => { void handleExport("docx"); },
+      "edit.undo": () => runMonacoAction("undo"),
+      "edit.redo": () => runMonacoAction("redo"),
+      "edit.search": () => runMonacoAction("actions.find"),
+      "edit.replace": () => runMonacoAction("editor.action.startFindReplaceAction"),
+      "format.bold": () => wrapSelection("bold", "**"),
+      "format.italic": () => wrapSelection("italic", "*"),
+      "format.underline": () => wrapSelection("underline", "<u>", "</u>"),
+      "format.heading1": () => applyHeading(1),
+      "format.heading2": () => applyHeading(2),
+      "format.heading3": () => applyHeading(3),
+      "format.normal": () => applyHeading(0),
+      "table.insert": insertTable,
+      "view.toggleDarkMode": () => editor.setDarkMode((dark) => !dark),
+      "view.toggleAIPanel": () => setShowAIPanel((visible) => !visible),
+      "view.fullEditor": () => setSplit(100),
+      "view.balancedSplit": () => setSplit(50),
+      "view.fullPreview": () => setSplit(0),
+    }),
+    [
+      applyHeading,
+      editor,
+      handleOpenFile,
+      handleExport,
+      handleSaveFile,
+      insertTable,
+      runMonacoAction,
+      wrapSelection,
+    ]
+  );
+
+  const shortcuts = useMemo(() => resolveShortcutDefinitions(), []);
+  const backendDisabled = backendStatus !== "ready";
+
+  const menuGroups = useMemo<MenuGroup[]>(
+    () => [
+      {
+        label: "File",
+        items: [
+          { id: "file.new", label: "New", onSelect: actions["file.new"] },
+          { id: "file.open", label: "Open File", onSelect: actions["file.open"], disabled: backendDisabled },
+          { id: "file.save", label: "Save File", onSelect: actions["file.save"], disabled: backendDisabled },
+          "separator",
+          { id: "file.exportHtml", label: "Export to HTML", onSelect: actions["file.exportHtml"], disabled: backendDisabled },
+          { id: "file.exportDocx", label: "Export to Word", onSelect: actions["file.exportDocx"], disabled: backendDisabled },
+          { id: "file.exportPdf", label: "Export to PDF", onSelect: actions["file.exportPdf"], disabled: backendDisabled },
+          "separator",
+          { id: "file.closeTab", label: "Close", onSelect: actions["file.closeTab"] },
+          { id: "file.closeAllTabs", label: "Close All", onSelect: actions["file.closeAllTabs"] },
+        ],
+      },
+      {
+        label: "Edit",
+        items: [
+          { id: "edit.undo", label: "Undo", onSelect: actions["edit.undo"] },
+          { id: "edit.redo", label: "Redo", onSelect: actions["edit.redo"] },
+          "separator",
+          { id: "edit.search", label: "Search...", onSelect: actions["edit.search"] },
+          { id: "edit.replace", label: "Replace...", onSelect: actions["edit.replace"] },
+        ],
+      },
+      {
+        label: "Format",
+        items: [
+          { id: "format.bold", label: "Bold", onSelect: actions["format.bold"] },
+          { id: "format.italic", label: "Italic", onSelect: actions["format.italic"] },
+          { id: "format.underline", label: "Underline", onSelect: actions["format.underline"] },
+          "separator",
+          { id: "format.heading1", label: "Heading 1", onSelect: actions["format.heading1"] },
+          { id: "format.heading2", label: "Heading 2", onSelect: actions["format.heading2"] },
+          { id: "format.heading3", label: "Heading 3", onSelect: actions["format.heading3"] },
+          { id: "format.normal", label: "Normal Text", onSelect: actions["format.normal"] },
+        ],
+      },
+      {
+        label: "View",
+        items: [
+          { id: "view.toggleDarkMode", label: "Toggle Dark Mode", onSelect: actions["view.toggleDarkMode"] },
+          { id: "view.toggleAIPanel", label: "Show AI Agent Panel", onSelect: actions["view.toggleAIPanel"] },
+          "separator",
+          { id: "view.fullEditor", label: "Full Width Editor", onSelect: actions["view.fullEditor"] },
+          { id: "view.balancedSplit", label: "Balanced Split View", onSelect: actions["view.balancedSplit"] },
+          { id: "view.fullPreview", label: "Full Width Preview", onSelect: actions["view.fullPreview"] },
+        ],
+      },
+      {
+        label: "Table",
+        items: [{ id: "table.insert", label: "Insert Table...", onSelect: actions["table.insert"] }],
+      },
+      {
+        label: "Shortcuts",
+        items: shortcuts.map((shortcut) => ({
+          id: shortcut.id,
+          label: shortcut.label,
+          onSelect: actions[shortcut.id],
+        })),
+      },
+    ],
+    [actions, backendDisabled, shortcuts]
+  );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const editableTarget = isEditableTarget(event.target);
+      const isMonacoTarget =
+        event.target instanceof HTMLElement && Boolean(event.target.closest(".monaco-editor"));
+
+      for (const shortcut of shortcuts) {
+        const matches = shortcut.bindings.some((binding) => shortcutMatchesEvent(binding, event));
+        if (!matches) continue;
+        if (shortcut.scope === "editor" && editableTarget && !isMonacoTarget) return;
+
+        event.preventDefault();
+        actions[shortcut.id]();
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [actions, shortcuts]);
 
   const handleAIApplyAction = useCallback(
     (type: string, content: string) => {
@@ -462,6 +646,7 @@ export default function HomePage() {
       />
 
       {/* Toolbar */}
+      <MenuBar groups={menuGroups} shortcuts={shortcuts} />
       <div className="relative">
         <Toolbar
           onOpenFile={() => { void handleOpenFile(); }}
@@ -496,6 +681,8 @@ export default function HomePage() {
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
         <SplitPane
+          split={split}
+          onSplitChange={setSplit}
           left={
             <EditorPane
               value={editor.activeTab.content}

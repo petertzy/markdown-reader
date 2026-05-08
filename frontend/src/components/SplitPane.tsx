@@ -12,6 +12,8 @@ import React, { useState, useCallback, useRef, useEffect } from "react";
 interface SplitPaneProps {
   left: React.ReactNode;
   right: React.ReactNode;
+  split?: number;
+  onSplitChange?: (split: number) => void;
   initialSplit?: number; // 0 to 100
   minSize?: number; // percentage
 }
@@ -19,13 +21,25 @@ interface SplitPaneProps {
 export default function SplitPane({
   left,
   right,
+  split: controlledSplit,
+  onSplitChange,
   initialSplit = 50,
   minSize = 0,
 }: SplitPaneProps) {
-  const [split, setSplit] = useState(initialSplit);
-  const [lastSplit, setLastSplit] = useState(initialSplit);
+  const [internalSplit, setInternalSplit] = useState(initialSplit);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const split = controlledSplit ?? internalSplit;
+
+  const setSplitValue = useCallback(
+    (nextSplit: number) => {
+      if (controlledSplit === undefined) {
+        setInternalSplit(nextSplit);
+      }
+      onSplitChange?.(nextSplit);
+    },
+    [controlledSplit, onSplitChange]
+  );
 
   const startDragging = useCallback(() => {
     setIsDragging(true);
@@ -45,9 +59,9 @@ export default function SplitPane({
       let newSplit = ((clientX - containerRect.left) / containerRect.width) * 100;
       newSplit = Math.max(minSize, Math.min(100 - minSize, newSplit));
 
-      setSplit(newSplit);
+      setSplitValue(newSplit);
     },
-    [isDragging, minSize]
+    [isDragging, minSize, setSplitValue]
   );
 
   useEffect(() => {
@@ -73,25 +87,6 @@ export default function SplitPane({
       document.body.style.cursor = "";
     };
   }, [isDragging, onDrag, stopDragging]);
-
-  const toggleFullLeft = useCallback(() => {
-    if (split > 98) {
-      // Restore previous split if it was reasonably balanced, else 50
-      setSplit(lastSplit < 95 && lastSplit > 5 ? lastSplit : 50);
-    } else {
-      setLastSplit(split);
-      setSplit(100);
-    }
-  }, [split, lastSplit]);
-
-  const toggleFullRight = useCallback(() => {
-    if (split < 2) {
-      setSplit(lastSplit < 95 && lastSplit > 5 ? lastSplit : 50);
-    } else {
-      setLastSplit(split);
-      setSplit(0);
-    }
-  }, [split, lastSplit]);
 
   return (
     <div ref={containerRef} className="flex flex-1 relative overflow-hidden h-full">
@@ -125,7 +120,7 @@ export default function SplitPane({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setSplit(100);
+              setSplitValue(100);
             }}
             onMouseDown={(e) => e.stopPropagation()}
             className={`w-8 h-8 flex items-center justify-center rounded-full bg-white dark:bg-[#333] border shadow-lg hover:scale-110 active:scale-95 transition-all pointer-events-auto ${
@@ -146,7 +141,7 @@ export default function SplitPane({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setSplit(50);
+                setSplitValue(50);
               }}
               onMouseDown={(e) => e.stopPropagation()}
               className="w-8 h-8 flex items-center justify-center rounded-full bg-white dark:bg-[#333] border border-gray-300 dark:border-gray-600 shadow-lg hover:bg-blue-50 dark:hover:bg-blue-900/40 hover:scale-110 active:scale-95 transition-all text-gray-600 dark:text-gray-300 pointer-events-auto"
@@ -163,7 +158,7 @@ export default function SplitPane({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setSplit(0);
+              setSplitValue(0);
             }}
             onMouseDown={(e) => e.stopPropagation()}
             className={`w-8 h-8 flex items-center justify-center rounded-full bg-white dark:bg-[#333] border shadow-lg hover:scale-110 active:scale-95 transition-all pointer-events-auto ${

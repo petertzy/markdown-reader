@@ -246,6 +246,14 @@ export function useEditor() {
     [activeTabId]
   );
 
+  const closeAllTabs = useCallback(() => {
+    const fresh = makeTab(nextTabId());
+    setTabs([fresh]);
+    setActiveTabId(fresh.id);
+    setPreviewHtml("");
+    setWordCount(null);
+  }, []);
+
   // ── recent files ───────────────────────────────────────────────────────────
   const loadRecentFiles = useCallback(async () => {
     const { entries } = await Files.getRecent();
@@ -287,6 +295,7 @@ export function useEditor() {
     saveFile,
     newTab,
     closeTab,
+    closeAllTabs,
     loadRecentFiles,
     refreshPreview,
     exportAs,
