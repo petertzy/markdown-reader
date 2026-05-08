@@ -26,6 +26,7 @@ export type ActionId =
 
 export type ShortcutBinding = {
   key: string;
+  code?: string;
   ctrl?: boolean;
   meta?: boolean;
   shift?: boolean;
@@ -44,14 +45,23 @@ export type ShortcutOverrideMap = Partial<Record<ActionId, ShortcutBinding[]>>;
 const isMac =
   typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
 
-const primary = (key: string, extra: Omit<ShortcutBinding, "key"> = {}): ShortcutBinding => ({
+function keyCodeFor(key: string) {
+  if (/^[a-z]$/i.test(key)) return `Key${key.toUpperCase()}`;
+  if (/^\d$/.test(key)) return `Digit${key}`;
+  return undefined;
+}
+
+const primary = (key: string, extra: Omit<ShortcutBinding, "key" | "code"> = {}): ShortcutBinding => ({
   key,
+  code: keyCodeFor(key),
   ...(isMac ? { meta: true } : { ctrl: true }),
   ...extra,
 });
 
 const primaryAlt = (key: string): ShortcutBinding =>
-  isMac ? { key, meta: true, alt: true } : { key, ctrl: true, alt: true };
+  isMac
+    ? { key, code: keyCodeFor(key), meta: true, alt: true }
+    : { key, code: keyCodeFor(key), ctrl: true, alt: true };
 
 export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
   { id: "file.new", label: "New File", scope: "global", bindings: [primary("n")] },
@@ -108,8 +118,11 @@ export function resolveShortcutDefinitions(
 }
 
 export function shortcutMatchesEvent(binding: ShortcutBinding, event: KeyboardEvent) {
+  const keyMatches = event.key.toLowerCase() === binding.key.toLowerCase();
+  const codeMatches = Boolean(binding.code && event.code === binding.code);
+
   return (
-    event.key.toLowerCase() === binding.key.toLowerCase() &&
+    (keyMatches || codeMatches) &&
     event.ctrlKey === Boolean(binding.ctrl) &&
     event.metaKey === Boolean(binding.meta) &&
     event.shiftKey === Boolean(binding.shift) &&
