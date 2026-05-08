@@ -23,7 +23,6 @@ export default function SplitPane({
   minSize = 0,
 }: SplitPaneProps) {
   const [split, setSplit] = useState(initialSplit);
-  const [lastSplit, setLastSplit] = useState(initialSplit);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -73,25 +72,6 @@ export default function SplitPane({
       document.body.style.cursor = "";
     };
   }, [isDragging, onDrag, stopDragging]);
-
-  const toggleFullLeft = useCallback(() => {
-    if (split > 98) {
-      // Restore previous split if it was reasonably balanced, else 50
-      setSplit(lastSplit < 95 && lastSplit > 5 ? lastSplit : 50);
-    } else {
-      setLastSplit(split);
-      setSplit(100);
-    }
-  }, [split, lastSplit]);
-
-  const toggleFullRight = useCallback(() => {
-    if (split < 2) {
-      setSplit(lastSplit < 95 && lastSplit > 5 ? lastSplit : 50);
-    } else {
-      setLastSplit(split);
-      setSplit(0);
-    }
-  }, [split, lastSplit]);
 
   return (
     <div ref={containerRef} className="flex flex-1 relative overflow-hidden h-full">
