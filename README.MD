@@ -140,6 +140,12 @@ Output path (macOS):
 
 - `frontend/src-tauri/target/release/bundle/macos/Markdown Reader.app`
 
+---
+
+<img width="264" height="139" alt="Image" src="https://github.com/user-attachments/assets/18091038-758b-40cd-ad1f-08700a4e8b92" />
+
+---
+
 ### macOS beta install note
 
 Public macOS downloads need Developer ID signing and Apple notarization to open
@@ -153,10 +159,6 @@ open "/Applications/Markdown Reader.app"
 
 For public releases, use `scripts/package-macos-release.sh` with a Developer ID
 Application certificate and notarization credentials.
-
----
-
-<img width="264" height="139" alt="Image" src="https://github.com/user-attachments/assets/18091038-758b-40cd-ad1f-08700a4e8b92" />
 
 ---
 
