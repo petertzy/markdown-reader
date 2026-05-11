@@ -387,6 +387,19 @@ export default function AIPanel({
             <div className="text-xs text-gray-500 dark:text-gray-400">Loading settings...</div>
           )}
 
+          {settingsMessage && (
+            <div
+              className={`text-xs px-2 py-1 rounded ${
+                settingsMessage.toLowerCase().includes("error") ||
+                settingsMessage.toLowerCase().includes("api ")
+                  ? "text-red-500 bg-red-50 dark:bg-red-900/20"
+                  : "text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-[#2d2d2d]"
+              }`}
+            >
+              {settingsMessage}
+            </div>
+          )}
+
           {settings && (
             <>
               <div className="flex flex-col gap-1">
@@ -469,19 +482,6 @@ export default function AIPanel({
                     : "Secure key storage is not available on this system."}
                 </div>
               </div>
-
-              {settingsMessage && (
-                <div
-                  className={`text-xs px-2 py-1 rounded ${
-                    settingsMessage.toLowerCase().includes("error") ||
-                    settingsMessage.toLowerCase().includes("api ")
-                      ? "text-red-500 bg-red-50 dark:bg-red-900/20"
-                      : "text-gray-600 dark:text-gray-300 bg-gray-50 dark:bg-[#2d2d2d]"
-                  }`}
-                >
-                  {settingsMessage}
-                </div>
-              )}
 
               <div className="flex gap-2 pt-1">
                 <button

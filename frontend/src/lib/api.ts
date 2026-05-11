@@ -245,8 +245,90 @@ export type AISettings = {
   secure_key_storage_available: boolean;
 };
 
+const AI_PROVIDER_ORDER = [
+  "openai_compatible",
+  "openrouter",
+  "openai",
+  "anthropic",
+];
+
+const AI_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+  openai_compatible: "OpenAI Compatible",
+  openrouter: "OpenRouter",
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+};
+
+const AI_PROVIDER_ENV_VARS: Record<string, string> = {
+  openai_compatible: "OPENAI_COMPATIBLE_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
+  openai: "OPENAI_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+};
+
+const OPENAI_COMPATIBLE_BASE_URL_OPTIONS: OpenAICompatibleBaseUrlOption[] = [
+  {
+    key: "navidia",
+    label: "Navidia",
+    url: "https://integrate.api.nvidia.com/v1",
+  },
+  {
+    key: "groq",
+    label: "Groq",
+    url: "https://api.groq.com/openai/v1",
+  },
+];
+
+type PartialAIProviderInfo = Partial<AIProviderInfo>;
+type PartialAISettings = Partial<Omit<AISettings, "providers">> & {
+  providers?: Record<string, PartialAIProviderInfo>;
+};
+
+function normalizeAISettings(raw: PartialAISettings): AISettings {
+  const rawProviders = raw.providers ?? {};
+  const providerOrder =
+    Array.isArray(raw.provider_order) && raw.provider_order.length > 0
+      ? raw.provider_order
+      : AI_PROVIDER_ORDER.filter((name) => name in rawProviders).concat(
+          AI_PROVIDER_ORDER.filter((name) => !(name in rawProviders))
+        );
+  const normalizedProviderOrder = Array.from(new Set(providerOrder));
+  const normalizedProviders: Record<string, AIProviderInfo> = {};
+
+  for (const name of normalizedProviderOrder) {
+    const provider = rawProviders[name] ?? {};
+    normalizedProviders[name] = {
+      display_name:
+        provider.display_name ?? AI_PROVIDER_DISPLAY_NAMES[name] ?? name,
+      env_var: provider.env_var ?? AI_PROVIDER_ENV_VARS[name] ?? "",
+      model: provider.model ?? provider.default_models?.[0] ?? "",
+      default_models: provider.default_models ?? [],
+      key_configured: provider.key_configured ?? false,
+    };
+  }
+
+  const rawProvider = (raw.ai_provider ?? "").trim();
+  const aiProvider = normalizedProviderOrder.includes(rawProvider)
+    ? rawProvider
+    : normalizedProviderOrder[0] ?? "openai_compatible";
+
+  return {
+    ...raw,
+    ai_provider: aiProvider,
+    providers: normalizedProviders,
+    provider_order: normalizedProviderOrder,
+    openai_compatible_base_url_choice:
+      raw.openai_compatible_base_url_choice ?? "navidia",
+    openai_compatible_base_url_options:
+      raw.openai_compatible_base_url_options ??
+      OPENAI_COMPATIBLE_BASE_URL_OPTIONS,
+    secure_key_storage_available: raw.secure_key_storage_available ?? false,
+  };
+}
+
 export const AI = {
-  getSettings: () => apiFetch<AISettings>("/api/ai/settings"),
+  getSettings: async () =>
+    normalizeAISettings(await apiFetch<PartialAISettings>("/api/ai/settings")),
 
   setProvider: (provider: string) =>
     apiFetch<{ provider: string }>(
@@ -283,11 +365,19 @@ export const AI = {
       body: JSON.stringify({ provider, api_key, base_url_override }),
     }),
 
-  setOpenAICompatibleBaseUrlChoice: (choice_key: string) =>
-    apiFetch<{ choice: string }>(
-      "/api/ai/settings/openai-compatible/base-url-choice",
-      { method: "POST", body: JSON.stringify({ choice_key }) }
-    ),
+  setOpenAICompatibleBaseUrlChoice: async (choice_key: string) => {
+    try {
+      return await apiFetch<{ choice: string }>(
+        "/api/ai/settings/openai-compatible/base-url-choice",
+        { method: "POST", body: JSON.stringify({ choice_key }) }
+      );
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("→ 404")) {
+        return { choice: choice_key };
+      }
+      throw err;
+    }
+  },
 
   chat: (payload: AgentChatPayload) =>
     apiFetch<AgentResponse>("/api/ai/chat", {
