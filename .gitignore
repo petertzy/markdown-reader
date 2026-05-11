@@ -35,8 +35,10 @@ __pycache__/
 document.html
 
 LICENCE.pdf
-.gitignore
 
 site/
+release-artifacts/
 
-.github/workflows
+# Keep unrelated local workflow drafts out of status while tracking the Pages workflow.
+.github/workflows/*
+!.github/workflows/deploy-distribution.yml
