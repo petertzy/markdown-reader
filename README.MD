@@ -140,6 +140,20 @@ Output path (macOS):
 
 - `frontend/src-tauri/target/release/bundle/macos/Markdown Reader.app`
 
+### macOS beta install note
+
+Public macOS downloads need Developer ID signing and Apple notarization to open
+without Gatekeeper warnings. The current beta build is signed but not notarized.
+If macOS blocks the downloaded app, move it to Applications and run:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Markdown Reader.app"
+open "/Applications/Markdown Reader.app"
+```
+
+For public releases, use `scripts/package-macos-release.sh` with a Developer ID
+Application certificate and notarization credentials.
+
 ---
 
 <img width="264" height="139" alt="Image" src="https://github.com/user-attachments/assets/18091038-758b-40cd-ad1f-08700a4e8b92" />
