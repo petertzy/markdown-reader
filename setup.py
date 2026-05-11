@@ -6,7 +6,11 @@ import sys
 # 5000 is enough for fontTools, weasyprint and other deep packages.
 sys.setrecursionlimit(5000)
 
-from py2app.build_app import py2app as py2app_build
+if sys.platform == "darwin":
+    from py2app.build_app import py2app as py2app_build
+else:
+    py2app_build = object
+
 from setuptools import setup
 
 
