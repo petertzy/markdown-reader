@@ -226,6 +226,36 @@ nav {
     gap: 2rem;
 }
 
+.install-note {
+    max-width: 760px;
+    margin: -2rem auto 4rem;
+    padding: 1.5rem;
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.install-note h3 {
+    font-size: 1.2rem;
+    margin-bottom: 0.75rem;
+}
+
+.install-note p {
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+}
+
+.install-note code {
+    display: block;
+    overflow-x: auto;
+    padding: 0.9rem 1rem;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.35);
+    color: var(--accent-secondary);
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+
 .download-card {
     background: var(--bg-card);
     padding: 2.5rem;
