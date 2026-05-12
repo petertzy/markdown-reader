@@ -79,14 +79,13 @@ nav {
 
 /* Hero Section */
 .hero {
-    height: 100vh;
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
     text-align: center;
-    padding: 0 10%;
-    margin-top: 4rem;
+    padding: 8rem 10% 4rem;
 }
 
 .hero h1 {
@@ -222,7 +221,7 @@ nav {
 
 .download-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 2rem;
 }
 
@@ -263,6 +262,11 @@ nav {
     border: 1px solid var(--glass-border);
     text-align: center;
     transition: var(--transition);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
 }
 
 .download-card.active:hover {
