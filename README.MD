@@ -1,170 +1,174 @@
 # Markdown Reader
 
-<img width="1044" height="648" alt="Image" src="https://github.com/user-attachments/assets/ac3351a8-dd2a-445b-9f1f-4754faeef509" />
+Markdown Reader is a desktop Markdown editor and reader with a modern Next.js
+interface, a local FastAPI backend, AI-assisted editing tools, and native
+desktop packaging through Tauri.
 
----
+The project previously shipped as a Python Tkinter application. That legacy UI
+is still available for reference and fallback use, while the current
+application is built around the Tauri desktop experience.
 
-Modern Markdown editor with a Next.js UI, FastAPI backend, AI features, and desktop packaging via Tauri.
+![Markdown Reader desktop preview](distribution/assets/hero-mockup.png)
 
-Planning notes: [scripts/ProjectPlan.md](scripts/ProjectPlan.md)
+## Features
 
----
+- Edit Markdown with a split editor and live preview experience.
+- Open and work with Markdown files from a native desktop app window.
+- Import content from Markdown, HTML, and PDF workflows supported by the
+  backend.
+- Use AI-assisted translation, summarization, table-of-contents generation,
+  formatting, and code-block cleanup.
+- Configure OpenAI Compatible, OpenRouter, OpenAI, and Anthropic providers from
+  the app.
+- Review AI suggestions before applying them, with support for rejection,
+  rollback, and audit tracking.
+- Export rendered documents through the local backend.
+- Build a single packaged desktop app with the Python backend bundled as a
+  Tauri sidecar.
 
-## Current Architecture
+## Architecture
 
-### Development mode
-
-- Launches a real Tauri desktop window instead of a browser tab
-- Frontend still runs from the Next.js dev server on `http://localhost:3000`
-- Backend runs from the FastAPI dev server on `http://127.0.0.1:8000`
-- Recommended start command: `./scripts/dev-tauri.sh`
-- In this mode, the Tauri shell talks to the fixed dev backend on port `8000`
-- The packaged Python sidecar is not used in debug mode
-
-### Desktop (packaged) mode
-
-- Users launch one app only: `Markdown Reader.app`
-- Python backend is bundled as a sidecar process
-- Backend port is dynamically assigned by the OS at runtime (no hard-coded 8000/3000 in desktop mode)
-- Frontend discovers backend port through a Tauri command
-
-This avoids port collisions with local services and allows multiple app instances more safely.
-
----
-
-## Repository Layout
+Markdown Reader is split into three main layers:
 
 ```text
 MarkdownReader/
-├── backend/                    # FastAPI app and routers
-├── frontend/                   # Next.js + Tauri desktop shell
-├── markdown_reader/            # Existing Python business logic (preserved)
-├── scripts/dev-tauri.sh        # Recommended native dev startup
-├── tests/                      # Unit/integration tests
-├── README_OLD.MD               # Legacy tkinter-era documentation
-└── pyproject.toml
+├── backend/              # FastAPI app, routers, rendering, export, and AI APIs
+├── frontend/             # Next.js UI and Tauri desktop shell
+├── markdown_reader/      # Legacy Tkinter app logic kept for fallback/reference
+├── scripts/              # Development and release helper scripts
+├── tests/                # Python tests for backend and AI workflow logic
+├── docs/                 # Additional project and platform notes
+├── README_REFACTORING.md # Archived refactoring/migration README
+└── README_OLD.md         # Legacy Tkinter-era README
 ```
 
----
+In development mode, the app uses fixed local ports:
 
-## Quick Start (Development)
+- Next.js frontend: `http://localhost:3000`
+- FastAPI backend: `http://127.0.0.1:8000`
 
-### Prerequisites
+In packaged desktop mode, users launch only `Markdown Reader.app`. The Python
+backend runs as a bundled sidecar and receives an available local port at
+runtime, which avoids hard-coded desktop ports.
 
-- Python 3.11+
-- [uv](https://github.com/astral-sh/uv)
-- Node.js 18+
+## Requirements
 
-### 1) Install dependencies
+- Python 3.11 or newer
+- [uv](https://docs.astral.sh/uv/)
+- Node.js 18 or newer
+- npm
+- Rust and the Tauri system prerequisites for your platform
+
+For Tauri setup details, follow the official prerequisite guide:
+
+```text
+https://tauri.app/start/prerequisites/
+```
+
+Some PDF and export features depend on native libraries through WeasyPrint and
+related packages. Platform notes are available in:
+
+- `docs/PrepareForMacUser.md`
+- `docs/PrepareForWindowsUser.md`
+
+## Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/petertzy/markdown-reader.git
+cd markdown-reader
+```
+
+Install Python dependencies:
 
 ```bash
 uv sync
-cd frontend && npm install
 ```
 
-> **Note for contributors:** `pre-commit` is required for git hooks (code linting/formatting runs on every commit).
-> If you see `No module named pre_commit` when committing, run:
->
-> ```bash
-> uv add --dev pre-commit
-> uv run pre-commit install
-> ```
+Install frontend dependencies:
 
-### 2) Configure frontend env
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+Create the frontend environment file:
 
 ```bash
 cp frontend/.env.local.example frontend/.env.local
 ```
 
-### 3) Start services
+The default development backend URL is:
+
+```text
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+```
+
+## Running the Desktop App in Development
+
+Use the project helper script from the repository root:
 
 ```bash
 ./scripts/dev-tauri.sh
 ```
 
-Open:
+This script starts the FastAPI backend on port `8000`, lets Tauri start the
+Next.js development server on port `3000`, and opens the native desktop window.
 
-- Backend docs: http://127.0.0.1:8000/docs
-- Tauri native app window: launched automatically by `./scripts/dev-tauri.sh`
+Useful development URLs:
 
-### 4) Stop services
+- Swagger API docs: `http://127.0.0.1:8000/docs`
+- ReDoc API docs: `http://127.0.0.1:8000/redoc`
+- Backend health check: `http://127.0.0.1:8000/api/health`
 
-Press `Ctrl+C` in the terminal running `./scripts/dev-tauri.sh`.
+Stop the development app with `Ctrl+C` in the terminal running the script.
 
----
+## Running Services Separately
 
-## Desktop Build (Single App)
+Most contributors should use `./scripts/dev-tauri.sh`, but the services can be
+started manually when debugging.
 
-The desktop build produces one user-facing app and bundles the backend internally.
+Start the backend:
 
-### 1) Install Tauri toolchain
+```bash
+uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+```
 
-Follow OS prerequisites:
-
-- https://tauri.app/start/prerequisites/
-
-Install frontend tooling:
+Start the frontend:
 
 ```bash
 cd frontend
-npm install
-npm install -D @tauri-apps/cli @tauri-apps/api
+npm run dev
 ```
 
-### 2) Build backend sidecar executable
-
-```bash
-cd ..
-uv run pyinstaller markdown-reader-backend.spec
-```
-
-### 3) Copy sidecar binary into Tauri
-
-For Apple Silicon macOS:
-
-```bash
-cp dist/markdown-reader-backend frontend/src-tauri/binaries/markdown-reader-backend-aarch64-apple-darwin
-chmod +x frontend/src-tauri/binaries/markdown-reader-backend-aarch64-apple-darwin
-```
-
-For other targets, use the corresponding Rust target-triple suffix.
-
-### 4) Build the desktop app
+Start Tauri development mode:
 
 ```bash
 cd frontend
-npx tauri build --bundles app
+npm run tauri:dev
 ```
 
-Output path (macOS):
+## Usage
 
-- `frontend/src-tauri/target/release/bundle/macos/Markdown Reader.app`
+After the desktop window opens, use Markdown Reader to:
 
----
+- Open Markdown files for editing and preview.
+- Work with multiple document tabs.
+- Preview rendered Markdown while editing.
+- Import supported document formats through the available file actions.
+- Use AI tools from the AI panel to translate, summarize, format, or prepare
+  document edits.
+- Review suggested AI changes before applying them.
+- Configure AI providers, models, base URLs, and API keys from the app settings.
 
-<img width="264" height="139" alt="Image" src="https://github.com/user-attachments/assets/18091038-758b-40cd-ad1f-08700a4e8b92" />
+API keys are saved through the system credential store when available. Provider
+and model preferences are stored in the user's local app settings.
 
----
+## Backend API
 
-### macOS beta install note
-
-Public macOS downloads need Developer ID signing and Apple notarization to open
-without Gatekeeper warnings. The current beta build is signed but not notarized.
-If macOS blocks the downloaded app, move it to Applications and run:
-
-```bash
-xattr -dr com.apple.quarantine "/Applications/Markdown Reader.app"
-open "/Applications/Markdown Reader.app"
-```
-
-For public releases, use `scripts/package-macos-release.sh` with a Developer ID
-Application certificate and notarization credentials.
-
----
-
-## API Surface (Backend)
-
-Main groups:
+The FastAPI backend exposes these main route groups:
 
 - `/api/files/*`
 - `/api/markdown/*`
@@ -173,48 +177,171 @@ Main groups:
 
 Health endpoint:
 
-- `GET /api/health`
+```text
+GET /api/health
+```
 
-Interactive docs (dev mode):
+During development, open `http://127.0.0.1:8000/docs` for interactive API
+documentation.
 
-- Swagger: `http://127.0.0.1:8000/docs`
-- ReDoc: `http://127.0.0.1:8000/redoc`
+## Building the Desktop App
 
----
+Build the Python backend sidecar:
 
-## AI Provider Configuration
+```bash
+uv run pyinstaller markdown-reader-backend.spec
+```
 
-AI features can be configured from the app toolbar through the `Settings` tab in the AI panel.
+Copy the sidecar binary into the Tauri binary directory. For Apple Silicon
+macOS:
 
-Supported providers:
+```bash
+cp dist/markdown-reader-backend frontend/src-tauri/binaries/markdown-reader-backend-aarch64-apple-darwin
+chmod +x frontend/src-tauri/binaries/markdown-reader-backend-aarch64-apple-darwin
+```
 
-- OpenAI Compatible
-- OpenRouter
-- OpenAI
-- Anthropic
+For other platforms, use the matching Rust target triple in the sidecar file
+name.
 
-The settings UI lets users choose the active provider, select a model, fetch
-available models, save or delete API keys, and choose an OpenAI Compatible base
-URL preset when applicable. Provider and model choices are saved in the
-per-user settings file, while API keys are saved through the system credential
-store when available.
+Build the desktop bundle:
 
----
+```bash
+cd frontend
+npx tauri build --bundles app
+```
 
-## Notes About Ports
+The macOS app bundle is created at:
 
-- In development mode, fixed ports (`3000` and `8000`) are used for convenience.
-- In packaged desktop mode, backend uses a dynamically assigned local port.
-- This is intentional and follows common desktop-app sidecar practices.
+```text
+frontend/src-tauri/target/release/bundle/macos/Markdown Reader.app
+```
 
----
+### macOS Release Notes
 
-## Legacy UI
+Public macOS downloads need Developer ID signing and Apple notarization to open
+without Gatekeeper warnings. The current beta build may be signed without
+notarization.
 
-The old tkinter entrypoint is preserved:
+If macOS blocks a local beta build after download, move it to Applications and
+run:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Markdown Reader.app"
+open "/Applications/Markdown Reader.app"
+```
+
+For release packaging, use:
+
+```bash
+./scripts/package-macos-release.sh
+```
+
+## Legacy Tkinter App
+
+The original Python/Tkinter application is still available:
 
 ```bash
 uv run python app.py
 ```
 
-Legacy docs: [README_OLD.MD](README_OLD.MD)
+Legacy documentation is archived in [README_OLD.md](README_OLD.md).
+
+## Development
+
+Install development tools:
+
+```bash
+uv sync --extra dev
+```
+
+Install git hooks:
+
+```bash
+uv run pre-commit install
+```
+
+Run Ruff checks:
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+```
+
+Format Python code:
+
+```bash
+uv run ruff format .
+```
+
+Run the Python test suite:
+
+```bash
+uv run python -m unittest discover -s tests
+```
+
+Run a single test file:
+
+```bash
+uv run python -m unittest tests/test_ai_automation_logic.py
+```
+
+Build the frontend:
+
+```bash
+cd frontend
+npm run build
+```
+
+## Dependency Management
+
+Python dependencies are managed through `pyproject.toml` and `uv.lock`.
+
+Use `uv sync` for normal setup. If dependencies change, regenerate the lockfile:
+
+```bash
+uv lock
+```
+
+CI uses locked installs, so commit both `pyproject.toml` and `uv.lock` whenever
+dependency changes are intentional.
+
+Frontend dependencies are managed with npm and `frontend/package-lock.json`.
+
+## Documentation
+
+Additional notes live in `docs/`:
+
+- `docs/HostingStrategy.md`
+- `docs/PrepareForMacUser.md`
+- `docs/PrepareForWindowsUser.md`
+- `docs/MathRenderingTestFile.md`
+
+The temporary refactoring README has been preserved as
+`README_REFACTORING.md`.
+
+## Contributing
+
+Contributions are welcome. A typical workflow is:
+
+```bash
+git checkout -b your-branch-name
+uv sync --extra dev
+cd frontend && npm install && cd ..
+uv run pre-commit install
+```
+
+Before opening a pull request, run the relevant checks:
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run python -m unittest discover -s tests
+cd frontend && npm run build
+```
+
+Keep changes focused, update documentation when behavior changes, and include
+tests for backend or workflow changes where practical.
+
+## License
+
+See [LICENSE](LICENSE.md).
