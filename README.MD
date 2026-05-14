@@ -1,11 +1,11 @@
 # Markdown Reader
 
-Markdown Reader is a desktop Markdown editor and reader with a modern Next.js
-interface, a local FastAPI backend, AI-assisted editing tools, and native
+Markdown Reader is a desktop Markdown editor and reader built with a Next.js
+frontend, a local FastAPI backend, AI-assisted editing tools, and native
 desktop packaging through Tauri.
 
-The project was previously shipped as a Python Tkinter application.  
-That legacy UI is still available for reference and fallback use, while the current version is built around the Tauri desktop experience.
+A legacy Python Tkinter UI is still available for reference and fallback use,
+while the current version is built around the Tauri desktop experience.
 
 ![Markdown Reader desktop preview](https://github.com/user-attachments/assets/ac3351a8-dd2a-445b-9f1f-4754faeef509)
 
@@ -38,7 +38,7 @@ MarkdownReader/
 ├── tests/                # Python tests for backend and AI workflow logic
 ├── docs/                 # Additional project and platform notes
 ├── README_REFACTORING.md # Archived refactoring/migration README
-└── README_OLD.md         # Legacy Tkinter-era README
+└── README_OLD.MD         # Legacy Tkinter-era README
 ```
 
 In development mode, the app uses fixed local ports:
@@ -243,7 +243,7 @@ The original Python/Tkinter application is still available:
 uv run python app.py
 ```
 
-Legacy documentation is archived in [README_OLD.md](README_OLD.md).
+Legacy documentation is archived in [README_OLD.MD](README_OLD.MD).
 
 ## Development
 
