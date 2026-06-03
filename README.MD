@@ -51,6 +51,23 @@ Open `http://127.0.0.1:8000/docs` for the backend API docs. Press `Ctrl+C` to st
 
 ---
 
+## Desktop Downloads
+
+Official desktop release builds are published through GitHub Actions for:
+
+- macOS Apple Silicon (`aarch64-apple-darwin`)
+- Windows x64 (`x86_64-pc-windows-msvc`)
+- Linux x64 (`x86_64-unknown-linux-gnu`)
+
+macOS Intel builds are not part of the current release matrix. Recent macOS
+devices use Apple Silicon, and the app's advanced PDF dependency chain no
+longer provides all required wheels for macOS Intel.
+
+The public download page is served from `distribution/` through GitHub Pages:
+<https://petertzy.github.io/markdown-reader/>.
+
+---
+
 ## Architecture
 
 Markdown Reader is split into three main layers:
@@ -134,6 +151,31 @@ cd frontend && npm run tauri:dev
 
 ## Building the Desktop App
 
+Release bundles are built by `.github/workflows/release.yml` when a `v*` tag is
+pushed or the workflow is run manually. The workflow uses native runners because
+the Python backend sidecar is bundled with PyInstaller.
+
+Current release targets:
+
+| Platform | Runner | Target triple | Bundles |
+| --- | --- | --- | --- |
+| macOS Apple Silicon | `macos-14` | `aarch64-apple-darwin` | `.app` / `.dmg` |
+| Linux x64 | `ubuntu-22.04` | `x86_64-unknown-linux-gnu` | `.deb` / `.AppImage` / `.rpm` |
+| Windows x64 | `windows-latest` | `x86_64-pc-windows-msvc` | `.msi` / `.exe` |
+
+To create a release, update the app version, commit the change, then push a tag:
+
+```bash
+git tag vX.Y.Z
+git push origin vX.Y.Z
+```
+
+The workflow uploads bundles to a draft GitHub Release for review before
+publishing. The distribution page reads the latest public GitHub Release and
+links to the matching platform assets.
+
+### Local Build
+
 Build the Python backend sidecar:
 
 ```bash
@@ -147,7 +189,7 @@ cp dist/markdown-reader-backend frontend/src-tauri/binaries/markdown-reader-back
 chmod +x frontend/src-tauri/binaries/markdown-reader-backend-aarch64-apple-darwin
 ```
 
-For other platforms, use the matching [Rust target triple](https://doc.rust-lang.org/cargo/appendix/glossary.html#target) as the sidecar filename suffix.
+For Windows or Linux local builds, use the matching [Rust target triple](https://doc.rust-lang.org/cargo/appendix/glossary.html#target) as the sidecar filename suffix.
 
 Build the desktop bundle:
 

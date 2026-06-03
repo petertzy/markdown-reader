@@ -14,16 +14,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 test: name => isMac(name) && isArm(name) && (name.endsWith('.zip') || name.endsWith('.tar.gz'))
             }
         ],
-        'mac-intel': [
-            {
-                label: 'Download DMG',
-                test: name => isMac(name) && isIntel(name) && name.endsWith('.dmg')
-            },
-            {
-                label: 'Download App',
-                test: name => isMac(name) && isIntel(name) && (name.endsWith('.zip') || name.endsWith('.tar.gz'))
-            }
-        ],
         windows: [
             {
                 label: 'Download MSI',
@@ -104,10 +94,6 @@ function isMac(name) {
 
 function isArm(name) {
     return /aarch64|arm64|apple-silicon/.test(name);
-}
-
-function isIntel(name) {
-    return /x86_64|x64|amd64|intel/.test(name);
 }
 
 function isWindows(name) {
