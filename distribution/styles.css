@@ -225,9 +225,44 @@ nav {
     gap: 2rem;
 }
 
+.release-note {
+    max-width: 760px;
+    margin: -2rem auto 2rem;
+    padding: 1.2rem 1.5rem;
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.04);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.release-label {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+}
+
+.release-note strong {
+    font-size: 1.15rem;
+}
+
+.release-note a {
+    color: var(--accent-secondary);
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.release-note a:hover {
+    text-decoration: underline;
+}
+
 .install-note {
     max-width: 760px;
-    margin: -2rem auto 4rem;
+    margin: 0 auto 4rem;
     padding: 1.5rem;
     border: 1px solid var(--glass-border);
     border-radius: 16px;
@@ -265,8 +300,9 @@ nav {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 1rem;
+    min-height: 350px;
 }
 
 .download-card.active:hover {
@@ -280,18 +316,32 @@ nav {
     cursor: not-allowed;
 }
 
+.platform-icon {
+    width: 3rem;
+    height: 3rem;
+    margin-bottom: 0.5rem;
+    color: white;
+    stroke-width: 1.5;
+}
+
 .badge {
     display: inline-block;
     padding: 0.4rem 1rem;
     border-radius: 50px;
     font-size: 0.8rem;
     font-weight: 600;
-    margin-bottom: 1.5rem;
+    margin-bottom: 0.75rem;
 }
 
 .badge-available {
     background: rgba(0, 229, 255, 0.1);
     color: var(--accent-secondary);
+}
+
+.badge-loading,
+.badge-manual {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-muted);
 }
 
 .badge-soon {
@@ -301,7 +351,27 @@ nav {
 
 .download-card h4 {
     font-size: 1.5rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 0;
+}
+
+.platform-meta {
+    color: var(--text-muted);
+    min-height: 3.2rem;
+    max-width: 14rem;
+}
+
+.download-actions {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: auto;
+}
+
+.download-actions .btn {
+    width: 100%;
+    padding: 0.9rem 1rem;
+    font-size: 1rem;
 }
 
 /* Footer */
@@ -331,4 +401,8 @@ footer {
     .btn { text-align: center; }
     nav { padding: 1.5rem 5%; }
     .nav-links { display: none; }
+    .release-note {
+        align-items: flex-start;
+        flex-direction: column;
+    }
 }

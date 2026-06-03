@@ -11,8 +11,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_PATH="${ROOT}/frontend/src-tauri/target/release/bundle/macos/Markdown Reader.app"
 ARTIFACT_DIR="${ROOT}/release-artifacts"
-ARTIFACT_PATH="${ARTIFACT_DIR}/Markdown-Reader-2.0.0-macOS-arm64.zip"
-NOTARY_UPLOAD_PATH="${ARTIFACT_DIR}/Markdown-Reader-2.0.0-macOS-arm64-notary.zip"
+APP_VERSION="$(node -p "require('${ROOT}/frontend/src-tauri/tauri.conf.json').version")"
+ARTIFACT_PATH="${ARTIFACT_DIR}/Markdown-Reader-${APP_VERSION}-macOS-arm64.zip"
+NOTARY_UPLOAD_PATH="${ARTIFACT_DIR}/Markdown-Reader-${APP_VERSION}-macOS-arm64-notary.zip"
 SIGN_IDENTITY="${MACOS_SIGN_IDENTITY:--}"
 SIGN_OPTIONS=()
 

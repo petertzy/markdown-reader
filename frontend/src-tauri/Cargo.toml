@@ -1,6 +1,6 @@
 [package]
 name = "app"
-version = "2.0.0"
+version = "2.0.1"
 description = "Markdown Reader desktop app"
 authors = ["Markdown Reader Contributors"]
 license = ""

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Markdown Reader | The Ultimate Reading Experience</title>
-    <meta name="description" content="A professional, high-performance Markdown reader and editor with AI capabilities. Available for macOS and iOS.">
+    <meta name="description" content="A professional, high-performance Markdown reader and editor with AI capabilities. Available for macOS, Windows, and Linux.">
     <link rel="stylesheet" href="styles.css">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -77,40 +77,66 @@
             <h2 class="reveal">Choose Your Platform</h2>
             <p class="reveal">Start your journey with Markdown Reader today.</p>
         </div>
+        <div class="release-note reveal">
+            <div>
+                <span class="release-label">Latest public release</span>
+                <strong id="release-version">Checking GitHub Releases...</strong>
+            </div>
+            <a id="release-link" href="https://github.com/petertzy/markdown-reader/releases/latest">View all assets</a>
+        </div>
         <div class="install-note reveal">
-            <h3>macOS beta install note</h3>
-            <p>This build is signed but not notarized yet. If macOS blocks it after download, move the app to Applications, then run:</p>
+            <h3>macOS install note</h3>
+            <p>Current public macOS builds may not be notarized yet. If macOS blocks the app after download, move it to Applications, then run:</p>
             <code>xattr -dr com.apple.quarantine "/Applications/Markdown Reader.app"</code>
         </div>
         <div class="download-grid">
-            <!-- Active Platforms -->
-            <div class="download-card active reveal">
-                <span class="badge badge-available">Available Now</span>
-                <i data-lucide="apple" style="font-size: 3rem; margin-bottom: 1.5rem; color: white;"></i>
-                <h4>macOS</h4>
-                <a href="https://github.com/petertzy/markdown-reader/releases/download/v2.0.0/Markdown-Reader-2.0.0-macOS-arm64.zip" class="btn btn-secondary">Download for Mac</a>
+            <div class="download-card active reveal" data-platform-card="mac-arm">
+                <span class="badge badge-loading">Checking Release</span>
+                <i data-lucide="apple" class="platform-icon"></i>
+                <h4>macOS Apple Silicon</h4>
+                <p class="platform-meta">For M1, M2, M3, and newer Macs.</p>
+                <div class="download-actions" data-download-actions>
+                    <a href="https://github.com/petertzy/markdown-reader/releases/latest" class="btn btn-secondary">View Downloads</a>
+                </div>
             </div>
-            <div class="download-card soon reveal">
-                <span class="badge badge-soon">Coming Soon</span>
-                <i data-lucide="smartphone" style="font-size: 3rem; margin-bottom: 1.5rem; color: white;"></i>
-                <h4>iOS</h4>
+            <div class="download-card active reveal" data-platform-card="mac-intel">
+                <span class="badge badge-loading">Checking Release</span>
+                <i data-lucide="apple" class="platform-icon"></i>
+                <h4>macOS Intel</h4>
+                <p class="platform-meta">For Intel-based Macs.</p>
+                <div class="download-actions" data-download-actions>
+                    <a href="https://github.com/petertzy/markdown-reader/releases/latest" class="btn btn-secondary">View Downloads</a>
+                </div>
             </div>
-
-            <!-- Coming Soon Platforms -->
-            <div class="download-card soon reveal">
-                <span class="badge badge-soon">Coming Soon</span>
-                <i data-lucide="windows" style="font-size: 3rem; margin-bottom: 1.5rem; color: var(--text-muted);"></i>
+            <div class="download-card active reveal" data-platform-card="windows">
+                <span class="badge badge-loading">Checking Release</span>
+                <i data-lucide="monitor-down" class="platform-icon"></i>
                 <h4>Windows</h4>
+                <p class="platform-meta">For Windows 10 and later on x64 PCs.</p>
+                <div class="download-actions" data-download-actions>
+                    <a href="https://github.com/petertzy/markdown-reader/releases/latest" class="btn btn-secondary">View Downloads</a>
+                </div>
             </div>
-            <div class="download-card soon reveal">
-                <span class="badge badge-soon">Coming Soon</span>
-                <i data-lucide="terminal" style="font-size: 3rem; margin-bottom: 1.5rem; color: var(--text-muted);"></i>
+            <div class="download-card active reveal" data-platform-card="linux">
+                <span class="badge badge-loading">Checking Release</span>
+                <i data-lucide="terminal" class="platform-icon"></i>
                 <h4>Linux</h4>
+                <p class="platform-meta">AppImage, DEB, and RPM packages when available.</p>
+                <div class="download-actions" data-download-actions>
+                    <a href="https://github.com/petertzy/markdown-reader/releases/latest" class="btn btn-secondary">View Downloads</a>
+                </div>
             </div>
             <div class="download-card soon reveal">
                 <span class="badge badge-soon">Coming Soon</span>
-                <i data-lucide="toy-brick" style="font-size: 3rem; margin-bottom: 1.5rem; color: var(--text-muted);"></i>
+                <i data-lucide="smartphone" class="platform-icon"></i>
+                <h4>iOS</h4>
+                <p class="platform-meta">Mobile support is not part of the desktop release matrix yet.</p>
+            </div>
+            <div class="download-card soon reveal">
+                <span class="badge badge-soon">Coming Soon</span>
+                <i data-lucide="toy-brick" class="platform-icon"></i>
                 <h4>Android</h4>
+                <p class="platform-meta">Mobile support is not part of the desktop release matrix yet.</p>
             </div>
         </div>
     </section>
