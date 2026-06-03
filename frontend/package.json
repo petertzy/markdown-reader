@@ -1,9 +1,10 @@
 {
   "name": "markdown-reader-frontend",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3000",
+    "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "build": "next build",
     "start": "next start --port 3000",
