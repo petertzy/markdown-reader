@@ -42,6 +42,15 @@ dev = [
     "httpx>=0.27.0",   # for FastAPI TestClient
     "pytest>=8.0",
 ]
+# Install with: uv sync --extra universal-import
+# or:           pip install "markdown-reader[universal-import]"
+#
+# Enables import of 20+ additional document formats through MarkItDown:
+#   Excel (.xlsx/.xls), PowerPoint (.pptx), CSV, EPUB, XML, ZIP, images
+#   (with OCR), audio (speech-to-text), Outlook messages, Jupyter notebooks.
+universal-import = [
+    "markitdown[all]>=0.1.0",
+]
 
 [project.scripts]
 # Start the FastAPI backend
