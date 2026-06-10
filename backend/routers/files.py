@@ -2,12 +2,22 @@
 backend/routers/files.py
 ========================
 File system CRUD endpoints + recent-files management.
+
+Document import is handled by a two-level converter chain:
+  1. Native converters for Markdown/text, HTML, PDF, and DOCX (always used
+     when the extension matches — no external dependency required).
+  2. MarkItDown fallback (microsoft/markitdown) for any remaining formats
+     such as Excel (.xlsx/.xls), PowerPoint (.pptx), CSV, EPUB, XML, ZIP,
+     images (with OCR via optional dependencies), and audio transcription.
+     MarkItDown is imported lazily; if the package is not installed the
+     endpoint still works for the natively-supported types.
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -16,6 +26,46 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Formats supported natively (without MarkItDown)
+# ---------------------------------------------------------------------------
+_NATIVE_FORMATS: dict[str, str] = {
+    ".md": "Markdown",
+    ".markdown": "Markdown",
+    ".txt": "Plain Text",
+    ".html": "HTML",
+    ".htm": "HTML",
+    ".pdf": "PDF",
+    ".docx": "Word Document",
+}
+
+# ---------------------------------------------------------------------------
+# Formats added by MarkItDown (informational — used by /supported-formats)
+# ---------------------------------------------------------------------------
+_MARKITDOWN_FORMATS: dict[str, str] = {
+    ".pptx": "PowerPoint Presentation",
+    ".ppt": "PowerPoint Presentation (legacy)",
+    ".xlsx": "Excel Spreadsheet",
+    ".xls": "Excel Spreadsheet (legacy)",
+    ".csv": "CSV Spreadsheet",
+    ".epub": "EPUB eBook",
+    ".xml": "XML Document",
+    ".zip": "ZIP Archive (contents converted individually)",
+    ".wav": "WAV Audio (speech-to-text)",
+    ".mp3": "MP3 Audio (speech-to-text)",
+    ".jpg": "JPEG Image (OCR)",
+    ".jpeg": "JPEG Image (OCR)",
+    ".png": "PNG Image (OCR)",
+    ".gif": "GIF Image (OCR)",
+    ".bmp": "BMP Image (OCR)",
+    ".tiff": "TIFF Image (OCR)",
+    ".tif": "TIFF Image (OCR)",
+    ".msg": "Outlook Email Message",
+    ".ipynb": "Jupyter Notebook",
+}
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _ROOT not in sys.path:
@@ -188,30 +238,65 @@ def _convert_docx_to_markdown(path: str) -> str:
     return markdown
 
 
+def _convert_with_markitdown(path: str, filename: str | None = None) -> str:
+    """Use Microsoft MarkItDown to convert a file to Markdown.
+
+    Raises RuntimeError if markitdown is not installed.
+    Raises HTTPException(400) if the format is not supported by MarkItDown.
+    """
+    try:
+        from markitdown import MarkItDown  # type: ignore[import]
+    except ImportError as exc:
+        raise RuntimeError(
+            "markitdown is not installed. Run: pip install markitdown"
+        ) from exc
+
+    md_converter = MarkItDown()
+    try:
+        result = md_converter.convert(path)
+    except Exception as exc:
+        ext = Path(filename or path).suffix.lower()
+        raise HTTPException(
+            status_code=400,
+            detail=f"MarkItDown could not convert {ext or 'unknown'} file: {exc}",
+        ) from exc
+
+    text = getattr(result, "text_content", None)
+    if text is None:
+        text = str(result)
+    return text.strip()
+
+
 def _convert_local_file_to_markdown(path: str, filename: str | None = None) -> str:
     ext = Path(filename or path).suffix.lower()
 
+    # ── Native converters (no extra dependencies beyond what is already
+    #    required by the application) ─────────────────────────────────────
     if ext in {".md", ".markdown", ".txt"}:
         with open(path, encoding="utf-8", errors="replace") as file_obj:
             return file_obj.read()
 
     if ext in {".html", ".htm"}:
         logic = import_module("markdown_reader.logic")
-
         with open(path, encoding="utf-8", errors="replace") as file_obj:
             return logic.convert_html_to_markdown(file_obj.read())
 
     if ext == ".pdf":
         logic = import_module("markdown_reader.logic")
-
         return logic.convert_pdf_to_markdown(path)
 
     if ext == ".docx":
         return _convert_docx_to_markdown(path)
 
-    raise HTTPException(
-        status_code=400, detail=f"Unsupported file type: {ext or 'unknown'}"
+    # ── MarkItDown fallback — handles 15+ additional formats ─────────────
+    logger.info(
+        "No native converter for '%s'; falling back to MarkItDown.", ext or "unknown"
     )
+    try:
+        return _convert_with_markitdown(path, filename)
+    except RuntimeError as exc:
+        # MarkItDown not installed: surface as a clear 400 with install hint.
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/convert-to-markdown")
@@ -324,3 +409,37 @@ def clear_recent_files():
     """Clear all recent-file entries."""
     _set_recent_entries([])
     return {"entries": []}
+
+
+@router.get("/supported-formats")
+def get_supported_formats():
+    """Return all file formats that can be imported and converted to Markdown.
+
+    The response groups formats into two categories:
+
+    * ``native`` – always available; handled by built-in converters.
+    * ``markitdown`` – handled by Microsoft MarkItDown (requires the
+      ``markitdown`` package to be installed).  The ``markitdown_available``
+      flag indicates whether the package is currently installed.
+    """
+    markitdown_available = False
+    try:
+        import_module("markitdown")
+        markitdown_available = True
+    except ImportError:
+        pass
+
+    native = [
+        {"extension": ext, "description": desc}
+        for ext, desc in _NATIVE_FORMATS.items()
+    ]
+    markitdown = [
+        {"extension": ext, "description": desc}
+        for ext, desc in _MARKITDOWN_FORMATS.items()
+    ]
+
+    return {
+        "native": native,
+        "markitdown": markitdown,
+        "markitdown_available": markitdown_available,
+    }
