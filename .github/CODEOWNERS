@@ -10,7 +10,8 @@ mkdocs.yml @petertzy @lwu1822
 .github/workflows/deploy-docs.yml @petertzy @lwu1822
 
 # Markdown and workflow files should be reviewed by petertzy
-*.md or *.MD @petertzy @lwu1822
+*.md @petertzy @lwu1822
+*.MD @petertzy @lwu1822
 *.yml @petertzy @lwu1822
 
 # app.py should be reviewed by petertzy
