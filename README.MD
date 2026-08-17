@@ -12,6 +12,17 @@
 
 ---
 
+## Table of Contents
+
+- [Why Markdown Reader?](#-why-markdown-reader)
+  - [Key Features](#key-features)
+- [Quick Start](#-quick-start)
+- [Desktop Downloads](#-desktop-downloads)
+- [Architecture](#-architecture)
+- [Contributing](#-contributing)
+
+---
+
 ## 🌟 Why Markdown Reader?
 
 Most modern writing apps force you to choose between **privacy** and **power**. Cloud-based AI editors train on your data, while local editors often lack intelligent features.
@@ -19,11 +30,12 @@ Most modern writing apps force you to choose between **privacy** and **power**. 
 **Markdown Reader bridges the gap.** It is a native desktop application built on Tauri, ensuring your files stay locally on your machine. But it also seamlessly integrates with **OpenAI, Anthropic, OpenRouter, and Local LLMs**, bringing powerful AI-assisted writing directly to your offline workflow.
 
 ### Key Features
-* 🔒 **Local-First Architecture**: Your files never leave your machine unless you explicitly call an external AI API.
-* 🤖 **Bring-Your-Own-AI**: Configure OpenAI, Anthropic, or OpenRouter with your own API keys.
-* ✍️ **Intelligent Editing**: AI-assisted translation, summarization, formatting, and code-block cleanup.
-* 🛡️ **Audit & Rollback**: Review all AI suggestions before applying them. Reject or rollback changes with a single click.
-* 🖥️ **Native Desktop Feel**: Built with Next.js and packaged with Tauri for blazing-fast performance.
+
+- 🔒 **Local-First Architecture**: Your files never leave your machine unless you explicitly call an external AI API.
+- 🤖 **Bring-Your-Own-AI**: Configure OpenAI, Anthropic, or OpenRouter with your own API keys.
+- ✍️ **Intelligent Editing**: AI-assisted translation, summarization, formatting, and code-block cleanup.
+- 🛡️ **Audit & Rollback**: Review all AI suggestions before applying them. Reject or rollback changes with a single click.
+- 🖥️ **Native Desktop Feel**: Built with Next.js and packaged with Tauri for blazing-fast performance.
 
 ---
 
@@ -55,17 +67,17 @@ cp frontend/.env.local.example frontend/.env.local
 
 We provide official desktop release builds through GitHub Actions.
 
-| OS | Architecture | Download |
-|---|---|---|
-| **macOS** | Apple Silicon | [Download .dmg](https://petertzy.github.io/markdown-reader/) |
-| **Windows** | x64 | [Download .exe](https://petertzy.github.io/markdown-reader/) |
-| **Linux** | x64 | [Download .AppImage](https://petertzy.github.io/markdown-reader/) |
+| OS          | Architecture  | Download                                                          |
+| ----------- | ------------- | ----------------------------------------------------------------- |
+| **macOS**   | Apple Silicon | [Download .dmg](https://petertzy.github.io/markdown-reader/)      |
+| **Windows** | x64           | [Download .exe](https://petertzy.github.io/markdown-reader/)      |
+| **Linux**   | x64           | [Download .AppImage](https://petertzy.github.io/markdown-reader/) |
 
-*(Note: macOS Intel builds are currently unsupported due to advanced PDF dependency constraints).*
+_(Note: macOS Intel builds are currently unsupported due to advanced PDF dependency constraints)._
 
 ---
 
-## 🏗️ Architecture
+## 🏗 Architecture
 
 Markdown Reader is split into three main layers to ensure maximum performance and maintainability:
 
@@ -82,6 +94,7 @@ When packaged for desktop use, the Python backend is bundled as a silent Tauri s
 Contributions are highly welcome! Whether you're fixing a bug, suggesting a feature, or helping us write documentation, we'd love to have you.
 
 To get started:
+
 1. `git checkout -b your-feature-branch`
 2. Run linting: `uv run ruff check .`
 3. Run tests: `uv run python -m unittest discover -s tests`
