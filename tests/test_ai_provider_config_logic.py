@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from markdown_reader import logic
+from backend import ai_logic as logic
 
 
 class TestAIProviderConfigLogic(unittest.TestCase):
@@ -64,7 +64,7 @@ class TestAIProviderConfigLogic(unittest.TestCase):
                 return {"data": [{"id": "override-model"}]}
 
         with patch(
-            "markdown_reader.logic.requests.get", return_value=_DummyResp()
+            "backend.ai_logic.requests.get", return_value=_DummyResp()
         ) as mock_get:
             models = logic.fetch_available_models(
                 "openai_compatible",

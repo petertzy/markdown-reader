@@ -277,13 +277,15 @@ def _convert_local_file_to_markdown(path: str, filename: str | None = None) -> s
             return file_obj.read()
 
     if ext in {".html", ".htm"}:
-        logic = import_module("markdown_reader.logic")
+        from backend.converters import convert_html_to_markdown
+
         with open(path, encoding="utf-8", errors="replace") as file_obj:
-            return logic.convert_html_to_markdown(file_obj.read())
+            return convert_html_to_markdown(file_obj.read())
 
     if ext == ".pdf":
-        logic = import_module("markdown_reader.logic")
-        return logic.convert_pdf_to_markdown(path)
+        from backend.converters import convert_pdf_to_markdown
+
+        return convert_pdf_to_markdown(path)
 
     if ext == ".docx":
         return _convert_docx_to_markdown(path)
@@ -430,8 +432,7 @@ def get_supported_formats():
         pass
 
     native = [
-        {"extension": ext, "description": desc}
-        for ext, desc in _NATIVE_FORMATS.items()
+        {"extension": ext, "description": desc} for ext, desc in _NATIVE_FORMATS.items()
     ]
     markitdown = [
         {"extension": ext, "description": desc}

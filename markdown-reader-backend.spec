@@ -7,9 +7,10 @@ a = Analysis(
     binaries=[],
     datas=[],
     hiddenimports=[
-        'markdown_reader.logic',
-        'markdown_reader.plugins.docx_exporter',
-        'markdown_reader.plugins.pdf_exporter',
+        'backend.ai_logic',
+        'backend.converters',
+        'backend.docx_exporter',
+        'backend.pdf_exporter',
     ],
     hookspath=[],
     hooksconfig={},

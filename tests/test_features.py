@@ -21,13 +21,15 @@ import unittest
 # ---------------------------------------------------------------------------
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from backend.routers.files import ConvertToMarkdownPayload, convert_to_markdown
-from markdown_reader.recent_files import (
+from backend.recent_files import (
     RecentFilesManager,
     _middle_ellipsis,
     _safe_write_json,
 )
-from markdown_reader.word_count_bar import _count_words, _reading_time, _strip_markdown
+from backend.routers.files import ConvertToMarkdownPayload, convert_to_markdown
+from backend.word_count import count_words as _count_words
+from backend.word_count import reading_time as _reading_time
+from backend.word_count import strip_markdown as _strip_markdown
 
 # ===========================================================================
 # Tests for word_count_bar helpers

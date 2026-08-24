@@ -9,7 +9,6 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
-from importlib import import_module
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -83,9 +82,8 @@ def download_html(payload: ExportPayload):
 @router.post("/docx")
 def export_docx(payload: ExportPayload):
     """Export Markdown to DOCX and return the output file path."""
+    from backend import docx_exporter
     from backend.renderer import render_markdown
-
-    docx_exporter = import_module("markdown_reader.plugins.docx_exporter")
 
     html = render_markdown(
         payload.content,
@@ -110,9 +108,8 @@ def export_docx(payload: ExportPayload):
 @router.post("/pdf")
 def export_pdf(payload: ExportPayload):
     """Export Markdown to PDF via WeasyPrint and return the output file path."""
+    from backend import pdf_exporter
     from backend.renderer import render_markdown
-
-    pdf_exporter = import_module("markdown_reader.plugins.pdf_exporter")
 
     html = render_markdown(
         payload.content,

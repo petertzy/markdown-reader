@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 import sys
-from importlib import import_module
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -22,8 +21,10 @@ router = APIRouter()
 
 
 def _logic():
-    """Import the legacy AI logic only when an AI endpoint is used."""
-    return import_module("markdown_reader.logic")
+    """Import AI logic only when an AI endpoint is used."""
+    from backend import ai_logic
+
+    return ai_logic
 
 
 # ── Models ────────────────────────────────────────────────────────────────────

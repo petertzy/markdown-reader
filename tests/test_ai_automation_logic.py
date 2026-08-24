@@ -1,6 +1,6 @@
 import unittest
 
-from markdown_reader.logic import (
+from backend.ai_logic import (
     build_ai_automation_fallback,
     get_ai_automation_task_templates,
 )

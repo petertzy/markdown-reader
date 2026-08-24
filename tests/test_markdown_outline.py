@@ -15,11 +15,8 @@ These tests cover:
 
 from __future__ import annotations
 
-import pytest
-
 # Import directly from the module under test.
 from backend.routers.markdown import _extract_outline, _slugify
-
 
 # ── _slugify ─────────────────────────────────────────────────────────────────
 
