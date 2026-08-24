@@ -1,6 +1,6 @@
 # Markdown Reader
 
-Markdown Reader is a clean and intuitive Markdown editor/reader with real-time preview support and dark mode toggle. It is compatible with macOS and Windows desktop environments and built with pure Python and Tkinter.
+Markdown Reader is a modern Markdown editor/reader with real-time preview support, AI-assisted editing, and desktop packaging through Tauri. It uses a Next.js frontend with a local FastAPI backend.
 
 ---
 
@@ -17,8 +17,7 @@ Markdown Reader is a clean and intuitive Markdown editor/reader with real-time p
 * Dark mode toggle.
 * **Advanced Table Editor**: Interactive table insertion with customizable rows and columns.
 * **Dual PDF Conversion**: Fast PyMuPDF mode or advanced [Docling](https://github.com/docling-project/docling) mode for complex documents.
-* Built with pure Python, Tkinter, and ttkbootstrap — cross-platform.
-* Can be bundled as a macOS app using `py2app`.
+* Built with Next.js, Tauri, and a local FastAPI backend.
 * Opens preview automatically and avoids multiple browser tabs for a smoother experience.
 * Multi-provider AI failover: Automatically switches to fallback providers on rate-limit/auth/server errors.
 
@@ -95,7 +94,7 @@ After this, `ruff --fix` and `ruff-format` will run automatically on staged file
 ## Running the Application
 
 ```bash
-uv run python app.py
+uv run ./scripts/dev-tauri.sh
 ```
 
 ### How to Use
@@ -141,16 +140,15 @@ uv run python app.py
 
 ## Packaging as a macOS App (Optional)
 
-To bundle this app as a `.app`, use the included `setup.py` script:
-
-### Build the App
+Build the backend sidecar and Tauri desktop bundle:
 
 ```bash
-rm -rf build dist
-python setup.py py2app
+uv run pyinstaller markdown-reader-backend.spec
+cd frontend
+npm run tauri build
 ```
 
-The generated app will be located in the `dist/` folder. You can launch it by double-clicking. To use it like a regular app, move it to your Applications folder.
+The generated desktop artifacts are produced by Tauri under `frontend/src-tauri/target/release/bundle/`.
 
 ---
 
@@ -214,13 +212,11 @@ uv run python -m unittest tests/test_ai_automation_logic.py
 | Test file | What it covers |
 |---|---|
 | `test_ai_automation_logic.py` | Offline fallback logic for TOC generation, summarization, code-block formatting, and task template listing |
-| `test_ai_agent_ui_helpers.py` | UI helper methods: payload validation, chat history migration, audit log capping, suggestion apply/reject |
-| `test_ai_agent_selection_only_integration.py` | Integration path for selection-only mode — verifies correct error handling when no text is selected |
 | `test_ai_provider_config_logic.py` | Provider configuration and API key management logic |
 
 Tests run automatically on every push and pull request via GitHub Actions (see `.github/workflows/python-ci.yml`).
 
-> **macOS note:** `test_ai_agent_ui_helpers.py` and `test_ai_agent_selection_only_integration.py` import `markdown_reader.ui`, which loads WeasyPrint at import time. WeasyPrint requires native system libraries (pango, cairo, gdk-pixbuf). If you see an `OSError: cannot load library 'libgobject-2.0-0'` error, follow the steps in [PrepareForMacUser.md](./PrepareForMacUser.md) first. `test_ai_automation_logic.py` and `test_ai_provider_config_logic.py` have no system library dependencies and can always run.
+> **macOS note:** PDF export uses WeasyPrint, which requires native system libraries (pango, cairo, gdk-pixbuf). If you see an `OSError: cannot load library 'libgobject-2.0-0'` error, follow the steps in [PrepareForMacUser.md](./PrepareForMacUser.md) first.
 
 ---
 
@@ -280,9 +276,10 @@ git push
 
 ## Technical Details
 
-* GUI: `tkinter`, `ttkbootstrap`
+* Frontend: Next.js and Tauri
+* Backend: FastAPI sidecar process
 * Markdown Engine: `markdown2`
-* HTML Preview: Dynamically generated HTML opened in the default browser
+* HTML Preview: Rendered in the desktop UI
 * File Conversion: `html2text` for HTML, `PyMuPDF` and `docling` for PDF import (`pypdf` is used as a fallback when PyMuPDF is unavailable)
 * PDF Export: `weasyprint`
 * AI Translation: `requests` for API communication with OpenAI Compatible, OpenRouter, OpenAI, and Anthropic

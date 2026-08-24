@@ -1,7 +1,7 @@
 """
 renderer.py
 ===========
-Standalone Markdown-to-HTML renderer extracted from markdown_reader/logic.py
+Standalone Markdown-to-HTML renderer for the FastAPI backend
 so it can be used in the FastAPI backend without requiring a tkinter app object.
 """
 
@@ -11,7 +11,7 @@ import os
 import sys
 from html import escape as html_escape
 
-# Ensure the project root is on sys.path so we can import markdown_reader
+# Ensure the project root is on sys.path for standalone backend execution.
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)

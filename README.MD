@@ -83,8 +83,6 @@ Markdown Reader is split into three main layers to ensure maximum performance an
 
 1. **Backend (`/backend`)**: A blazing-fast FastAPI application handling rendering, export, and all AI API communications.
 2. **Frontend (`/frontend`)**: A Next.js UI providing the rich editor experience, packaged within a Tauri desktop shell.
-3. **Legacy (`/markdown_reader`)**: Legacy Tkinter app logic preserved for historical reference.
-
 When packaged for desktop use, the Python backend is bundled as a silent Tauri sidecar process, dynamically assigning ports at runtime to avoid conflicts.
 
 ---

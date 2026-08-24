@@ -10,7 +10,6 @@ import os
 import re
 import sys
 import unicodedata
-from importlib import import_module
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -90,7 +89,9 @@ def _extract_outline(markdown: str) -> list[dict]:
         level = len(match.group(1))
         raw_text = match.group(2).strip()
         # Strip common inline Markdown so the label is readable plain text.
-        plain = re.sub(r"\*{1,2}|_{1,2}|`|~~|!\[.*?\]\(.*?\)|\[([^\]]*)\]\(.*?\)", r"\1", raw_text)
+        plain = re.sub(
+            r"\*{1,2}|_{1,2}|`|~~|!\[.*?\]\(.*?\)|\[([^\]]*)\]\(.*?\)", r"\1", raw_text
+        )
         plain = plain.strip()
 
         base_slug = _slugify(plain)
@@ -131,10 +132,10 @@ def render(payload: RenderPayload):
 @router.post("/convert/html")
 def html_to_markdown(payload: HtmlToMarkdownPayload):
     """Convert an HTML string to Markdown."""
-    logic = import_module("markdown_reader.logic")
+    from backend.converters import convert_html_to_markdown
 
     try:
-        result = logic.convert_html_to_markdown(payload.html)
+        result = convert_html_to_markdown(payload.html)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return {"markdown": result}
@@ -143,15 +144,18 @@ def html_to_markdown(payload: HtmlToMarkdownPayload):
 @router.post("/convert/pdf")
 def pdf_to_markdown(payload: PdfToMarkdownPayload):
     """Convert a local PDF file to Markdown."""
-    logic = import_module("markdown_reader.logic")
+    from backend.converters import (
+        convert_pdf_to_markdown,
+        convert_pdf_to_markdown_docling,
+    )
 
     if not os.path.isfile(payload.path):
         raise HTTPException(status_code=404, detail=f"File not found: {payload.path}")
     try:
         if payload.use_docling:
-            result = logic.convert_pdf_to_markdown_docling(payload.path)
+            result = convert_pdf_to_markdown_docling(payload.path)
         else:
-            result = logic.convert_pdf_to_markdown(payload.path)
+            result = convert_pdf_to_markdown(payload.path)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return {"markdown": result}

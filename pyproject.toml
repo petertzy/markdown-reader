@@ -23,11 +23,6 @@ dependencies = [
     "fastapi>=0.111.0",
     "uvicorn[standard]>=0.29.0",
     "pydantic>=2.7.0",
-    # --- Legacy tkinter UI (kept for reference / fallback) ---
-    "watchdog",
-    "ttkbootstrap",
-    "py2app>=0.28; sys_platform == 'darwin'",
-    "pyobjc-framework-Cocoa; sys_platform == 'darwin'",
 ]
 
 [project.optional-dependencies]
@@ -72,16 +67,11 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# ttkbootstrap is designed to be used with star imports for its style constants
-"app.py" = ["F403", "F405"]
-"markdown_reader/ui.py" = ["F403", "F405"]
-# sys.setrecursionlimit() must run before importing setuptools (see comment in file)
-"setup.py" = ["E402"]
 # Backend routers use sys.path manipulation for standalone import compatibility
 "backend/**" = ["E402"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["markdown_reader"]
+known-first-party = ["backend"]
 
 [tool.ruff.format]
 quote-style = "double"
