@@ -34,6 +34,7 @@ Most modern writing apps force you to choose between **privacy** and **power**. 
 - 🔒 **Local-First Architecture**: Your files never leave your machine unless you explicitly call an external AI API.
 - 🤖 **Bring-Your-Own-AI**: Configure OpenAI, Anthropic, or OpenRouter with your own API keys.
 - ✍️ **Intelligent Editing**: AI-assisted translation, summarization, formatting, and code-block cleanup.
+- ⚡ **Slash Commands**: Type `/` in the editor to trigger AI actions or insert a table inline, without opening the AI panel.
 - 🛡️ **Audit & Rollback**: Review all AI suggestions before applying them. Reject or rollback changes with a single click.
 - 🖥️ **Native Desktop Feel**: Built with Next.js and packaged with Tauri for blazing-fast performance.
 
@@ -84,6 +85,23 @@ Markdown Reader is split into three main layers to ensure maximum performance an
 1. **Backend (`/backend`)**: A blazing-fast FastAPI application handling rendering, export, and all AI API communications.
 2. **Frontend (`/frontend`)**: A Next.js UI providing the rich editor experience, packaged within a Tauri desktop shell.
 When packaged for desktop use, the Python backend is bundled as a silent Tauri sidecar process, dynamically assigning ports at runtime to avoid conflicts.
+
+---
+
+## ⚡ Slash Commands
+
+Type `/` at the start of a line (or after whitespace) in the editor to open an inline command menu:
+
+| Command | Behavior |
+| --- | --- |
+| `/summarize` | Summarizes the document via AI |
+| `/translate` | Opens the AI panel's Translate tab |
+| `/format` | Applies Markdown formatting via AI |
+| `/toc` | Generates a table of contents via AI |
+| `/fix-code` | Fixes code block fences via AI |
+| `/insert-table` | Inserts a Markdown table (no AI call) |
+
+Use the arrow keys to navigate, Enter to run a command, or Escape to dismiss the menu.
 
 ---
 

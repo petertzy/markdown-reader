@@ -152,6 +152,14 @@ def get_ai_provider_env_var(provider: str) -> str:
     }[provider]
 
 
+def _get_key_slot_env_var(provider_or_slot: str) -> str:
+    provider_or_slot = (provider_or_slot or "").strip()
+    for choice in OPENAI_COMPATIBLE_BASE_URL_OPTIONS:
+        if provider_or_slot == get_openai_compatible_storage_key_name(choice):
+            return get_openai_compatible_env_var(choice)
+    return get_ai_provider_env_var(provider_or_slot)
+
+
 def get_ai_provider_display_name(provider: str) -> str:
     return {
         "openai_compatible": "OpenAI Compatible",
@@ -226,16 +234,34 @@ def get_openai_compatible_env_var(choice_key: str | None = None) -> str:
 def get_ai_provider_model(provider: str) -> str:
     provider = _normalize_provider_name(provider)
     env_var = AI_PROVIDER_MODEL_ENV[provider]
-    return os.getenv(env_var, "").strip() or get_provider_default_models(provider)[0]
+    settings_model = ""
+    ai_models = _load_app_settings().get("ai_models", {})
+    if isinstance(ai_models, dict):
+        settings_model = str(ai_models.get(provider, "")).strip()
+    return (
+        os.getenv(env_var, "").strip()
+        or settings_model
+        or get_provider_default_models(provider)[0]
+    )
 
 
 def set_ai_provider_model(provider: str, model: str) -> None:
     provider = _normalize_provider_name(provider)
-    os.environ[AI_PROVIDER_MODEL_ENV[provider]] = model.strip()
+    model = model.strip()
+    os.environ[AI_PROVIDER_MODEL_ENV[provider]] = model
+    settings = _load_app_settings()
+    settings.setdefault("ai_models", {})
+    if isinstance(settings["ai_models"], dict):
+        settings["ai_models"][provider] = model
+    _save_app_settings(settings)
 
 
 def set_current_ai_provider(provider: str) -> None:
-    os.environ["AI_PROVIDER"] = _normalize_provider_name(provider)
+    provider = _normalize_provider_name(provider)
+    os.environ["AI_PROVIDER"] = provider
+    settings = _load_app_settings()
+    settings["ai_provider"] = provider
+    _save_app_settings(settings)
 
 
 def get_provider_default_models(
@@ -257,7 +283,7 @@ def is_secure_key_storage_available() -> bool:
 
 def get_secure_ai_api_key(provider: str) -> str:
     if keyring is None:
-        return os.getenv(get_ai_provider_env_var(provider), "")
+        return os.getenv(_get_key_slot_env_var(provider), "")
     try:
         return keyring.get_password(AI_CREDENTIAL_SERVICE, provider) or ""
     except KeyringError:
@@ -266,14 +292,14 @@ def get_secure_ai_api_key(provider: str) -> str:
 
 def set_secure_ai_api_key(provider: str, api_key: str) -> None:
     if keyring is None:
-        os.environ[get_ai_provider_env_var(provider)] = api_key
+        os.environ[_get_key_slot_env_var(provider)] = api_key
         return
     keyring.set_password(AI_CREDENTIAL_SERVICE, provider, api_key)
 
 
 def delete_secure_ai_api_key(provider: str) -> None:
     if keyring is None:
-        os.environ.pop(get_ai_provider_env_var(provider), None)
+        os.environ.pop(_get_key_slot_env_var(provider), None)
         return
     try:
         keyring.delete_password(AI_CREDENTIAL_SERVICE, provider)
@@ -300,6 +326,133 @@ def fetch_available_models(
         ]
         return [model for model in ids if model]
     return get_provider_default_models(provider, base_url_override=base_url_override)
+
+
+def _get_current_ai_provider() -> str:
+    load_persisted_ai_settings()
+    settings_provider = _load_app_settings().get("ai_provider", "")
+    persisted_provider = settings_provider if isinstance(settings_provider, str) else ""
+    return _normalize_provider_name(
+        persisted_provider.strip() or os.getenv("AI_PROVIDER", "")
+    )
+
+
+def _get_ai_api_key_for_provider(provider: str) -> tuple[str, str, str]:
+    provider = _normalize_provider_name(provider)
+    key_slot = provider
+    env_var = get_ai_provider_env_var(provider)
+    if provider == "openai_compatible":
+        choice = get_openai_compatible_base_url_choice()
+        key_slot = get_openai_compatible_storage_key_name(choice)
+        env_var = get_openai_compatible_env_var(choice)
+
+    api_key = os.getenv(env_var, "").strip() or get_secure_ai_api_key(key_slot).strip()
+    if provider == "openai_compatible" and not api_key:
+        fallback_env_var = get_ai_provider_env_var(provider)
+        api_key = (
+            os.getenv(fallback_env_var, "").strip()
+            or get_secure_ai_api_key(provider).strip()
+        )
+        env_var = fallback_env_var
+    return api_key, key_slot, env_var
+
+
+def _get_ai_base_url(provider: str) -> str:
+    provider = _normalize_provider_name(provider)
+    if provider == "openai_compatible":
+        return get_openai_compatible_base_url().rstrip("/")
+    return AI_PROVIDER_BASE_URLS[provider].rstrip("/")
+
+
+def _extract_openai_compatible_text(response_data: dict[str, Any]) -> str:
+    choices = response_data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+    first_choice = choices[0] if isinstance(choices[0], dict) else {}
+    message = first_choice.get("message")
+    if isinstance(message, dict):
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return "".join(
+                item.get("text", "")
+                for item in content
+                if isinstance(item, dict)
+                and item.get("type") in {"text", "output_text"}
+            )
+    text = first_choice.get("text")
+    return text if isinstance(text, str) else ""
+
+
+def _extract_anthropic_text(response_data: dict[str, Any]) -> str:
+    content = response_data.get("content")
+    if not isinstance(content, list):
+        return ""
+    return "".join(
+        item.get("text", "")
+        for item in content
+        if isinstance(item, dict) and item.get("type") == "text"
+    )
+
+
+def _request_translation_from_provider(
+    provider: str,
+    api_key: str,
+    model: str,
+    content: str,
+    source_language: str,
+    target_language: str,
+) -> str:
+    system_prompt = (
+        "Translate Markdown while preserving Markdown structure, front matter, "
+        "links, tables, code fences, inline code, math, and HTML. Return only the "
+        "translated Markdown."
+    )
+    user_prompt = (
+        f"Source language: {source_language or 'auto'}\n"
+        f"Target language: {target_language}\n\n"
+        "Markdown:\n"
+        f"{content}"
+    )
+    base_url = _get_ai_base_url(provider)
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    if provider == "anthropic":
+        headers["anthropic-version"] = "2023-06-01"
+        response = requests.post(
+            f"{base_url}/messages",
+            headers=headers,
+            json={
+                "model": model,
+                "max_tokens": 4096,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": user_prompt}],
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        translated = _extract_anthropic_text(response.json()).strip()
+    else:
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers=headers,
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "temperature": 0.2,
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        translated = _extract_openai_compatible_text(response.json()).strip()
+
+    if not translated:
+        raise RuntimeError("AI provider returned an empty translation.")
+    return translated
 
 
 def get_ai_automation_task_templates() -> list[dict[str, Any]]:
@@ -438,6 +591,15 @@ def build_ai_automation_fallback(
     user_message: str, document_text: str = "", selected_text: str = ""
 ) -> dict[str, Any] | None:
     lowered = (user_message or "").lower()
+    slash_command = lowered.strip()
+    if slash_command == "/summarize":
+        lowered = "generate summary"
+    elif slash_command == "/format":
+        lowered = "format this section"
+    elif slash_command == "/toc":
+        lowered = "generate table of contents"
+    elif slash_command == "/fix-code":
+        lowered = "format code blocks and correct syntax"
     selection = selected_text if isinstance(selected_text, str) else ""
     document = document_text if isinstance(document_text, str) else ""
     target = selection if selection.strip() else document
@@ -581,6 +743,23 @@ def request_ai_agent_response(
 def translate_markdown_with_ai(
     content: str, source_language: str, target_language: str
 ) -> str:
-    raise TranslationConfigError(
-        "AI translation requires a configured provider API key."
+    if not (content or "").strip():
+        return ""
+
+    provider = _get_current_ai_provider()
+    api_key, _key_slot, env_var = _get_ai_api_key_for_provider(provider)
+    if not api_key:
+        raise TranslationConfigError(
+            "AI translation requires a configured provider API key.",
+            provider_name=provider,
+            env_var=env_var,
+        )
+
+    return _request_translation_from_provider(
+        provider,
+        api_key,
+        get_ai_provider_model(provider),
+        content,
+        source_language,
+        target_language,
     )

@@ -8,6 +8,7 @@
 
 import dynamic from "next/dynamic";
 import type { editor } from "monaco-editor";
+import type Monaco from "monaco-editor";
 
 // Monaco must be loaded client-side only (no SSR)
 const MonacoEditor = dynamic(
@@ -20,8 +21,8 @@ type Props = {
   onChange: (value: string | undefined) => void;
   darkMode: boolean;
   fontSize: number;
-  /** Called with the monaco editor instance after mount */
-  onMount?: (editor: editor.IStandaloneCodeEditor) => void;
+  /** Called with the monaco editor instance and the monaco namespace after mount */
+  onMount?: (editor: editor.IStandaloneCodeEditor, monaco: typeof Monaco) => void;
 };
 
 export default function EditorPane({ value, onChange, darkMode, fontSize, onMount }: Props) {

@@ -92,8 +92,10 @@ def get_ai_settings():
         }
     settings["providers"] = providers
     settings["provider_order"] = list(logic.AI_PROVIDER_PRIORITY)
+    settings_provider = settings.get("ai_provider", "")
     settings["ai_provider"] = logic._normalize_provider_name(
-        os.getenv("AI_PROVIDER", "") or settings.get("ai_provider", "")
+        (settings_provider if isinstance(settings_provider, str) else "").strip()
+        or os.getenv("AI_PROVIDER", "")
     )
     settings["openai_compatible_base_url_choice"] = (
         logic.get_openai_compatible_base_url_choice()
@@ -265,6 +267,7 @@ def translate(payload: TranslatePayload):
             detail={
                 "message": str(exc),
                 "provider": getattr(exc, "provider_name", None),
+                "env_var": getattr(exc, "env_var", None),
             },
         )
     except Exception as exc:

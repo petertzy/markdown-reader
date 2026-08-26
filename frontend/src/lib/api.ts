@@ -214,11 +214,24 @@ export type AgentChatPayload = {
 export type AgentResponse = {
   assistant_message: string;
   proposed_action: {
-    type: "replace_document" | "replace_selection" | "none";
+    type:
+      | "replace_document"
+      | "replace_selection"
+      | "insert_below_document"
+      | "insert_below_selection"
+      | "insert_below"
+      | "none";
     content: string;
     reason: string;
   };
   used_provider: string;
+};
+
+export type AIAutomationTemplate = {
+  id: string;
+  title: string;
+  prompt: string;
+  requires_selection: boolean;
 };
 
 export type AIProviderInfo = {
@@ -395,7 +408,7 @@ export const AI = {
     }),
 
   getAutomationTemplates: () =>
-    apiFetch<{ templates: unknown[] }>("/api/ai/automation/templates"),
+    apiFetch<{ templates: AIAutomationTemplate[] }>("/api/ai/automation/templates"),
 
   getAutomationLogs: (limit = 100) =>
     apiFetch<{ logs: unknown[] }>(`/api/ai/automation/logs?limit=${limit}`),
