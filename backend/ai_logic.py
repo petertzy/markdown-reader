@@ -20,6 +20,17 @@ except Exception:
 
 
 AI_CREDENTIAL_SERVICE = "MarkdownReader.AI"
+LOCAL_AI_DEFAULT_BASE_URL = "http://localhost:1234/v1"
+LOCAL_AI_BASE_URL_OPTIONS = {
+    "lm_studio": "http://localhost:1234/v1",
+    "ollama": "http://localhost:11434/v1",
+    "custom": "",
+}
+LOCAL_AI_BASE_URL_LABELS = {
+    "lm_studio": "LM Studio",
+    "ollama": "Ollama",
+    "custom": "Custom",
+}
 OPENAI_COMPATIBLE_BASE_URL_OPTIONS = {
     "navidia": "https://integrate.api.nvidia.com/v1",
     "groq": "https://api.groq.com/openai/v1",
@@ -37,19 +48,28 @@ OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION = {
         "openai/gpt-oss-20b",
     ],
 }
-AI_PROVIDER_PRIORITY = ("openai_compatible", "openrouter", "openai", "anthropic")
+AI_PROVIDER_PRIORITY = (
+    "local",
+    "openai_compatible",
+    "openrouter",
+    "openai",
+    "anthropic",
+)
 AI_PROVIDER_BASE_URLS = {
+    "local": LOCAL_AI_DEFAULT_BASE_URL,
     "openai_compatible": OPENAI_COMPATIBLE_BASE_URL_OPTIONS["navidia"],
     "openrouter": "https://openrouter.ai/api/v1",
     "openai": "https://api.openai.com/v1",
     "anthropic": "https://api.anthropic.com/v1",
 }
 AI_PROVIDER_DEFAULT_MODELS = {
+    "local": [],
     "openrouter": ["meta-llama/llama-3.3-70b-instruct:free", "openai/gpt-4o-mini"],
     "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
     "anthropic": ["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"],
 }
 AI_PROVIDER_MODEL_ENV = {
+    "local": "LOCAL_AI_MODEL",
     "openai_compatible": "OPENAI_COMPATIBLE_MODEL",
     "openrouter": "OPENROUTER_MODEL",
     "openai": "OPENAI_MODEL",
@@ -145,6 +165,7 @@ def load_persisted_ai_settings() -> None:
 def get_ai_provider_env_var(provider: str) -> str:
     provider = _normalize_provider_name(provider)
     return {
+        "local": "LOCAL_AI_API_KEY",
         "openai_compatible": "OPENAI_COMPATIBLE_API_KEY",
         "openrouter": "OPENROUTER_API_KEY",
         "openai": "OPENAI_API_KEY",
@@ -162,6 +183,7 @@ def _get_key_slot_env_var(provider_or_slot: str) -> str:
 
 def get_ai_provider_display_name(provider: str) -> str:
     return {
+        "local": "Local Model",
         "openai_compatible": "OpenAI Compatible",
         "openrouter": "OpenRouter",
         "openai": "OpenAI",
@@ -180,6 +202,13 @@ def get_openai_compatible_base_url_options() -> list[dict[str, str]]:
     return [
         {"key": key, "label": OPENAI_COMPATIBLE_BASE_URL_LABELS[key], "url": url}
         for key, url in OPENAI_COMPATIBLE_BASE_URL_OPTIONS.items()
+    ]
+
+
+def get_local_ai_base_url_options() -> list[dict[str, str]]:
+    return [
+        {"key": key, "label": LOCAL_AI_BASE_URL_LABELS[key], "url": url}
+        for key, url in LOCAL_AI_BASE_URL_OPTIONS.items()
     ]
 
 
@@ -213,6 +242,67 @@ def get_openai_compatible_base_url() -> str:
     return OPENAI_COMPATIBLE_BASE_URL_OPTIONS[get_openai_compatible_base_url_choice()]
 
 
+def get_local_ai_base_url() -> str:
+    env_url = os.getenv("LOCAL_AI_BASE_URL", "").strip()
+    if env_url:
+        return env_url.rstrip("/")
+    settings = _load_app_settings()
+    choice = str(settings.get("local_ai_base_url_choice", "")).strip()
+    if choice in LOCAL_AI_BASE_URL_OPTIONS and choice != "custom":
+        return LOCAL_AI_BASE_URL_OPTIONS[choice].rstrip("/")
+    configured_url = (
+        str(settings.get("local_ai_custom_base_url", "")).strip()
+        or str(settings.get("local_ai_base_url", "")).strip()
+        or LOCAL_AI_DEFAULT_BASE_URL
+    )
+    return configured_url.rstrip("/")
+
+
+def set_local_ai_base_url(base_url: str) -> str:
+    normalized = (base_url or "").strip().rstrip("/") or LOCAL_AI_DEFAULT_BASE_URL
+    os.environ["LOCAL_AI_BASE_URL"] = normalized
+    settings = _load_app_settings()
+    settings["local_ai_base_url_choice"] = "custom"
+    settings["local_ai_custom_base_url"] = normalized
+    settings["local_ai_base_url"] = normalized
+    _save_app_settings(settings)
+    return normalized
+
+
+def get_local_ai_base_url_choice() -> str:
+    choice = str(_load_app_settings().get("local_ai_base_url_choice", "")).strip()
+    if choice in LOCAL_AI_BASE_URL_OPTIONS:
+        return choice
+    current_url = get_local_ai_base_url().rstrip("/")
+    for key, option_url in LOCAL_AI_BASE_URL_OPTIONS.items():
+        if option_url and current_url == option_url.rstrip("/"):
+            return key
+    return "custom" if current_url != LOCAL_AI_DEFAULT_BASE_URL else "lm_studio"
+
+
+def get_local_ai_custom_base_url() -> str:
+    custom_url = str(_load_app_settings().get("local_ai_custom_base_url", "")).strip()
+    return custom_url.rstrip("/")
+
+
+def set_local_ai_base_url_choice(choice_key: str, custom_base_url: str = "") -> str:
+    choice = choice_key if choice_key in LOCAL_AI_BASE_URL_OPTIONS else "lm_studio"
+    settings = _load_app_settings()
+    settings["local_ai_base_url_choice"] = choice
+    if custom_base_url.strip():
+        settings["local_ai_custom_base_url"] = custom_base_url.strip().rstrip("/")
+    resolved_url = (
+        settings.get("local_ai_custom_base_url", "")
+        if choice == "custom"
+        else LOCAL_AI_BASE_URL_OPTIONS[choice]
+    )
+    resolved_url = str(resolved_url or LOCAL_AI_DEFAULT_BASE_URL).strip().rstrip("/")
+    settings["local_ai_base_url"] = resolved_url
+    os.environ["LOCAL_AI_BASE_URL"] = resolved_url
+    _save_app_settings(settings)
+    return choice
+
+
 def get_openai_compatible_storage_key_name(choice_key: str | None = None) -> str:
     choice = choice_key or get_openai_compatible_base_url_choice()
     return (
@@ -241,7 +331,7 @@ def get_ai_provider_model(provider: str) -> str:
     return (
         os.getenv(env_var, "").strip()
         or settings_model
-        or get_provider_default_models(provider)[0]
+        or next(iter(get_provider_default_models(provider)), "")
     )
 
 
@@ -311,7 +401,9 @@ def fetch_available_models(
     provider: str, api_key: str, base_url_override: str = ""
 ) -> list[str]:
     provider = _normalize_provider_name(provider)
-    if provider == "openai_compatible":
+    if provider == "local":
+        base_url = (base_url_override or get_local_ai_base_url()).rstrip("/")
+    elif provider == "openai_compatible":
         base_url = (base_url_override or get_openai_compatible_base_url()).rstrip("/")
     else:
         base_url = AI_PROVIDER_BASE_URLS[provider].rstrip("/")
@@ -359,6 +451,8 @@ def _get_ai_api_key_for_provider(provider: str) -> tuple[str, str, str]:
 
 def _get_ai_base_url(provider: str) -> str:
     provider = _normalize_provider_name(provider)
+    if provider == "local":
+        return get_local_ai_base_url().rstrip("/")
     if provider == "openai_compatible":
         return get_openai_compatible_base_url().rstrip("/")
     return AI_PROVIDER_BASE_URLS[provider].rstrip("/")
@@ -416,7 +510,9 @@ def _request_translation_from_provider(
         f"{content}"
     )
     base_url = _get_ai_base_url(provider)
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
     if provider == "anthropic":
         headers["anthropic-version"] = "2023-06-01"
@@ -748,7 +844,7 @@ def translate_markdown_with_ai(
 
     provider = _get_current_ai_provider()
     api_key, _key_slot, env_var = _get_ai_api_key_for_provider(provider)
-    if not api_key:
+    if provider != "local" and not api_key:
         raise TranslationConfigError(
             "AI translation requires a configured provider API key.",
             provider_name=provider,

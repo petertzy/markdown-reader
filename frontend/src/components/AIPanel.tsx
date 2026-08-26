@@ -56,6 +56,8 @@ export default function AIPanel({
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [provider, setProvider] = useState("openai_compatible");
   const [baseUrlChoice, setBaseUrlChoice] = useState("navidia");
+  const [localBaseUrlChoice, setLocalBaseUrlChoice] = useState("lm_studio");
+  const [localBaseUrl, setLocalBaseUrl] = useState("http://localhost:1234/v1");
   const [model, setModel] = useState("");
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [apiKey, setApiKey] = useState("");
@@ -75,12 +77,28 @@ export default function AIPanel({
     return settings?.openai_compatible_base_url_options.find((item) => item.key === baseUrlChoice)?.url ?? "";
   };
 
+  const selectedLocalBaseUrl = (
+    choice = localBaseUrlChoice,
+    customUrl = localBaseUrl
+  ) => {
+    const optionUrl =
+      settings?.local_ai_base_url_options.find((item) => item.key === choice)?.url ??
+      "";
+    return choice === "custom" ? customUrl : optionUrl;
+  };
+
   const syncSettingsForm = (nextSettings: AISettings) => {
     const nextProvider = nextSettings.ai_provider || nextSettings.provider_order[0] || "openai_compatible";
     const nextModel = nextSettings.providers[nextProvider]?.model ?? "";
     setSettings(nextSettings);
     setProvider(nextProvider);
     setBaseUrlChoice(nextSettings.openai_compatible_base_url_choice || "navidia");
+    setLocalBaseUrlChoice(nextSettings.local_ai_base_url_choice || "lm_studio");
+    setLocalBaseUrl(
+      nextSettings.local_ai_custom_base_url ||
+        nextSettings.local_ai_base_url ||
+        "http://localhost:1234/v1"
+    );
     setModel(nextModel);
     setModelOptions(Array.from(new Set(nextSettings.providers[nextProvider]?.default_models ?? [])));
     setApiKey("");
@@ -102,7 +120,15 @@ export default function AIPanel({
     const baseUrl =
       nextProvider === "openai_compatible"
         ? settings?.openai_compatible_base_url_options.find((item) => item.key === nextBaseChoice)?.url ?? ""
+        : nextProvider === "local"
+          ? selectedLocalBaseUrl()
         : "";
+    if (nextProvider === "local" && !baseUrl.trim()) {
+      setModelOptions([]);
+      setModel("");
+      setSettingsMessage("Enter a custom Base URL before fetching models.");
+      return;
+    }
     setSettingsMessage(null);
     setModelsFetching(true);
     try {
@@ -113,8 +139,10 @@ export default function AIPanel({
       setModelOptions(models);
       if (models.length > 0 && !models.includes(model)) {
         setModel(models[0]);
+      } else if (models.length === 0) {
+        setModel("");
       }
-      setSettingsMessage(`${models.length} models available.`);
+      setSettingsMessage(result.message || `${models.length} models available.`);
     } catch (err) {
       setSettingsMessage(err instanceof Error ? err.message : String(err));
     } finally {
@@ -128,7 +156,9 @@ export default function AIPanel({
     setModelOptions(nextModels);
     setModel(settings?.providers[nextProvider]?.model || nextModels[0] || "");
     setApiKey("");
-    void refreshModelOptions(nextProvider, baseUrlChoice);
+    if (nextProvider !== "local") {
+      void refreshModelOptions(nextProvider, baseUrlChoice);
+    }
   };
 
   const handleBaseUrlChange = (nextChoice: string) => {
@@ -138,12 +168,30 @@ export default function AIPanel({
     }
   };
 
+  const handleLocalBaseUrlChoiceChange = (nextChoice: string) => {
+    setLocalBaseUrlChoice(nextChoice);
+    const optionUrl = settings?.local_ai_base_url_options.find((item) => item.key === nextChoice)?.url;
+    if (optionUrl) {
+      setLocalBaseUrl(optionUrl);
+    }
+    setModelOptions([]);
+    setModel("");
+    setSettingsMessage(
+      nextChoice === "custom"
+        ? "Enter a custom Base URL before fetching models."
+        : null
+    );
+  };
+
   const saveSettings = async () => {
     setSettingsSaving(true);
     setSettingsMessage(null);
     try {
       if (provider === "openai_compatible") {
         await AI.setOpenAICompatibleBaseUrlChoice(baseUrlChoice);
+      }
+      if (provider === "local") {
+        await AI.setLocalAIBaseUrlChoice(localBaseUrlChoice, localBaseUrl);
       }
       if (apiKey.trim()) {
         await AI.saveApiKey(provider, apiKey.trim());
@@ -168,6 +216,7 @@ export default function AIPanel({
       const keyProvider =
         provider === "openai_compatible" ? `openai_compatible_${baseUrlChoice}` : provider;
       await AI.deleteApiKey(keyProvider);
+      await AI.setProvider(provider);
       setApiKey("");
       syncSettingsForm(await AI.getSettings());
       setSettingsMessage("Stored key deleted.");
@@ -470,6 +519,40 @@ export default function AIPanel({
                 </div>
               )}
 
+              {provider === "local" && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Local Provider</label>
+                  <select
+                    value={localBaseUrlChoice}
+                    onChange={(e) => handleLocalBaseUrlChoiceChange(e.target.value)}
+                    className="text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
+                  >
+                    {settings.local_ai_base_url_options.map((item) => (
+                      <option key={item.key} value={item.key}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                  {localBaseUrlChoice === "custom" ? (
+                    <input
+                      type="text"
+                      value={localBaseUrl}
+                      onChange={(e) => {
+                        setLocalBaseUrl(e.target.value);
+                        setModelOptions([]);
+                        setModel("");
+                      }}
+                      placeholder="http://localhost:1234/v1"
+                      className="text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
+                    />
+                  ) : (
+                    <div className="text-[11px] text-gray-400 dark:text-gray-500 break-all">
+                      {selectedLocalBaseUrl()}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-500 dark:text-gray-400">Model</label>
                 <select
@@ -503,7 +586,9 @@ export default function AIPanel({
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder={
-                    settings.providers[provider]?.key_configured
+                    provider === "local"
+                      ? "Optional for local endpoints"
+                      : settings.providers[provider]?.key_configured
                       ? "Stored key is configured"
                       : "Enter API key"
                   }

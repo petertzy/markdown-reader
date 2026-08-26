@@ -44,6 +44,15 @@ class BaseUrlChoicePayload(BaseModel):
     choice_key: str
 
 
+class BaseUrlPayload(BaseModel):
+    base_url: str
+
+
+class LocalBaseUrlChoicePayload(BaseModel):
+    choice_key: str
+    custom_base_url: str = ""
+
+
 class FetchModelsPayload(BaseModel):
     provider: str
     api_key: str = ""
@@ -103,6 +112,10 @@ def get_ai_settings():
     settings["openai_compatible_base_url_options"] = (
         logic.get_openai_compatible_base_url_options()
     )
+    settings["local_ai_base_url"] = logic.get_local_ai_base_url()
+    settings["local_ai_base_url_choice"] = logic.get_local_ai_base_url_choice()
+    settings["local_ai_custom_base_url"] = logic.get_local_ai_custom_base_url()
+    settings["local_ai_base_url_options"] = logic.get_local_ai_base_url_options()
     settings["secure_key_storage_available"] = logic.is_secure_key_storage_available()
     return settings
 
@@ -158,6 +171,25 @@ def set_openai_compatible_base_url(payload: BaseUrlChoicePayload):
     return {"choice": payload.choice_key}
 
 
+@router.get("/settings/local/base-url")
+def local_ai_base_url():
+    return {"base_url": _logic().get_local_ai_base_url()}
+
+
+@router.post("/settings/local/base-url")
+def set_local_ai_base_url(payload: BaseUrlPayload):
+    return {"base_url": _logic().set_local_ai_base_url(payload.base_url)}
+
+
+@router.post("/settings/local/base-url-choice")
+def set_local_ai_base_url_choice(payload: LocalBaseUrlChoicePayload):
+    logic = _logic()
+    choice = logic.set_local_ai_base_url_choice(
+        payload.choice_key, custom_base_url=payload.custom_base_url
+    )
+    return {"choice": choice, "base_url": logic.get_local_ai_base_url()}
+
+
 @router.get("/models/{provider}")
 def get_models(provider: str, base_url_override: str = ""):
     """Fetch available models for a provider (live API call)."""
@@ -175,10 +207,18 @@ def get_models(provider: str, base_url_override: str = ""):
         models = logic.fetch_available_models(
             provider, api_key, base_url_override=base_url_override
         )
+        message = ""
     except Exception:
+        if provider == "local":
+            return {
+                "provider": provider,
+                "models": [],
+                "message": "Local model provider is not reachable.",
+            }
         # Fall back to default list when the API is unreachable
         models = logic.get_provider_default_models(provider)
-    return {"provider": provider, "models": models}
+        message = ""
+    return {"provider": provider, "models": models, "message": message}
 
 
 @router.post("/models")
@@ -191,11 +231,19 @@ def fetch_models_with_key(payload: FetchModelsPayload):
             payload.api_key,
             base_url_override=payload.base_url_override,
         )
+        message = ""
     except Exception:
+        if payload.provider == "local":
+            return {
+                "provider": payload.provider,
+                "models": [],
+                "message": "Local model provider is not reachable.",
+            }
         models = logic.get_provider_default_models(
             payload.provider, base_url_override=payload.base_url_override
         )
-    return {"provider": payload.provider, "models": models}
+        message = ""
+    return {"provider": payload.provider, "models": models, "message": message}
 
 
 # ── Chat / automation endpoints ────────────────────────────────────────────────

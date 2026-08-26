@@ -32,7 +32,7 @@ Most modern writing apps force you to choose between **privacy** and **power**. 
 ### Key Features
 
 - 🔒 **Local-First Architecture**: Your files never leave your machine unless you explicitly call an external AI API.
-- 🤖 **Bring-Your-Own-AI**: Configure OpenAI, Anthropic, or OpenRouter with your own API keys.
+- 🤖 **Bring-Your-Own-AI**: Configure OpenAI, Anthropic, OpenRouter, OpenAI-compatible providers, or local models.
 - ✍️ **Intelligent Editing**: AI-assisted translation, summarization, formatting, and code-block cleanup.
 - ⚡ **Slash Commands**: Type `/` in the editor to trigger AI actions or insert a table inline, without opening the AI panel.
 - 🛡️ **Audit & Rollback**: Review all AI suggestions before applying them. Reject or rollback changes with a single click.
@@ -102,6 +102,12 @@ Type `/` at the start of a line (or after whitespace) in the editor to open an i
 | `/insert-table` | Inserts a Markdown table (no AI call) |
 
 Use the arrow keys to navigate, Enter to run a command, or Escape to dismiss the menu.
+
+---
+
+## 🧠 Local Model Support
+
+Markdown Reader can call locally hosted OpenAI-compatible model servers. In the AI settings panel, choose **Local Model**, select **LM Studio**, **Ollama**, or **Custom**, fetch available models, and save the model you want to use. Local endpoints do not require an API key unless your local server is configured to require one.
 
 ---
 
