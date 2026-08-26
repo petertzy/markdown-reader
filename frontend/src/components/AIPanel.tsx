@@ -4,10 +4,15 @@ import { useState, useRef, useEffect } from "react";
 import { useAIChat } from "@/hooks/useAIChat";
 import { AI, type AISettings } from "@/lib/api";
 
+export type AIPanelTab = "chat" | "translate" | "settings";
+type Tab = AIPanelTab;
+
 type Props = {
   documentText: string;
   selectedText?: string;
   onApplyAction?: (type: string, content: string) => void;
+  /** Force the panel to switch to this tab (e.g. deep-linking from a slash command) */
+  initialTab?: Tab;
 };
 
 const LANGUAGES = [
@@ -16,15 +21,19 @@ const LANGUAGES = [
   "Italian", "Dutch", "Polish", "Turkish",
 ];
 
-type Tab = "chat" | "translate" | "settings";
-
 export default function AIPanel({
   documentText,
   selectedText = "",
   onApplyAction,
+  initialTab,
 }: Props) {
   const { messages, loading, error, sendMessage, translate, clearHistory } = useAIChat();
-  const [tab, setTab] = useState<Tab>("chat");
+  const [tab, setTab] = useState<Tab>(initialTab ?? "chat");
+
+  useEffect(() => {
+    if (initialTab) setTab(initialTab);
+  }, [initialTab]);
+
   const [input, setInput] = useState("");
   const [sourceLang, setSourceLang] = useState("Auto Detect");
   const [targetLang, setTargetLang] = useState("English");

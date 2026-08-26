@@ -10,15 +10,17 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import { useEditor } from "@/hooks/useEditor";
+import { useSlashCommands, isSlashTriggerPosition, type SlashCommand } from "@/hooks/useSlashCommands";
 import TabBar from "@/components/TabBar";
 import Toolbar from "@/components/Toolbar";
 import MenuBar, { type MenuGroup } from "@/components/MenuBar";
 import EditorPane from "@/components/EditorPane";
 import PreviewPane from "@/components/PreviewPane";
 import SplitPane from "@/components/SplitPane";
-import AIPanel from "@/components/AIPanel";
+import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
+import SlashCommandMenu from "@/components/SlashCommandMenu";
 import StatusBar from "@/components/StatusBar";
-import { Export, Files, getBaseUrl, type ExportPayload } from "@/lib/api";
+import { AI, Export, Files, getBaseUrl, type ExportPayload } from "@/lib/api";
 import {
   resolveShortcutDefinitions,
   shortcutMatchesEvent,
@@ -79,10 +81,12 @@ export default function HomePage() {
   const editor = useEditor();
   const [showPreview] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(false);
+  const [aiPanelInitialTab, setAiPanelInitialTab] = useState<AIPanelTab | undefined>(undefined);
   const [split, setSplit] = useState(50);
   const [isLikelyTauriRuntime, setIsLikelyTauriRuntime] = useState(false);
   const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">("ready");
   const [backendMessage, setBackendMessage] = useState<string | null>(null);
+  const [monacoReady, setMonacoReady] = useState(false);
   const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const dragCounterRef = useRef(0);
   const openFileRef = useRef(editor.openFile);
@@ -474,6 +478,169 @@ export default function HomePage() {
     return mono.getModel()?.getValueInRange(sel) ?? "";
   };
 
+  // ── Slash commands ──────────────────────────────────────────────────────────
+  const slash = useSlashCommands();
+
+  const executeSlashCommand = useCallback(
+    async (command: SlashCommand) => {
+      const mono = monacoRef.current;
+      const model = mono?.getModel();
+      const trigger = slash.triggerPosition;
+      const position = mono?.getPosition();
+      if (mono && model && trigger && position) {
+        mono.executeEdits("slash-command", [
+          {
+            range: {
+              startLineNumber: trigger.lineNumber,
+              startColumn: trigger.column - 1,
+              endLineNumber: position.lineNumber,
+              endColumn: position.column,
+            },
+            text: "",
+          },
+        ]);
+        mono.focus();
+      }
+      slash.close();
+
+      // Read the live buffer post-edit — editor.activeTab.content is React state
+      // and has not yet caught up with the executeEdits call above.
+      const documentText = model?.getValue() ?? editor.activeTab.content;
+
+      if (command.kind === "insert-table") {
+        insertTable();
+        return;
+      }
+      if (command.kind === "open-translate-tab") {
+        setAiPanelInitialTab("translate");
+        setShowAIPanel(true);
+        return;
+      }
+      if (!command.prompt) {
+        alert(`AI command "${command.label}" is not available (automation templates failed to load).`);
+        return;
+      }
+      try {
+        const result = await AI.chat({
+          message: command.prompt,
+          document_text: documentText,
+          selected_text: getSelectedText(),
+          chat_history: [],
+        });
+        if (result.proposed_action.type !== "none") {
+          handleAIApplyAction(result.proposed_action.type, result.proposed_action.content);
+        } else if (result.assistant_message) {
+          alert(result.assistant_message);
+        }
+      } catch (err) {
+        alert(`AI command failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    },
+    [slash, insertTable, editor, handleAIApplyAction]
+  );
+
+  const slashRef = useRef({
+    isOpen: slash.isOpen,
+    triggerPosition: slash.triggerPosition,
+    moveSelection: slash.moveSelection,
+    close: slash.close,
+    openAt: slash.openAt,
+    getSelectedCommand: slash.getSelectedCommand,
+    execute: executeSlashCommand,
+  });
+  useEffect(() => {
+    slashRef.current = {
+      isOpen: slash.isOpen,
+      triggerPosition: slash.triggerPosition,
+      moveSelection: slash.moveSelection,
+      close: slash.close,
+      openAt: slash.openAt,
+      getSelectedCommand: slash.getSelectedCommand,
+      execute: executeSlashCommand,
+    };
+  });
+
+  useEffect(() => {
+    const mono = monacoRef.current;
+    if (!mono || !monacoReady) return;
+
+    const handleSync = () => {
+      const model = mono.getModel();
+      const position = mono.getPosition();
+      if (!model || !position) return;
+      const s = slashRef.current;
+
+      if (!s.isOpen) {
+        if (isSlashTriggerPosition(model, position)) {
+          s.openAt(position);
+        }
+        return;
+      }
+
+      const trigger = s.triggerPosition;
+      if (!trigger || position.lineNumber !== trigger.lineNumber || position.column < trigger.column) {
+        s.close();
+        return;
+      }
+      const lineContent = model.getLineContent(trigger.lineNumber);
+      if (lineContent.charAt(trigger.column - 2) !== "/") {
+        s.close();
+        return;
+      }
+      const queryText = model.getValueInRange({
+        startLineNumber: trigger.lineNumber,
+        startColumn: trigger.column,
+        endLineNumber: position.lineNumber,
+        endColumn: position.column,
+      });
+      if (/\s/.test(queryText)) {
+        s.close();
+        return;
+      }
+      slash.updateQuery(queryText);
+    };
+
+    const d1 = mono.onDidChangeModelContent(handleSync);
+    const d2 = mono.onDidChangeCursorPosition(handleSync);
+    const d3 = mono.onKeyDown((event) => {
+      const s = slashRef.current;
+      if (!s.isOpen) return;
+      const key = event.browserEvent.key;
+      if (key === "ArrowDown") {
+        event.preventDefault();
+        event.stopPropagation();
+        s.moveSelection(1);
+      } else if (key === "ArrowUp") {
+        event.preventDefault();
+        event.stopPropagation();
+        s.moveSelection(-1);
+      } else if (key === "Enter") {
+        const cmd = s.getSelectedCommand();
+        if (cmd) {
+          event.preventDefault();
+          event.stopPropagation();
+          void s.execute(cmd);
+        }
+      } else if (key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        s.close();
+      }
+    });
+
+    return () => {
+      d1.dispose();
+      d2.dispose();
+      d3.dispose();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monacoReady]);
+
+  const slashMenuPosition =
+    slash.isOpen && slash.triggerPosition && monacoRef.current
+      ? monacoRef.current.getScrolledVisiblePosition(slash.triggerPosition)
+      : null;
+
   useEffect(() => {
     openFileRef.current = editor.openFile;
     openTextAsTabRef.current = editor.openTextAsTab;
@@ -684,13 +851,25 @@ export default function HomePage() {
           split={split}
           onSplitChange={setSplit}
           left={
-            <EditorPane
-              value={editor.activeTab.content}
-              onChange={editor.handleContentChange}
-              darkMode={editor.darkMode}
-              fontSize={editor.fontSize}
-              onMount={(e) => { monacoRef.current = e; }}
-            />
+            <div className="relative h-full">
+              <EditorPane
+                value={editor.activeTab.content}
+                onChange={editor.handleContentChange}
+                darkMode={editor.darkMode}
+                fontSize={editor.fontSize}
+                onMount={(e) => { monacoRef.current = e; setMonacoReady(true); }}
+              />
+              {slash.isOpen && slashMenuPosition && (
+                <SlashCommandMenu
+                  commands={slash.filteredCommands}
+                  selectedIndex={slash.selectedIndex}
+                  top={slashMenuPosition.top + slashMenuPosition.height}
+                  left={slashMenuPosition.left}
+                  onSelect={(cmd) => { void executeSlashCommand(cmd); }}
+                  onClose={slash.close}
+                />
+              )}
+            </div>
           }
           right={
             showPreview ? (
@@ -709,6 +888,7 @@ export default function HomePage() {
             documentText={editor.activeTab.content}
             selectedText={getSelectedText()}
             onApplyAction={handleAIApplyAction}
+            initialTab={aiPanelInitialTab}
           />
         )}
       </div>
