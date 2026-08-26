@@ -87,6 +87,7 @@ export default function HomePage() {
   const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">("ready");
   const [backendMessage, setBackendMessage] = useState<string | null>(null);
   const [monacoReady, setMonacoReady] = useState(false);
+  const [selectedText, setSelectedText] = useState("");
   const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const dragCounterRef = useRef(0);
   const openFileRef = useRef(editor.openFile);
@@ -470,13 +471,17 @@ export default function HomePage() {
     [editor]
   );
 
-  const getSelectedText = () => {
+  const getSelectedText = useCallback(() => {
     const mono = monacoRef.current;
     if (!mono) return "";
     const sel = mono.getSelection();
     if (!sel) return "";
     return mono.getModel()?.getValueInRange(sel) ?? "";
-  };
+  }, []);
+
+  const syncSelectedText = useCallback(() => {
+    setSelectedText(getSelectedText());
+  }, [getSelectedText]);
 
   // ── Slash commands ──────────────────────────────────────────────────────────
   const slash = useSlashCommands();
@@ -536,7 +541,7 @@ export default function HomePage() {
         alert(`AI command failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
-    [slash, insertTable, editor, handleAIApplyAction]
+    [slash, insertTable, editor, handleAIApplyAction, getSelectedText]
   );
 
   const slashRef = useRef({
@@ -565,6 +570,7 @@ export default function HomePage() {
     if (!mono || !monacoReady) return;
 
     const handleSync = () => {
+      syncSelectedText();
       const model = mono.getModel();
       const position = mono.getPosition();
       if (!model || !position) return;
@@ -602,7 +608,8 @@ export default function HomePage() {
 
     const d1 = mono.onDidChangeModelContent(handleSync);
     const d2 = mono.onDidChangeCursorPosition(handleSync);
-    const d3 = mono.onKeyDown((event) => {
+    const d3 = mono.onDidChangeCursorSelection(syncSelectedText);
+    const d4 = mono.onKeyDown((event) => {
       const s = slashRef.current;
       if (!s.isOpen) return;
       const key = event.browserEvent.key;
@@ -632,9 +639,10 @@ export default function HomePage() {
       d1.dispose();
       d2.dispose();
       d3.dispose();
+      d4.dispose();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [monacoReady]);
+  }, [monacoReady, syncSelectedText]);
 
   const slashMenuPosition =
     slash.isOpen && slash.triggerPosition && monacoRef.current
@@ -886,7 +894,7 @@ export default function HomePage() {
         {showAIPanel && (
           <AIPanel
             documentText={editor.activeTab.content}
-            selectedText={getSelectedText()}
+            selectedText={selectedText}
             onApplyAction={handleAIApplyAction}
             initialTab={aiPanelInitialTab}
           />

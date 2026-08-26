@@ -111,6 +111,39 @@ class TestAIAutomationLogic(unittest.TestCase):
         self.assertEqual(result["proposed_action"]["reason"], "no_content_for_summary")
         self.assertIn("No document content", result["assistant_message"])
 
+    def test_slash_summary_command_uses_summary_fallback(self):
+        result = build_ai_automation_fallback(
+            "/summarize",
+            document_text="# Title\n\nThis is a test document.",
+            selected_text="",
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["proposed_action"]["type"], "replace_document")
+        self.assertIn("## Summary", result["assistant_message"])
+
+    def test_slash_toc_command_uses_toc_fallback(self):
+        result = build_ai_automation_fallback(
+            "/toc",
+            document_text="# Title\n\n## Section",
+            selected_text="",
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["proposed_action"]["type"], "replace_document")
+        self.assertIn("## Table of Contents", result["proposed_action"]["content"])
+
+    def test_slash_fix_code_command_uses_code_fallback(self):
+        result = build_ai_automation_fallback(
+            "/fix-code",
+            document_text="",
+            selected_text="```\nprint('hello')\n",
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["proposed_action"]["type"], "replace_selection")
+        self.assertTrue(result["proposed_action"]["content"].strip().endswith("```"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,6 +21,16 @@ const LANGUAGES = [
   "Italian", "Dutch", "Polish", "Turkish",
 ];
 
+const INSERT_TABLE_MARKDOWN =
+  "| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |";
+
+const CHAT_SLASH_PROMPTS: Record<string, string> = {
+  "/summarize": "generate summary",
+  "/format": "format this section",
+  "/toc": "generate table of contents",
+  "/fix-code": "format code blocks and correct syntax",
+};
+
 export default function AIPanel({
   documentText,
   selectedText = "",
@@ -172,6 +182,20 @@ export default function AIPanel({
     const msg = input.trim();
     if (!msg || loading) return;
     setInput("");
+    const slashCommand = msg.toLowerCase();
+    if (slashCommand === "/translate") {
+      setTab("translate");
+      return;
+    }
+    if (slashCommand === "/insert-table") {
+      onApplyAction?.("replace_selection", INSERT_TABLE_MARKDOWN);
+      return;
+    }
+    const slashPrompt = CHAT_SLASH_PROMPTS[slashCommand];
+    if (slashPrompt) {
+      await sendMessage(slashPrompt, documentText, selectedText);
+      return;
+    }
     await sendMessage(msg, documentText, selectedText);
   };
 
@@ -238,7 +262,7 @@ export default function AIPanel({
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
             {messages.length === 0 && (
               <p className="text-gray-400 dark:text-gray-500 text-xs">
-                Ask me to summarize, generate a TOC, translate, fix code blocks, or anything else…
+                Try /summarize, /translate, /format, /toc, /fix-code, or /insert-table.
               </p>
             )}
             {messages.map((msg) => (
