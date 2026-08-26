@@ -248,6 +248,12 @@ export type OpenAICompatibleBaseUrlOption = {
   url: string;
 };
 
+export type LocalAIBaseUrlOption = {
+  key: string;
+  label: string;
+  url: string;
+};
+
 export type AISettings = {
   ai_provider: string;
   ai_models?: Record<string, string>;
@@ -255,10 +261,15 @@ export type AISettings = {
   provider_order: string[];
   openai_compatible_base_url_choice: string;
   openai_compatible_base_url_options: OpenAICompatibleBaseUrlOption[];
+  local_ai_base_url: string;
+  local_ai_base_url_choice: string;
+  local_ai_custom_base_url: string;
+  local_ai_base_url_options: LocalAIBaseUrlOption[];
   secure_key_storage_available: boolean;
 };
 
 const AI_PROVIDER_ORDER = [
+  "local",
   "openai_compatible",
   "openrouter",
   "openai",
@@ -266,6 +277,7 @@ const AI_PROVIDER_ORDER = [
 ];
 
 const AI_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+  local: "Local Model",
   openai_compatible: "OpenAI Compatible",
   openrouter: "OpenRouter",
   openai: "OpenAI",
@@ -273,6 +285,7 @@ const AI_PROVIDER_DISPLAY_NAMES: Record<string, string> = {
 };
 
 const AI_PROVIDER_ENV_VARS: Record<string, string> = {
+  local: "LOCAL_AI_API_KEY",
   openai_compatible: "OPENAI_COMPATIBLE_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
   openai: "OPENAI_API_KEY",
@@ -290,6 +303,12 @@ const OPENAI_COMPATIBLE_BASE_URL_OPTIONS: OpenAICompatibleBaseUrlOption[] = [
     label: "Groq",
     url: "https://api.groq.com/openai/v1",
   },
+];
+
+const LOCAL_AI_BASE_URL_OPTIONS: LocalAIBaseUrlOption[] = [
+  { key: "lm_studio", label: "LM Studio", url: "http://localhost:1234/v1" },
+  { key: "ollama", label: "Ollama", url: "http://localhost:11434/v1" },
+  { key: "custom", label: "Custom", url: "" },
 ];
 
 type PartialAIProviderInfo = Partial<AIProviderInfo>;
@@ -323,7 +342,7 @@ function normalizeAISettings(raw: PartialAISettings): AISettings {
   const rawProvider = (raw.ai_provider ?? "").trim();
   const aiProvider = normalizedProviderOrder.includes(rawProvider)
     ? rawProvider
-    : normalizedProviderOrder[0] ?? "openai_compatible";
+    : "openai_compatible";
 
   return {
     ...raw,
@@ -335,6 +354,11 @@ function normalizeAISettings(raw: PartialAISettings): AISettings {
     openai_compatible_base_url_options:
       raw.openai_compatible_base_url_options ??
       OPENAI_COMPATIBLE_BASE_URL_OPTIONS,
+    local_ai_base_url: raw.local_ai_base_url ?? "http://localhost:1234/v1",
+    local_ai_base_url_choice: raw.local_ai_base_url_choice ?? "lm_studio",
+    local_ai_custom_base_url: raw.local_ai_custom_base_url ?? "",
+    local_ai_base_url_options:
+      raw.local_ai_base_url_options ?? LOCAL_AI_BASE_URL_OPTIONS,
     secure_key_storage_available: raw.secure_key_storage_available ?? false,
   };
 }
@@ -368,12 +392,12 @@ export const AI = {
     ),
 
   getModels: (provider: string, base_url_override = "") =>
-    apiFetch<{ provider: string; models: string[] }>(
+    apiFetch<{ provider: string; models: string[]; message?: string }>(
       `/api/ai/models/${provider}${base_url_override ? `?base_url_override=${encodeURIComponent(base_url_override)}` : ""}`
     ),
 
   fetchModelsWithKey: (provider: string, api_key: string, base_url_override = "") =>
-    apiFetch<{ provider: string; models: string[] }>("/api/ai/models", {
+    apiFetch<{ provider: string; models: string[]; message?: string }>("/api/ai/models", {
       method: "POST",
       body: JSON.stringify({ provider, api_key, base_url_override }),
     }),
@@ -391,6 +415,21 @@ export const AI = {
       throw err;
     }
   },
+
+  setLocalAIBaseUrl: (base_url: string) =>
+    apiFetch<{ base_url: string }>("/api/ai/settings/local/base-url", {
+      method: "POST",
+      body: JSON.stringify({ base_url }),
+    }),
+
+  setLocalAIBaseUrlChoice: (choice_key: string, custom_base_url = "") =>
+    apiFetch<{ choice: string; base_url: string }>(
+      "/api/ai/settings/local/base-url-choice",
+      {
+        method: "POST",
+        body: JSON.stringify({ choice_key, custom_base_url }),
+      }
+    ),
 
   chat: (payload: AgentChatPayload) =>
     apiFetch<AgentResponse>("/api/ai/chat", {
