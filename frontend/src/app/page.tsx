@@ -77,6 +77,10 @@ function isLikelyDesktopRuntime() {
   );
 }
 
+function shouldShowPackagedBackendStatus() {
+  return process.env.NODE_ENV !== "development" && isLikelyDesktopRuntime();
+}
+
 export default function HomePage() {
   const editor = useEditor();
   const [showPreview] = useState(true);
@@ -93,6 +97,7 @@ export default function HomePage() {
   const openFileRef = useRef(editor.openFile);
   const openTextAsTabRef = useRef(editor.openTextAsTab);
   const lastDroppedPathsRef = useRef<{ signature: string; at: number } | null>(null);
+  const showPackagedBackendStatus = shouldShowPackagedBackendStatus();
 
   const handleSaveFile = useCallback(async () => {
     try {
@@ -163,11 +168,12 @@ export default function HomePage() {
   useEffect(() => {
     let cancelled = false;
     const detectedTauriRuntime = isLikelyDesktopRuntime();
+    const showPackagedBackendStatus = shouldShowPackagedBackendStatus();
     setIsLikelyTauriRuntime(detectedTauriRuntime);
 
     async function initialiseBackend() {
       try {
-        if (detectedTauriRuntime) {
+        if (showPackagedBackendStatus) {
           setBackendStatus("starting");
           await getBaseUrl();
         }
@@ -181,8 +187,13 @@ export default function HomePage() {
       } catch (err) {
         console.error(err);
         if (!cancelled) {
-          setBackendStatus("error");
-          setBackendMessage(err instanceof Error ? err.message : String(err));
+          if (showPackagedBackendStatus) {
+            setBackendStatus("error");
+            setBackendMessage(err instanceof Error ? err.message : String(err));
+          } else {
+            setBackendStatus("ready");
+            setBackendMessage(null);
+          }
         }
       }
     }
@@ -833,8 +844,8 @@ export default function HomePage() {
           fontSize={editor.fontSize}
           onFontSizeChange={editor.setFontSize}
           showAIPanel={showAIPanel}
-          backendStatus={backendStatus}
-          backendMessage={backendMessage}
+          backendStatus={showPackagedBackendStatus ? backendStatus : "ready"}
+          backendMessage={showPackagedBackendStatus ? backendMessage : null}
         />
         {/* Recent files trigger sits inside a relative container in Toolbar, but
             we render the dropdown here at page level for simplicity */}
@@ -883,8 +894,8 @@ export default function HomePage() {
             showPreview ? (
               <PreviewPane
                 html={editor.previewHtml}
-                loading={isLikelyTauriRuntime && backendStatus === "starting"}
-                error={backendStatus === "error" ? backendMessage : null}
+                loading={showPackagedBackendStatus && backendStatus === "starting"}
+                error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null}
               />
             ) : null
           }

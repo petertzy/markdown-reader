@@ -72,7 +72,11 @@ pub fn run() {
         })
         .setup(|app| {
             if cfg!(debug_assertions) {
-                *app.state::<BackendPort>().0.lock().unwrap() = Some(8000);
+                let backend_port = std::env::var("MARKDOWN_READER_BACKEND_PORT")
+                    .ok()
+                    .and_then(|value| value.parse::<u16>().ok())
+                    .unwrap_or(8000);
+                *app.state::<BackendPort>().0.lock().unwrap() = Some(backend_port);
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
                         .level(log::LevelFilter::Info)

@@ -42,7 +42,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",  # Next.js dev server
+        "http://127.0.0.1:3000",
         "http://localhost:3001",
+        "http://127.0.0.1:3001",
         "tauri://localhost",  # Tauri webview
         "http://tauri.localhost",
         "https://tauri.localhost",

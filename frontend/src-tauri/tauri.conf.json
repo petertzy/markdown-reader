@@ -5,7 +5,7 @@
   "identifier": "com.markdownreader.desktop",
   "build": {
     "frontendDist": "../out",
-    "devUrl": "http://localhost:3000",
+    "devUrl": "http://127.0.0.1:3000",
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "cross-env NEXT_EXPORT=1 npm run build"
   },

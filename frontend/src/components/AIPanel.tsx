@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useAIChat } from "@/hooks/useAIChat";
-import { AI, type AISettings } from "@/lib/api";
+import { AI, getDefaultAISettings, type AISettings } from "@/lib/api";
 
 export type AIPanelTab = "chat" | "translate" | "settings";
 type Tab = AIPanelTab;
@@ -31,6 +31,10 @@ const CHAT_SLASH_PROMPTS: Record<string, string> = {
   "/fix-code": "format code blocks and correct syntax",
 };
 
+function normalizeBaseUrl(url: string) {
+  return url.trim().replace(/\/+$/, "");
+}
+
 export default function AIPanel({
   documentText,
   selectedText = "",
@@ -49,7 +53,7 @@ export default function AIPanel({
   const [targetLang, setTargetLang] = useState("English");
   const [translateScope, setTranslateScope] = useState<"selection" | "document">("document");
   const [translatedPreview, setTranslatedPreview] = useState<string | null>(null);
-  const [settings, setSettings] = useState<AISettings | null>(null);
+  const [settings, setSettings] = useState<AISettings>(() => getDefaultAISettings());
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [modelsFetching, setModelsFetching] = useState(false);
@@ -57,21 +61,35 @@ export default function AIPanel({
   const [provider, setProvider] = useState("openai_compatible");
   const [baseUrlChoice, setBaseUrlChoice] = useState("navidia");
   const [localBaseUrlChoice, setLocalBaseUrlChoice] = useState("lm_studio");
-  const [localBaseUrl, setLocalBaseUrl] = useState("http://localhost:1234/v1");
+  const [localBaseUrl, setLocalBaseUrl] = useState("http://127.0.0.1:1234/v1");
   const [model, setModel] = useState("");
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [apiKey, setApiKey] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const settingsRequestSeq = useRef(0);
+  const modelRequestSeq = useRef(0);
+  const providerRef = useRef(provider);
+  const localBaseUrlChoiceRef = useRef(localBaseUrlChoice);
+  const localBaseUrlRef = useRef(localBaseUrl);
+
+  const currentLocalBaseUrl = () => {
+    const choice = localBaseUrlChoiceRef.current;
+    const customUrl = localBaseUrlRef.current;
+    const optionUrl =
+      settings?.local_ai_base_url_options.find((item) => item.key === choice)?.url ??
+      "";
+    return choice === "custom" ? customUrl : optionUrl;
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   useEffect(() => {
-    if (tab !== "settings" || settings) return;
+    if (tab !== "settings") return;
     void loadSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, settings]);
+  }, [tab]);
 
   const selectedBaseUrl = () => {
     return settings?.openai_compatible_base_url_options.find((item) => item.key === baseUrlChoice)?.url ?? "";
@@ -90,38 +108,76 @@ export default function AIPanel({
   const syncSettingsForm = (nextSettings: AISettings) => {
     const nextProvider = nextSettings.ai_provider || nextSettings.provider_order[0] || "openai_compatible";
     const nextModel = nextSettings.providers[nextProvider]?.model ?? "";
+    const nextLocalChoice = nextSettings.local_ai_base_url_choice || "lm_studio";
+    const nextLocalBaseUrl =
+      nextSettings.local_ai_custom_base_url ||
+      nextSettings.local_ai_base_url ||
+      "http://127.0.0.1:1234/v1";
     setSettings(nextSettings);
     setProvider(nextProvider);
     setBaseUrlChoice(nextSettings.openai_compatible_base_url_choice || "navidia");
-    setLocalBaseUrlChoice(nextSettings.local_ai_base_url_choice || "lm_studio");
-    setLocalBaseUrl(
-      nextSettings.local_ai_custom_base_url ||
-        nextSettings.local_ai_base_url ||
-        "http://localhost:1234/v1"
-    );
-    setModel(nextModel);
-    setModelOptions(Array.from(new Set(nextSettings.providers[nextProvider]?.default_models ?? [])));
+    setLocalBaseUrlChoice(nextLocalChoice);
+    setLocalBaseUrl(nextLocalBaseUrl);
+    providerRef.current = nextProvider;
+    localBaseUrlChoiceRef.current = nextLocalChoice;
+    localBaseUrlRef.current = nextLocalBaseUrl;
+    if (nextProvider === "local") {
+      setModel("");
+      setModelOptions([]);
+    } else {
+      setModel(nextModel);
+      setModelOptions(Array.from(new Set(nextSettings.providers[nextProvider]?.default_models ?? [])));
+    }
     setApiKey("");
   };
 
   const loadSettings = async () => {
+    const requestId = ++settingsRequestSeq.current;
     setSettingsLoading(true);
     setSettingsMessage(null);
     try {
-      syncSettingsForm(await AI.getSettings());
+      const nextSettings = await AI.getSettings();
+      if (requestId === settingsRequestSeq.current) {
+        syncSettingsForm(nextSettings);
+        if (nextSettings.ai_provider === "local") {
+          const nextLocalChoice = nextSettings.local_ai_base_url_choice || "lm_studio";
+          const nextLocalBaseUrl =
+            nextSettings.local_ai_custom_base_url ||
+            nextSettings.local_ai_base_url ||
+            "http://127.0.0.1:1234/v1";
+          if (nextLocalChoice !== "custom" || nextLocalBaseUrl.trim()) {
+            void refreshModelOptions(
+              "local",
+              nextSettings.openai_compatible_base_url_choice || "navidia",
+              nextLocalChoice,
+              nextLocalBaseUrl
+            );
+          }
+        }
+      }
     } catch (err) {
-      setSettingsMessage(err instanceof Error ? err.message : String(err));
+      if (requestId === settingsRequestSeq.current) {
+        setSettingsMessage(err instanceof Error ? err.message : String(err));
+      }
     } finally {
-      setSettingsLoading(false);
+      if (requestId === settingsRequestSeq.current) {
+        setSettingsLoading(false);
+      }
     }
   };
 
-  const refreshModelOptions = async (nextProvider = provider, nextBaseChoice = baseUrlChoice) => {
+  const refreshModelOptions = async (
+    nextProvider = provider,
+    nextBaseChoice = baseUrlChoice,
+    nextLocalChoice = localBaseUrlChoice,
+    nextLocalBaseUrl = localBaseUrl
+  ) => {
+    const requestId = ++modelRequestSeq.current;
     const baseUrl =
       nextProvider === "openai_compatible"
         ? settings?.openai_compatible_base_url_options.find((item) => item.key === nextBaseChoice)?.url ?? ""
         : nextProvider === "local"
-          ? selectedLocalBaseUrl()
+          ? selectedLocalBaseUrl(nextLocalChoice, nextLocalBaseUrl)
         : "";
     if (nextProvider === "local" && !baseUrl.trim()) {
       setModelOptions([]);
@@ -135,6 +191,14 @@ export default function AIPanel({
       const result = apiKey.trim()
         ? await AI.fetchModelsWithKey(nextProvider, apiKey.trim(), baseUrl)
         : await AI.getModels(nextProvider, baseUrl);
+      if (requestId !== modelRequestSeq.current) return;
+      if (
+        nextProvider === "local" &&
+        (providerRef.current !== "local" ||
+          normalizeBaseUrl(baseUrl) !== normalizeBaseUrl(currentLocalBaseUrl()))
+      ) {
+        return;
+      }
       const models = Array.from(new Set(result.models));
       setModelOptions(models);
       if (models.length > 0 && !models.includes(model)) {
@@ -144,24 +208,44 @@ export default function AIPanel({
       }
       setSettingsMessage(result.message || `${models.length} models available.`);
     } catch (err) {
-      setSettingsMessage(err instanceof Error ? err.message : String(err));
+      if (requestId === modelRequestSeq.current) {
+        setSettingsMessage(err instanceof Error ? err.message : String(err));
+      }
     } finally {
-      setModelsFetching(false);
+      if (requestId === modelRequestSeq.current) {
+        setModelsFetching(false);
+      }
     }
   };
 
   const handleProviderChange = (nextProvider: string) => {
+    modelRequestSeq.current += 1;
     setProvider(nextProvider);
+    providerRef.current = nextProvider;
     const nextModels = Array.from(new Set(settings?.providers[nextProvider]?.default_models ?? []));
-    setModelOptions(nextModels);
-    setModel(settings?.providers[nextProvider]?.model || nextModels[0] || "");
+    setModelOptions(nextProvider === "local" ? [] : nextModels);
+    setModel(nextProvider === "local" ? "" : settings?.providers[nextProvider]?.model || nextModels[0] || "");
     setApiKey("");
+    if (nextProvider === "local") {
+      setLocalBaseUrlChoice("lm_studio");
+      setLocalBaseUrl("http://127.0.0.1:1234/v1");
+      localBaseUrlChoiceRef.current = "lm_studio";
+      localBaseUrlRef.current = "http://127.0.0.1:1234/v1";
+      setSettingsMessage(null);
+      void AI.setLocalAIBaseUrlChoice("lm_studio").catch((err) => {
+        setSettingsMessage(err instanceof Error ? err.message : String(err));
+      });
+    }
+    void AI.setProvider(nextProvider).catch((err) => {
+      setSettingsMessage(err instanceof Error ? err.message : String(err));
+    });
     if (nextProvider !== "local") {
       void refreshModelOptions(nextProvider, baseUrlChoice);
     }
   };
 
   const handleBaseUrlChange = (nextChoice: string) => {
+    modelRequestSeq.current += 1;
     setBaseUrlChoice(nextChoice);
     if (provider === "openai_compatible") {
       void refreshModelOptions(provider, nextChoice);
@@ -169,18 +253,49 @@ export default function AIPanel({
   };
 
   const handleLocalBaseUrlChoiceChange = (nextChoice: string) => {
+    modelRequestSeq.current += 1;
     setLocalBaseUrlChoice(nextChoice);
     const optionUrl = settings?.local_ai_base_url_options.find((item) => item.key === nextChoice)?.url;
+    const nextLocalBaseUrl = optionUrl || localBaseUrl;
     if (optionUrl) {
       setLocalBaseUrl(optionUrl);
     }
+    localBaseUrlChoiceRef.current = nextChoice;
+    localBaseUrlRef.current = nextLocalBaseUrl;
     setModelOptions([]);
     setModel("");
     setSettingsMessage(
       nextChoice === "custom"
         ? "Enter a custom Base URL before fetching models."
-        : null
+        : "Fetching models..."
     );
+    if (nextChoice !== "custom") {
+      void refreshModelOptions("local", baseUrlChoice, nextChoice, nextLocalBaseUrl);
+    }
+  };
+
+  const handleFetchModels = async () => {
+    settingsRequestSeq.current += 1;
+    setSettingsLoading(false);
+    if (provider === "local") {
+      const currentLocalBaseUrl = selectedLocalBaseUrl(localBaseUrlChoice, localBaseUrl);
+      if (!currentLocalBaseUrl.trim()) {
+        setModelOptions([]);
+        setModel("");
+        setSettingsMessage("Enter a custom Base URL before fetching models.");
+        return;
+      }
+      await AI.setProvider(provider);
+      await AI.setLocalAIBaseUrlChoice(localBaseUrlChoice, currentLocalBaseUrl);
+      await refreshModelOptions(
+        provider,
+        baseUrlChoice,
+        localBaseUrlChoice,
+        currentLocalBaseUrl
+      );
+      return;
+    }
+    await refreshModelOptions();
   };
 
   const saveSettings = async () => {
@@ -256,6 +371,10 @@ export default function AIPanel({
     const content = translateScope === "selection" && selectedText ? selectedText : documentText;
     if (!content.trim()) return;
     setTranslatedPreview(null);
+    if (provider === "local") {
+      await AI.setProvider(provider);
+      await AI.setLocalAIBaseUrlChoice(localBaseUrlChoice, localBaseUrl);
+    }
     const result = await translate(content, sourceLang === "Auto Detect" ? "auto" : sourceLang, targetLang);
     if (result) setTranslatedPreview(result);
   };
@@ -541,8 +660,13 @@ export default function AIPanel({
                         setLocalBaseUrl(e.target.value);
                         setModelOptions([]);
                         setModel("");
+                        setSettingsMessage(
+                          e.target.value.trim()
+                            ? "Fetch models from the custom endpoint."
+                            : "Enter a custom Base URL before fetching models."
+                        );
                       }}
-                      placeholder="http://localhost:1234/v1"
+                      placeholder="http://127.0.0.1:1234/v1"
                       className="text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
                     />
                   ) : (
@@ -550,6 +674,9 @@ export default function AIPanel({
                       {selectedLocalBaseUrl()}
                     </div>
                   )}
+                  <div className="text-[11px] text-gray-400 dark:text-gray-500 break-all">
+                    Fetch URL: {selectedLocalBaseUrl() || "Not configured"}
+                  </div>
                 </div>
               )}
 
@@ -560,7 +687,7 @@ export default function AIPanel({
                   onChange={(e) => setModel(e.target.value)}
                   className="text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
                 >
-                  {model && !modelOptions.includes(model) && (
+                  {provider !== "local" && model && !modelOptions.includes(model) && (
                     <option value={model}>{model}</option>
                   )}
                   {modelOptions.map((item) => (
@@ -568,11 +695,14 @@ export default function AIPanel({
                       {item}
                     </option>
                   ))}
+                  {provider === "local" && modelOptions.length === 0 && (
+                    <option value="">No models loaded</option>
+                  )}
                 </select>
               </div>
 
               <button
-                onClick={() => { void refreshModelOptions(); }}
+                onClick={() => { void handleFetchModels(); }}
                 disabled={modelsFetching}
                 className="py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-[#2d2d2d] text-gray-700 dark:text-gray-300 disabled:opacity-40"
               >

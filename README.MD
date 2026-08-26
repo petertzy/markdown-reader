@@ -60,6 +60,15 @@ cp frontend/.env.local.example frontend/.env.local
 ./scripts/dev-tauri.sh
 ```
 
+The development helper starts the FastAPI backend on `127.0.0.1:8000` when that
+port is available. If port `8000` is already occupied by another process, it
+automatically chooses a free local port and passes it to the Tauri shell. To
+request a specific backend port, run:
+
+```bash
+MARKDOWN_READER_BACKEND_PORT=8010 ./scripts/dev-tauri.sh
+```
+
 > **Note for Contributors:** After cloning, run `uv sync --extra dev` and `uv run pre-commit install` to set up linting hooks.
 
 ---
@@ -84,7 +93,7 @@ Markdown Reader is split into three main layers to ensure maximum performance an
 
 1. **Backend (`/backend`)**: A blazing-fast FastAPI application handling rendering, export, and all AI API communications.
 2. **Frontend (`/frontend`)**: A Next.js UI providing the rich editor experience, packaged within a Tauri desktop shell.
-When packaged for desktop use, the Python backend is bundled as a silent Tauri sidecar process, dynamically assigning ports at runtime to avoid conflicts.
+When packaged for desktop use, the Python backend is bundled as a silent Tauri sidecar process, dynamically assigning ports at runtime to avoid conflicts. In development, `./scripts/dev-tauri.sh` uses the same port-handoff path when it needs to avoid a local port conflict.
 
 ---
 

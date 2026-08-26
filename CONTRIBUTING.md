@@ -17,9 +17,10 @@ Markdown Reader is a desktop Markdown editor and reader with:
 - project notes in `docs/`
 - release and distribution workflows in `.github/workflows/`
 
-The current development app runs a local FastAPI backend on
-`http://127.0.0.1:8000` and launches the Tauri desktop shell with a Next.js
-frontend on `http://localhost:3000`.
+The current development app runs a local FastAPI backend and launches the Tauri
+desktop shell with a Next.js frontend on `http://127.0.0.1:3000`. The helper
+uses `http://127.0.0.1:8000` when available, and automatically chooses another
+free local port if `8000` is already occupied.
 
 ---
 
@@ -79,23 +80,31 @@ Use the project helper for normal desktop development:
 ```
 
 This starts the FastAPI backend and launches the Tauri desktop shell. The
-backend API docs are available during development at:
+backend URL is printed by the script. When it uses the default port, the API
+docs are available at:
 
 - Swagger: `http://127.0.0.1:8000/docs`
 - ReDoc: `http://127.0.0.1:8000/redoc`
+
+If the script chooses another port, replace `8000` with the printed port. You
+can request a specific backend port when needed:
+
+```bash
+MARKDOWN_READER_BACKEND_PORT=8010 ./scripts/dev-tauri.sh
+```
 
 You can also run services separately when debugging. Use separate terminals for
 long-running commands:
 
 ```bash
 # Terminal 1: backend
-uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+uv run uvicorn backend.main:app --host 127.0.0.1 --port 8010 --reload
 
 # Terminal 2: frontend dev server
 cd frontend && npm run dev
 
 # Terminal 3: Tauri shell, with the frontend dev server already running
-cd frontend && npm run tauri:dev
+cd frontend && MARKDOWN_READER_BACKEND_PORT=8010 npm run tauri:dev
 ```
 
 AI-provider features may ask for API keys in the app, but normal documentation,

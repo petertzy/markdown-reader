@@ -1,5 +1,6 @@
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -34,7 +35,7 @@ class TestAIProviderConfigLogic(unittest.TestCase):
                 patch.dict(os.environ, {"LOCAL_AI_BASE_URL": ""}, clear=False),
             ):
                 self.assertEqual(
-                    logic.get_local_ai_base_url(), "http://localhost:1234/v1"
+                    logic.get_local_ai_base_url(), "http://127.0.0.1:1234/v1"
                 )
 
                 saved = logic.set_local_ai_base_url("http://127.0.0.1:1234/v1/")
@@ -65,7 +66,24 @@ class TestAIProviderConfigLogic(unittest.TestCase):
                 self.assertEqual(choice, "ollama")
                 self.assertEqual(logic.get_local_ai_base_url_choice(), "ollama")
                 self.assertEqual(
-                    logic.get_local_ai_base_url(), "http://localhost:11434/v1"
+                    logic.get_local_ai_base_url(), "http://127.0.0.1:11434/v1"
+                )
+
+    def test_local_provider_choice_overrides_stale_env_base_url(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            settings_file = Path(tmp_dir) / "settings.json"
+            with (
+                patch.object(logic, "APP_SETTINGS_FILE_PATH", settings_file),
+                patch.dict(
+                    os.environ,
+                    {"LOCAL_AI_BASE_URL": "http://127.0.0.1:1234/v1"},
+                    clear=False,
+                ),
+            ):
+                logic._save_app_settings({"local_ai_base_url_choice": "ollama"})
+
+                self.assertEqual(
+                    logic.get_local_ai_base_url(), "http://127.0.0.1:11434/v1"
                 )
 
     def test_local_provider_custom_base_url_choice_roundtrip(self):
@@ -153,7 +171,7 @@ class TestAIProviderConfigLogic(unittest.TestCase):
                 patch.object(logic, "APP_SETTINGS_FILE_PATH", settings_file),
                 patch.dict(
                     os.environ,
-                    {"LOCAL_AI_BASE_URL": "http://localhost:1234/v1"},
+                    {"LOCAL_AI_BASE_URL": "http://127.0.0.1:1234/v1"},
                     clear=False,
                 ),
                 patch(
@@ -164,9 +182,42 @@ class TestAIProviderConfigLogic(unittest.TestCase):
 
         called_url = mock_get.call_args[0][0]
         called_headers = mock_get.call_args.kwargs["headers"]
-        self.assertEqual(called_url, "http://localhost:1234/v1/models")
+        self.assertEqual(called_url, "http://127.0.0.1:1234/v1/models")
         self.assertEqual(called_headers, {})
         self.assertIn("local-model", models)
+
+    def test_fetch_models_falls_back_to_ollama_tags_endpoint(self):
+        class _OpenAICompatResp:
+            def raise_for_status(self):
+                raise logic.requests.HTTPError("not found")
+
+            def json(self):
+                return {}
+
+        class _OllamaTagsResp:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"models": [{"name": "llama3.2:latest"}]}
+
+        with patch(
+            "backend.ai_logic.requests.get",
+            side_effect=[_OpenAICompatResp(), _OllamaTagsResp()],
+        ) as mock_get:
+            models = logic.fetch_available_models(
+                "local", "", base_url_override="http://127.0.0.1:11434/v1"
+            )
+
+        called_urls = [call.args[0] for call in mock_get.call_args_list]
+        self.assertEqual(
+            called_urls,
+            [
+                "http://127.0.0.1:11434/v1/models",
+                "http://127.0.0.1:11434/api/tags",
+            ],
+        )
+        self.assertEqual(models, ["llama3.2:latest"])
 
     def test_local_models_endpoint_returns_empty_list_when_unreachable(self):
         with patch(
@@ -174,12 +225,30 @@ class TestAIProviderConfigLogic(unittest.TestCase):
             side_effect=RuntimeError("connection refused"),
         ):
             result = ai_router.get_models(
-                "local", base_url_override="http://localhost:11434/v1"
+                "local", base_url_override="http://127.0.0.1:11434/v1"
             )
 
         self.assertEqual(result["provider"], "local")
         self.assertEqual(result["models"], [])
         self.assertIn("not reachable", result["message"])
+
+    def test_local_models_endpoint_does_not_read_api_key(self):
+        with (
+            patch("backend.ai_logic.get_secure_ai_api_key") as mock_get_key,
+            patch(
+                "backend.ai_logic.fetch_available_models",
+                return_value=["llama3.2:latest"],
+            ) as mock_fetch_models,
+        ):
+            result = ai_router.get_models(
+                "local", base_url_override="http://127.0.0.1:11434/v1"
+            )
+
+        mock_get_key.assert_not_called()
+        mock_fetch_models.assert_called_once_with(
+            "local", "", base_url_override="http://127.0.0.1:11434/v1"
+        )
+        self.assertEqual(result["models"], ["llama3.2:latest"])
 
     def test_openai_compatible_default_models_depend_on_base_url(self):
         navidia_defaults = logic.get_provider_default_models(
@@ -215,6 +284,24 @@ class TestAIProviderConfigLogic(unittest.TestCase):
         self.assertEqual(api_key, "groq-key")
         self.assertEqual(key_slot, "openai_compatible_groq")
         self.assertEqual(env_var, "OPENAI_COMPATIBLE_GROQ_API_KEY")
+
+    def test_key_configured_check_times_out_when_keyring_hangs(self):
+        class _HangingKeyring:
+            def get_password(self, service, provider):
+                time.sleep(1)
+                return "secret"
+
+        started = time.monotonic()
+        with (
+            patch.object(logic, "keyring", _HangingKeyring()),
+            patch.dict(os.environ, {"OPENAI_API_KEY": ""}, clear=False),
+        ):
+            configured = logic.is_ai_api_key_configured(
+                "openai", "OPENAI_API_KEY", timeout_seconds=0.01
+            )
+
+        self.assertFalse(configured)
+        self.assertLess(time.monotonic() - started, 0.5)
 
     def test_provider_and_model_are_persisted_to_settings(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -297,7 +384,7 @@ class TestAIProviderConfigLogic(unittest.TestCase):
                     os.environ,
                     {
                         "AI_PROVIDER": "",
-                        "LOCAL_AI_BASE_URL": "http://localhost:1234/v1",
+                        "LOCAL_AI_BASE_URL": "http://127.0.0.1:1234/v1",
                         "LOCAL_AI_MODEL": "local-test",
                         "LOCAL_AI_API_KEY": "",
                     },
@@ -314,7 +401,7 @@ class TestAIProviderConfigLogic(unittest.TestCase):
         called_url = mock_post.call_args[0][0]
         called_json = mock_post.call_args.kwargs["json"]
         called_headers = mock_post.call_args.kwargs["headers"]
-        self.assertEqual(called_url, "http://localhost:1234/v1/chat/completions")
+        self.assertEqual(called_url, "http://127.0.0.1:1234/v1/chat/completions")
         self.assertEqual(called_json["model"], "local-test")
         self.assertNotIn("Authorization", called_headers)
         self.assertEqual(translated, "Hallo")

@@ -69,12 +69,12 @@ export default function Toolbar({
 
       {backendBusy && (
         <span className="text-xs text-amber-600 dark:text-amber-300 whitespace-nowrap">
-          Starting local engine...
+          Starting backend...
         </span>
       )}
       {backendFailed && (
         <span className="text-xs text-red-600 dark:text-red-300 truncate max-w-[220px]" title={backendMessage ?? undefined}>
-          Local engine unavailable
+          Backend unavailable
         </span>
       )}
 

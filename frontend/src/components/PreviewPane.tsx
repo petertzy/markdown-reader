@@ -14,9 +14,9 @@ type Props = {
 
 export default function PreviewPane({ html, loading = false, error = null }: Props) {
   const placeholder = error
-    ? `<p style='color:#b91c1c;padding:24px;font-family:sans-serif'>Local engine unavailable.</p>`
+    ? `<p style='color:#b91c1c;padding:24px;font-family:sans-serif'>Backend unavailable.</p>`
     : loading
-      ? "<p style='color:#999;padding:24px;font-family:sans-serif'>Starting local engine...</p>"
+      ? "<p style='color:#999;padding:24px;font-family:sans-serif'>Starting backend...</p>"
       : "<p style='color:#999;padding:24px;font-family:sans-serif'>Preview will appear here…</p>";
 
   return (

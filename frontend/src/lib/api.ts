@@ -29,6 +29,18 @@ function isTauriRuntime() {
 
 let _resolvedBaseUrl: string | null = null;
 
+function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs = 10000
+) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(input, { ...init, signal: init.signal ?? controller.signal }).finally(
+    () => window.clearTimeout(timeoutId)
+  );
+}
+
 /**
  * Returns the backend base URL, resolving it once and caching the result.
  * In Tauri the first call may take several seconds while the packaged sidecar
@@ -46,9 +58,11 @@ export async function getBaseUrl(): Promise<string> {
       if (port) {
         const candidate = `http://127.0.0.1:${port}`;
         try {
-          const health = await fetch(`${candidate}/api/health`, {
-            cache: "no-store",
-          });
+          const health = await fetchWithTimeout(
+            `${candidate}/api/health`,
+            { cache: "no-store" },
+            2000
+          );
           if (health.ok) {
             _resolvedBaseUrl = candidate;
             return _resolvedBaseUrl;
@@ -306,8 +320,8 @@ const OPENAI_COMPATIBLE_BASE_URL_OPTIONS: OpenAICompatibleBaseUrlOption[] = [
 ];
 
 const LOCAL_AI_BASE_URL_OPTIONS: LocalAIBaseUrlOption[] = [
-  { key: "lm_studio", label: "LM Studio", url: "http://localhost:1234/v1" },
-  { key: "ollama", label: "Ollama", url: "http://localhost:11434/v1" },
+  { key: "lm_studio", label: "LM Studio", url: "http://127.0.0.1:1234/v1" },
+  { key: "ollama", label: "Ollama", url: "http://127.0.0.1:11434/v1" },
   { key: "custom", label: "Custom", url: "" },
 ];
 
@@ -354,7 +368,7 @@ function normalizeAISettings(raw: PartialAISettings): AISettings {
     openai_compatible_base_url_options:
       raw.openai_compatible_base_url_options ??
       OPENAI_COMPATIBLE_BASE_URL_OPTIONS,
-    local_ai_base_url: raw.local_ai_base_url ?? "http://localhost:1234/v1",
+    local_ai_base_url: raw.local_ai_base_url ?? "http://127.0.0.1:1234/v1",
     local_ai_base_url_choice: raw.local_ai_base_url_choice ?? "lm_studio",
     local_ai_custom_base_url: raw.local_ai_custom_base_url ?? "",
     local_ai_base_url_options:
@@ -363,9 +377,23 @@ function normalizeAISettings(raw: PartialAISettings): AISettings {
   };
 }
 
+export function getDefaultAISettings(): AISettings {
+  return normalizeAISettings({});
+}
+
 export const AI = {
   getSettings: async () =>
-    normalizeAISettings(await apiFetch<PartialAISettings>("/api/ai/settings")),
+    normalizeAISettings(
+      await Promise.race([
+        apiFetch<PartialAISettings>("/api/ai/settings"),
+        new Promise<never>((_, reject) =>
+          window.setTimeout(
+            () => reject(new Error("AI settings request timed out.")),
+            30000
+          )
+        ),
+      ])
+    ),
 
   setProvider: (provider: string) =>
     apiFetch<{ provider: string }>(

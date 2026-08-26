@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -20,10 +21,10 @@ except Exception:
 
 
 AI_CREDENTIAL_SERVICE = "MarkdownReader.AI"
-LOCAL_AI_DEFAULT_BASE_URL = "http://localhost:1234/v1"
+LOCAL_AI_DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1"
 LOCAL_AI_BASE_URL_OPTIONS = {
-    "lm_studio": "http://localhost:1234/v1",
-    "ollama": "http://localhost:11434/v1",
+    "lm_studio": "http://127.0.0.1:1234/v1",
+    "ollama": "http://127.0.0.1:11434/v1",
     "custom": "",
 }
 LOCAL_AI_BASE_URL_LABELS = {
@@ -243,15 +244,18 @@ def get_openai_compatible_base_url() -> str:
 
 
 def get_local_ai_base_url() -> str:
-    env_url = os.getenv("LOCAL_AI_BASE_URL", "").strip()
-    if env_url:
-        return env_url.rstrip("/")
     settings = _load_app_settings()
     choice = str(settings.get("local_ai_base_url_choice", "")).strip()
     if choice in LOCAL_AI_BASE_URL_OPTIONS and choice != "custom":
         return LOCAL_AI_BASE_URL_OPTIONS[choice].rstrip("/")
+    custom_url = str(settings.get("local_ai_custom_base_url", "")).strip()
+    if choice == "custom" and custom_url:
+        return custom_url.rstrip("/")
+    env_url = os.getenv("LOCAL_AI_BASE_URL", "").strip()
+    if env_url:
+        return env_url.rstrip("/")
     configured_url = (
-        str(settings.get("local_ai_custom_base_url", "")).strip()
+        custom_url
         or str(settings.get("local_ai_base_url", "")).strip()
         or LOCAL_AI_DEFAULT_BASE_URL
     )
@@ -380,6 +384,30 @@ def get_secure_ai_api_key(provider: str) -> str:
         return ""
 
 
+def is_ai_api_key_configured(
+    provider: str, env_var: str = "", timeout_seconds: float = 1.0
+) -> bool:
+    if env_var and os.getenv(env_var, "").strip():
+        return True
+    if keyring is None:
+        return bool(os.getenv(_get_key_slot_env_var(provider), "").strip())
+
+    result = {"configured": False}
+
+    def check_keyring() -> None:
+        try:
+            result["configured"] = bool(
+                keyring.get_password(AI_CREDENTIAL_SERVICE, provider)
+            )
+        except KeyringError:
+            result["configured"] = False
+
+    thread = threading.Thread(target=check_keyring, daemon=True)
+    thread.start()
+    thread.join(timeout_seconds)
+    return result["configured"] if not thread.is_alive() else False
+
+
 def set_secure_ai_api_key(provider: str, api_key: str) -> None:
     if keyring is None:
         os.environ[_get_key_slot_env_var(provider)] = api_key
@@ -409,7 +437,22 @@ def fetch_available_models(
         base_url = AI_PROVIDER_BASE_URLS[provider].rstrip("/")
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     response = requests.get(f"{base_url}/models", headers=headers, timeout=20)
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.RequestException:
+        if provider == "local" and base_url.endswith(":11434/v1"):
+            tags_url = base_url.removesuffix("/v1") + "/api/tags"
+            tags_response = requests.get(tags_url, timeout=20)
+            tags_response.raise_for_status()
+            tags_data = tags_response.json()
+            tags_models = tags_data.get("models", [])
+            if isinstance(tags_models, list):
+                return [
+                    item.get("name", "")
+                    for item in tags_models
+                    if isinstance(item, dict) and item.get("name")
+                ]
+        raise
     data = response.json()
     models = data.get("data", data)
     if isinstance(models, list):

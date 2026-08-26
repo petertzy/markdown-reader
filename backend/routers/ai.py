@@ -89,15 +89,15 @@ def get_ai_settings():
             choice = logic.get_openai_compatible_base_url_choice()
             key_slot = logic.get_openai_compatible_storage_key_name(choice)
             env_var = logic.get_openai_compatible_env_var(choice)
+        key_configured = False
+        if provider != "local":
+            key_configured = logic.is_ai_api_key_configured(key_slot, env_var)
         providers[provider] = {
             "display_name": logic.get_ai_provider_display_name(provider),
             "env_var": env_var,
             "model": logic.get_ai_provider_model(provider),
             "default_models": logic.get_provider_default_models(provider),
-            "key_configured": bool(
-                (os.getenv(env_var, "").strip() if env_var else "")
-                or logic.get_secure_ai_api_key(key_slot)
-            ),
+            "key_configured": key_configured,
         }
     settings["providers"] = providers
     settings["provider_order"] = list(logic.AI_PROVIDER_PRIORITY)
@@ -202,7 +202,7 @@ def get_models(provider: str, base_url_override: str = ""):
             if override.rstrip("/") == str(option["url"]).rstrip("/"):
                 key_slot = logic.get_openai_compatible_storage_key_name(option["key"])
                 break
-    api_key = logic.get_secure_ai_api_key(key_slot)
+    api_key = "" if provider == "local" else logic.get_secure_ai_api_key(key_slot)
     try:
         models = logic.fetch_available_models(
             provider, api_key, base_url_override=base_url_override
