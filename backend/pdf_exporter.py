@@ -62,6 +62,7 @@ def export_markdown_to_pdf(
     body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; line-height: 1.6; overflow-wrap: break-word; }}
     img {{ max-width: 100% !important; width: auto !important; height: auto !important; page-break-inside: avoid; }}
     pre {{ white-space: pre-wrap; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 12px; }}
+    pre code {{ white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }}
     pre, code, table {{ page-break-inside: avoid; }}
   </style>
 </head>
