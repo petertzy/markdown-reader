@@ -72,6 +72,9 @@ def render_markdown(
                 "code-friendly",
                 "tables",
                 "break-on-newline",
+                # Keep links usable when exported HTML is shared as a file.
+                # markdown2 adds rel="noopener" alongside target="_blank".
+                "target-blank-links",
             ],
         )
         html_content = restore_math(html_content, math_replacements)
