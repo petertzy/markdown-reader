@@ -138,6 +138,8 @@ class _DocxHtmlParser(HTMLParser):
         if self.current_cell is not None:
             self.current_cell.append(text)
             return
+        if self.current_paragraph is None and not text.strip():
+            return
         if self.current_paragraph is None:
             self.current_paragraph = self.document.add_paragraph()
         run = self.current_paragraph.add_run(text)
