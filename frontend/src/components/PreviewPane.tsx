@@ -25,7 +25,7 @@ export default function PreviewPane({ html, loading = false, error = null }: Pro
         title="Markdown Preview"
         srcDoc={html || placeholder}
         className="w-full h-full border-none"
-        sandbox="allow-scripts"
+        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
       />
     </div>
   );
