@@ -14,6 +14,10 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt
 
+CODE_BLOCK_FILL = "F6F8FA"
+INLINE_CODE_FILL = "EFEFEF"
+CODE_BLOCK_CELL_MARGIN = "120"
+
 
 def _resolve_image_source(src: str, base_dir: str | None) -> tuple[str, bytes | None]:
     src = src.strip()
@@ -73,6 +77,35 @@ def _add_hyperlink(paragraph, text: str, url: str, style: dict[str, Any]) -> Non
     paragraph._p.append(hyperlink)
 
 
+def _add_shading(element, fill: str) -> None:
+    shading = OxmlElement("w:shd")
+    shading.set(qn("w:fill"), fill)
+    element.append(shading)
+
+
+def _shade_paragraph(paragraph, fill: str) -> None:
+    properties = paragraph._p.get_or_add_pPr()
+    _add_shading(properties, fill)
+
+
+def _style_code_block_cell(cell) -> None:
+    properties = cell._tc.get_or_add_tcPr()
+    _add_shading(properties, CODE_BLOCK_FILL)
+
+    margins = OxmlElement("w:tcMar")
+    for side in ("top", "left", "bottom", "right"):
+        margin = OxmlElement(f"w:{side}")
+        margin.set(qn("w:w"), CODE_BLOCK_CELL_MARGIN)
+        margin.set(qn("w:type"), "dxa")
+        margins.append(margin)
+    properties.append(margins)
+
+
+def _shade_run(run, fill: str) -> None:
+    properties = run._r.get_or_add_rPr()
+    _add_shading(properties, fill)
+
+
 class _DocxHtmlParser(HTMLParser):
     def __init__(self, document: Document, base_dir: str | None = None):
         super().__init__(convert_charrefs=False)
@@ -87,6 +120,7 @@ class _DocxHtmlParser(HTMLParser):
             "bold": False,
             "italic": False,
             "code": False,
+            "pre": False,
         }
         self.current_link_href: str | None = None
         self.data_buffer = ""
@@ -96,7 +130,13 @@ class _DocxHtmlParser(HTMLParser):
         self._flush_text()
         if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
             self.current_paragraph = self.document.add_heading("", level=int(tag[1]))
-        elif tag in ("p", "blockquote", "pre"):
+        elif tag == "pre":
+            table = self.document.add_table(rows=1, cols=1)
+            cell = table.cell(0, 0)
+            _style_code_block_cell(cell)
+            self.current_style["pre"] = True
+            self.current_paragraph = cell.paragraphs[0]
+        elif tag in ("p", "blockquote"):
             self.current_paragraph = self.document.add_paragraph()
         elif tag == "code":
             self.current_style["code"] = True
@@ -142,6 +182,8 @@ class _DocxHtmlParser(HTMLParser):
     def handle_endtag(self, tag: str):
         self._flush_text()
         if tag in ("h1", "h2", "h3", "h4", "h5", "h6", "p", "blockquote", "li", "pre"):
+            if tag == "pre":
+                self.current_style["pre"] = False
             self.current_paragraph = None
         elif tag == "code":
             self.current_style["code"] = False
@@ -200,6 +242,12 @@ class _DocxHtmlParser(HTMLParser):
         if self.current_style.get("code", False):
             run.font.name = "Courier New"
             run.font.size = Pt(10)
+            _shade_run(
+                run,
+                CODE_BLOCK_FILL
+                if self.current_style.get("pre", False)
+                else INLINE_CODE_FILL,
+            )
 
     def _build_table(self):
         if not self.current_table:
