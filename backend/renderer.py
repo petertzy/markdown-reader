@@ -8,8 +8,10 @@ so it can be used in the FastAPI backend without requiring a tkinter app object.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from html import escape as html_escape
+from html.parser import HTMLParser
 
 # Ensure the project root is on sys.path for standalone backend execution.
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -25,6 +27,71 @@ from backend.render_helpers import (
     protect_math,
     restore_math,
 )
+
+_BARE_URL_RE = re.compile(r"https?://[^\s<]+")
+_AUTOLINK_SKIP_TAGS = {"a", "code", "pre", "script", "style"}
+_TRAILING_URL_PUNCTUATION = ".,;:!?)]}"
+
+
+def _linkify_bare_urls(text: str) -> str:
+    parts: list[str] = []
+    last = 0
+    for match in _BARE_URL_RE.finditer(text):
+        url = match.group(0)
+        trailing = ""
+        while url and url[-1] in _TRAILING_URL_PUNCTUATION:
+            trailing = url[-1] + trailing
+            url = url[:-1]
+        if not url:
+            continue
+        parts.append(html_escape(text[last : match.start()]))
+        escaped_url = html_escape(url, quote=True)
+        parts.append(
+            f'<a href="{escaped_url}" target="_blank" rel="noopener">{html_escape(url)}</a>'
+        )
+        parts.append(html_escape(trailing))
+        last = match.end()
+    parts.append(html_escape(text[last:]))
+    return "".join(parts)
+
+
+class _BareUrlLinkifier(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.parts: list[str] = []
+        self.skip_stack: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        self.parts.append(self.get_starttag_text() or "")
+        if tag.lower() in _AUTOLINK_SKIP_TAGS:
+            self.skip_stack.append(tag.lower())
+
+    def handle_startendtag(self, tag: str, attrs) -> None:
+        self.parts.append(self.get_starttag_text() or "")
+
+    def handle_endtag(self, tag: str) -> None:
+        self.parts.append(f"</{tag}>")
+        tag = tag.lower()
+        if self.skip_stack and self.skip_stack[-1] == tag:
+            self.skip_stack.pop()
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(
+            html_escape(data) if self.skip_stack else _linkify_bare_urls(data)
+        )
+
+    def handle_entityref(self, name: str) -> None:
+        self.parts.append(f"&{name};")
+
+    def handle_charref(self, name: str) -> None:
+        self.parts.append(f"&#{name};")
+
+
+def linkify_bare_urls(html: str) -> str:
+    parser = _BareUrlLinkifier()
+    parser.feed(html)
+    parser.close()
+    return "".join(parser.parts)
 
 
 def render_markdown(
@@ -78,6 +145,7 @@ def render_markdown(
             ],
         )
         html_content = restore_math(html_content, math_replacements)
+        html_content = linkify_bare_urls(html_content)
     except Exception:
         import traceback
 
