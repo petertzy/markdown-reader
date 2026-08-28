@@ -281,6 +281,13 @@ def render_markdown(
   </style>
   <script>
     document.addEventListener('DOMContentLoaded', function() {{
+      document.querySelectorAll('a').forEach(function(link) {{
+        if (link.href.startsWith('http://') || link.href.startsWith('https://')) {{
+          link.setAttribute('target', '_blank');
+          link.setAttribute('rel', 'noopener noreferrer');
+        }}
+      }});
+      
       document.querySelectorAll('pre code').forEach(function(block) {{
         var btn = document.createElement('button');
         btn.className = 'copy-button';
