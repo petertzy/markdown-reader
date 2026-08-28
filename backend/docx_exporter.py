@@ -9,6 +9,9 @@ from typing import Any
 
 import requests
 from docx import Document
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Inches, Pt
 
 
@@ -35,6 +38,41 @@ def _resolve_image_source(src: str, base_dir: str | None) -> tuple[str, bytes | 
     return src, None
 
 
+def _add_hyperlink(paragraph, text: str, url: str, style: dict[str, Any]) -> None:
+    part = paragraph.part
+    relationship_id = part.relate_to(url, RT.HYPERLINK, is_external=True)
+
+    hyperlink = OxmlElement("w:hyperlink")
+    hyperlink.set(qn("r:id"), relationship_id)
+
+    run = OxmlElement("w:r")
+    run_properties = OxmlElement("w:rPr")
+
+    run_style = OxmlElement("w:rStyle")
+    run_style.set(qn("w:val"), "Hyperlink")
+    run_properties.append(run_style)
+
+    if style.get("bold", False):
+        run_properties.append(OxmlElement("w:b"))
+    if style.get("italic", False):
+        run_properties.append(OxmlElement("w:i"))
+    if style.get("code", False):
+        font = OxmlElement("w:rFonts")
+        font.set(qn("w:ascii"), "Courier New")
+        font.set(qn("w:hAnsi"), "Courier New")
+        run_properties.append(font)
+        size = OxmlElement("w:sz")
+        size.set(qn("w:val"), "20")
+        run_properties.append(size)
+
+    run.append(run_properties)
+    text_element = OxmlElement("w:t")
+    text_element.text = text
+    run.append(text_element)
+    hyperlink.append(run)
+    paragraph._p.append(hyperlink)
+
+
 class _DocxHtmlParser(HTMLParser):
     def __init__(self, document: Document, base_dir: str | None = None):
         super().__init__(convert_charrefs=False)
@@ -50,6 +88,7 @@ class _DocxHtmlParser(HTMLParser):
             "italic": False,
             "code": False,
         }
+        self.current_link_href: str | None = None
         self.data_buffer = ""
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str]]):
@@ -65,6 +104,9 @@ class _DocxHtmlParser(HTMLParser):
             self.current_style["bold"] = True
         elif tag in ("em", "i"):
             self.current_style["italic"] = True
+        elif tag == "a":
+            href = attrs_dict.get("href", "").strip()
+            self.current_link_href = href or None
         elif tag in ("ul", "ol"):
             self.current_list_style.append(
                 "List Bullet" if tag == "ul" else "List Number"
@@ -107,6 +149,8 @@ class _DocxHtmlParser(HTMLParser):
             self.current_style["bold"] = False
         elif tag in ("em", "i"):
             self.current_style["italic"] = False
+        elif tag == "a":
+            self.current_link_href = None
         elif tag in ("ul", "ol") and self.current_list_style:
             self.current_list_style.pop()
         elif tag == "table":
@@ -142,6 +186,14 @@ class _DocxHtmlParser(HTMLParser):
             return
         if self.current_paragraph is None:
             self.current_paragraph = self.document.add_paragraph()
+        if self.current_link_href:
+            _add_hyperlink(
+                self.current_paragraph,
+                text,
+                self.current_link_href,
+                self.current_style,
+            )
+            return
         run = self.current_paragraph.add_run(text)
         run.bold = self.current_style.get("bold", False)
         run.italic = self.current_style.get("italic", False)
