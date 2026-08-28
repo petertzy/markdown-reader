@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type ReactNode } from "react";
 import { useAIChat } from "@/hooks/useAIChat";
 import { AI, getDefaultAISettings, type AISettings } from "@/lib/api";
 
@@ -33,6 +33,138 @@ const CHAT_SLASH_PROMPTS: Record<string, string> = {
 
 function normalizeBaseUrl(url: string) {
   return url.trim().replace(/\/+$/, "");
+}
+
+function renderInlineMarkdown(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const pattern = /(\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s]+))/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+
+    if (match[2]) {
+      nodes.push(<strong key={match.index}>{match[2]}</strong>);
+    } else if (match[3]) {
+      nodes.push(
+        <code
+          key={match.index}
+          className="rounded bg-black/10 dark:bg-white/10 px-1 py-0.5 font-mono text-[11px]"
+        >
+          {match[3]}
+        </code>
+      );
+    } else {
+      const label = match[4] ?? match[6];
+      const href = match[5] ?? match[6];
+      nodes.push(
+        <a
+          key={match.index}
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2 hover:text-blue-600 dark:hover:text-blue-300"
+        >
+          {label}
+        </a>
+      );
+    }
+
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+
+  return nodes;
+}
+
+function ChatMessageContent({ content }: { content: string }) {
+  const blocks: ReactNode[] = [];
+  const paragraphLines: string[] = [];
+  let listItems: string[] = [];
+  let codeLines: string[] = [];
+  let inCodeBlock = false;
+
+  const flushParagraph = () => {
+    if (!paragraphLines.length) return;
+    const text = paragraphLines.join(" ");
+    blocks.push(
+      <p key={`p-${blocks.length}`} className="mb-2 last:mb-0">
+        {renderInlineMarkdown(text)}
+      </p>
+    );
+    paragraphLines.length = 0;
+  };
+
+  const flushList = () => {
+    if (!listItems.length) return;
+    blocks.push(
+      <ul key={`ul-${blocks.length}`} className="mb-2 list-disc space-y-1 pl-4 last:mb-0">
+        {listItems.map((item, index) => (
+          <li key={index}>{renderInlineMarkdown(item)}</li>
+        ))}
+      </ul>
+    );
+    listItems = [];
+  };
+
+  const flushCodeBlock = () => {
+    blocks.push(
+      <pre
+        key={`pre-${blocks.length}`}
+        className="mb-2 overflow-x-auto rounded border border-gray-200 bg-gray-50 p-2 font-mono text-[11px] leading-relaxed dark:border-gray-600 dark:bg-[#242424]"
+      >
+        <code>{codeLines.join("\n")}</code>
+      </pre>
+    );
+    codeLines = [];
+  };
+
+  for (const line of content.split(/\r?\n/)) {
+    if (line.trim().startsWith("```")) {
+      flushParagraph();
+      flushList();
+      if (inCodeBlock) {
+        flushCodeBlock();
+      }
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeLines.push(line);
+      continue;
+    }
+
+    const listMatch = line.match(/^\s*[-*]\s+(.+)$/);
+    if (listMatch) {
+      flushParagraph();
+      listItems.push(listMatch[1]);
+      continue;
+    }
+
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    flushList();
+    paragraphLines.push(line.trim());
+  }
+
+  flushParagraph();
+  flushList();
+  if (inCodeBlock || codeLines.length) {
+    flushCodeBlock();
+  }
+
+  return <>{blocks}</>;
 }
 
 export default function AIPanel({
@@ -436,13 +568,17 @@ export default function AIPanel({
             {messages.map((msg) => (
               <div key={msg.id} className={`flex flex-col gap-1 ${msg.role === "user" ? "items-end" : "items-start"}`}>
                 <div
-                  className={`px-3 py-2 rounded-lg text-xs max-w-full whitespace-pre-wrap break-words ${
+                  className={`px-3 py-2 rounded-lg text-xs max-w-full break-words ${
                     msg.role === "user"
                       ? "bg-blue-500 text-white"
                       : "bg-gray-100 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
                   }`}
                 >
-                  {msg.content}
+                  {msg.role === "assistant" ? (
+                    <ChatMessageContent content={msg.content} />
+                  ) : (
+                    <span className="whitespace-pre-wrap">{msg.content}</span>
+                  )}
                 </div>
                 {msg.proposedAction && msg.proposedAction.type !== "none" && onApplyAction && (
                   <button
@@ -657,11 +793,13 @@ export default function AIPanel({
                       type="text"
                       value={localBaseUrl}
                       onChange={(e) => {
-                        setLocalBaseUrl(e.target.value);
+                        const nextCustomBaseUrl = e.target.value;
+                        setLocalBaseUrl(nextCustomBaseUrl);
+                        localBaseUrlRef.current = nextCustomBaseUrl;
                         setModelOptions([]);
                         setModel("");
                         setSettingsMessage(
-                          e.target.value.trim()
+                          nextCustomBaseUrl.trim()
                             ? "Fetch models from the custom endpoint."
                             : "Enter a custom Base URL before fetching models."
                         );

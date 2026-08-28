@@ -406,6 +406,120 @@ class TestAIProviderConfigLogic(unittest.TestCase):
         self.assertNotIn("Authorization", called_headers)
         self.assertEqual(translated, "Hallo")
 
+    def test_chat_uses_configured_provider_for_general_messages(self):
+        class _DummyResp:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {
+                    "choices": [
+                        {"message": {"content": "I am Markdown Reader's assistant."}}
+                    ]
+                }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            settings_file = Path(tmp_dir) / "settings.json"
+            with (
+                patch.object(logic, "APP_SETTINGS_FILE_PATH", settings_file),
+                patch.object(logic, "keyring", None),
+                patch.dict(
+                    os.environ,
+                    {
+                        "AI_PROVIDER": "",
+                        "LOCAL_AI_BASE_URL": "http://127.0.0.1:1234/v1",
+                        "LOCAL_AI_MODEL": "local-test",
+                        "LOCAL_AI_API_KEY": "",
+                    },
+                ),
+                patch(
+                    "backend.ai_logic.requests.post", return_value=_DummyResp()
+                ) as mock_post,
+            ):
+                logic._save_app_settings({"ai_provider": "local"})
+                result = logic.request_ai_agent_response(
+                    "Could you please introduce yourself in detail?"
+                )
+
+        called_url = mock_post.call_args[0][0]
+        called_json = mock_post.call_args.kwargs["json"]
+        called_headers = mock_post.call_args.kwargs["headers"]
+        self.assertEqual(called_url, "http://127.0.0.1:1234/v1/chat/completions")
+        self.assertEqual(called_json["model"], "local-test")
+        self.assertNotIn("Authorization", called_headers)
+        self.assertEqual(
+            result["assistant_message"], "I am Markdown Reader's assistant."
+        )
+        self.assertEqual(result["proposed_action"]["type"], "none")
+        self.assertEqual(result["used_provider"], "local")
+
+    def test_chat_requires_api_key_for_remote_provider(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            settings_file = Path(tmp_dir) / "settings.json"
+            with (
+                patch.object(logic, "APP_SETTINGS_FILE_PATH", settings_file),
+                patch.object(logic, "keyring", None),
+                patch.dict(os.environ, {"AI_PROVIDER": "", "OPENAI_API_KEY": ""}),
+            ):
+                logic._save_app_settings({"ai_provider": "openai"})
+                with self.assertRaises(logic.TranslationConfigError) as err:
+                    logic.request_ai_agent_response("Hello")
+
+        self.assertIn("AI chat requires", str(err.exception))
+        self.assertEqual(err.exception.provider_name, "openai")
+        self.assertEqual(err.exception.env_var, "OPENAI_API_KEY")
+
+    def test_chat_uses_first_local_model_when_none_is_saved(self):
+        class _ModelsResp:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"data": [{"id": "local-auto-model"}]}
+
+        class _ChatResp:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                return {"choices": [{"message": {"content": "Hello from local."}}]}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            settings_file = Path(tmp_dir) / "settings.json"
+            with (
+                patch.object(logic, "APP_SETTINGS_FILE_PATH", settings_file),
+                patch.object(logic, "keyring", None),
+                patch.dict(
+                    os.environ,
+                    {
+                        "AI_PROVIDER": "",
+                        "LOCAL_AI_BASE_URL": "http://127.0.0.1:14567/v1",
+                        "LOCAL_AI_MODEL": "",
+                        "LOCAL_AI_API_KEY": "",
+                    },
+                ),
+                patch(
+                    "backend.ai_logic.requests.get", return_value=_ModelsResp()
+                ) as mock_get,
+                patch(
+                    "backend.ai_logic.requests.post", return_value=_ChatResp()
+                ) as mock_post,
+            ):
+                logic._save_app_settings(
+                    {
+                        "ai_provider": "local",
+                        "local_ai_base_url_choice": "custom",
+                        "local_ai_custom_base_url": "http://127.0.0.1:14567/v1",
+                    }
+                )
+                result = logic.request_ai_agent_response("Hello")
+
+        self.assertEqual(mock_get.call_args[0][0], "http://127.0.0.1:14567/v1/models")
+        self.assertEqual(
+            mock_post.call_args.kwargs["json"]["model"], "local-auto-model"
+        )
+        self.assertEqual(result["assistant_message"], "Hello from local.")
+
 
 if __name__ == "__main__":
     unittest.main()

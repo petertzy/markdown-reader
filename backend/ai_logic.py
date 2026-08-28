@@ -501,6 +501,21 @@ def _get_ai_base_url(provider: str) -> str:
     return AI_PROVIDER_BASE_URLS[provider].rstrip("/")
 
 
+def _get_ai_model_for_request(provider: str, api_key: str = "") -> str:
+    model = get_ai_provider_model(provider).strip()
+    if model:
+        return model
+    if provider == "local":
+        models = fetch_available_models(provider, api_key)
+        if models:
+            model = models[0]
+            set_ai_provider_model(provider, model)
+            return model
+    raise RuntimeError(
+        f"No model is configured for {get_ai_provider_display_name(provider)}."
+    )
+
+
 def _extract_openai_compatible_text(response_data: dict[str, Any]) -> str:
     choices = response_data.get("choices")
     if not isinstance(choices, list) or not choices:
@@ -592,6 +607,81 @@ def _request_translation_from_provider(
     if not translated:
         raise RuntimeError("AI provider returned an empty translation.")
     return translated
+
+
+def _request_chat_from_provider(
+    provider: str,
+    api_key: str,
+    model: str,
+    message: str,
+    document_text: str = "",
+    selected_text: str = "",
+    chat_history: list[dict[str, Any]] | None = None,
+) -> str:
+    system_prompt = (
+        "You are Markdown Reader's AI assistant. Help with writing, editing, "
+        "Markdown, document understanding, and general questions. Be concise and "
+        "useful. When document or selected text is provided, use it as context."
+    )
+    context_parts = []
+    if selected_text.strip():
+        context_parts.append("Selected text:\n" + selected_text.strip())
+    if document_text.strip():
+        context_parts.append("Document:\n" + document_text.strip())
+    user_prompt = (
+        "\n\n".join(context_parts + [message.strip()])
+        if context_parts
+        else message.strip()
+    )
+    base_url = _get_ai_base_url(provider)
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    history_messages = []
+    for item in chat_history or []:
+        role = item.get("role")
+        content = item.get("content")
+        if role in {"user", "assistant"} and isinstance(content, str) and content:
+            history_messages.append({"role": role, "content": content})
+
+    if provider == "anthropic":
+        headers["anthropic-version"] = "2023-06-01"
+        response = requests.post(
+            f"{base_url}/messages",
+            headers=headers,
+            json={
+                "model": model,
+                "max_tokens": 4096,
+                "system": system_prompt,
+                "messages": history_messages
+                + [{"role": "user", "content": user_prompt}],
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        answer = _extract_anthropic_text(response.json()).strip()
+    else:
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers=headers,
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    *history_messages,
+                    {"role": "user", "content": user_prompt},
+                ],
+                "temperature": 0.4,
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        answer = _extract_openai_compatible_text(response.json()).strip()
+
+    if not answer:
+        raise RuntimeError("AI provider returned an empty chat response.")
+    return answer
 
 
 def get_ai_automation_task_templates() -> list[dict[str, Any]]:
@@ -868,14 +958,31 @@ def request_ai_agent_response(
     fallback = build_ai_automation_fallback(message, document_text, selected_text)
     if fallback:
         return fallback
+    provider = _get_current_ai_provider()
+    api_key, _key_slot, env_var = _get_ai_api_key_for_provider(provider)
+    if provider != "local" and not api_key:
+        raise TranslationConfigError(
+            "AI chat requires a configured provider API key.",
+            provider_name=provider,
+            env_var=env_var,
+        )
+    assistant_message = _request_chat_from_provider(
+        provider,
+        api_key,
+        _get_ai_model_for_request(provider, api_key),
+        message,
+        document_text=document_text,
+        selected_text=selected_text,
+        chat_history=chat_history,
+    )
     return {
-        "assistant_message": "AI provider integration is configured, but no local fallback matched this request.",
+        "assistant_message": assistant_message,
         "proposed_action": {
             "type": "none",
             "content": "",
-            "reason": "no_local_fallback",
+            "reason": "chat_response",
         },
-        "used_provider": "local-fallback",
+        "used_provider": provider,
     }
 
 
@@ -897,7 +1004,7 @@ def translate_markdown_with_ai(
     return _request_translation_from_provider(
         provider,
         api_key,
-        get_ai_provider_model(provider),
+        _get_ai_model_for_request(provider, api_key),
         content,
         source_language,
         target_language,
