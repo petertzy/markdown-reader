@@ -57,6 +57,17 @@ uv sync --extra dev
 cd frontend && npm install && cd ..
 ```
 
+On macOS, PDF export through WeasyPrint also needs Homebrew native libraries:
+
+```bash
+brew install glib pango cairo libffi
+```
+
+The development helper adds `/opt/homebrew/lib` to
+`DYLD_FALLBACK_LIBRARY_PATH` automatically so WeasyPrint can locate
+`libgobject-2.0` and related libraries. If those libraries are missing, PDF
+export falls back to PyMuPDF with simpler layout.
+
 4. Configure the frontend environment file.
 
 ```bash

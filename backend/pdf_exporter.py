@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import base64
+import contextlib
+import io
 import mimetypes
 import os
 import re
-
-from weasyprint import HTML
 
 
 def _inline_local_images(html_content: str, base_dir: str | None = None) -> str:
@@ -69,4 +69,27 @@ def export_markdown_to_pdf(
 {normalized_html}
 </body>
 </html>"""
-    HTML(string=full_html).write_pdf(output_path)
+    try:
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            from weasyprint import HTML
+
+            HTML(string=full_html).write_pdf(output_path)
+    except Exception:
+        _export_pdf_with_pymupdf(normalized_html, output_path)
+
+
+def _export_pdf_with_pymupdf(html_content: str, output_path: str) -> None:
+    import fitz
+
+    page_width = 595
+    page_height = 842
+    margin = 50
+    doc = fitz.open()
+    page = doc.new_page(width=page_width, height=page_height)
+    rect = fitz.Rect(margin, margin, page_width - margin, page_height - margin)
+    page.insert_htmlbox(rect, html_content)
+    doc.save(output_path)
+    doc.close()

@@ -69,6 +69,21 @@ request a specific backend port, run:
 MARKDOWN_READER_BACKEND_PORT=8010 ./scripts/dev-tauri.sh
 ```
 
+### macOS PDF Export Dependencies
+
+PDF export uses WeasyPrint when its native libraries are available. On macOS,
+install the Homebrew libraries below so WeasyPrint can find `libgobject-2.0`,
+Pango, and Cairo:
+
+```bash
+brew install glib pango cairo libffi
+```
+
+`./scripts/dev-tauri.sh` automatically adds `/opt/homebrew/lib` to
+`DYLD_FALLBACK_LIBRARY_PATH` for Apple Silicon Homebrew installs. If WeasyPrint
+is unavailable, Markdown Reader falls back to PyMuPDF so PDF export can still
+complete, but WeasyPrint generally provides better layout fidelity.
+
 > **Note for Contributors:** After cloning, run `uv sync --extra dev` and `uv run pre-commit install` to set up linting hooks.
 
 ---
