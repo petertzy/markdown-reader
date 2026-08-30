@@ -18,6 +18,7 @@ import EditorPane from "@/components/EditorPane";
 import PreviewPane from "@/components/PreviewPane";
 import SplitPane from "@/components/SplitPane";
 import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
+import CitationPanel from "@/components/CitationPanel";
 import SlashCommandMenu from "@/components/SlashCommandMenu";
 import StatusBar from "@/components/StatusBar";
 import { AI, Export, Files, getBaseUrl, type ExportPayload } from "@/lib/api";
@@ -85,6 +86,7 @@ export default function HomePage() {
   const editor = useEditor();
   const [showPreview] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(false);
+  const [showCitationPanel, setShowCitationPanel] = useState(false);
   const [aiPanelInitialTab, setAiPanelInitialTab] = useState<AIPanelTab | undefined>(undefined);
   const [split, setSplit] = useState(50);
   const [isLikelyTauriRuntime, setIsLikelyTauriRuntime] = useState(false);
@@ -163,6 +165,16 @@ export default function HomePage() {
       text: "| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |",
     }));
   }, [replaceSelection]);
+
+  const insertCitation = useCallback(
+    (citationKey: string) => {
+      replaceSelection("insert-citation", () => ({
+        text: `[@${citationKey}]`,
+        cursorOffset: `[@${citationKey}]`.length,
+      }));
+    },
+    [replaceSelection]
+  );
 
   // Warm the packaged sidecar on mount so the first user action is not silent.
   useEffect(() => {
@@ -840,10 +852,12 @@ export default function HomePage() {
           onExport={handleExport}
           onToggleDark={() => editor.setDarkMode((d) => !d)}
           onToggleAIPanel={() => setShowAIPanel((v) => !v)}
+          onToggleCitationPanel={() => setShowCitationPanel((v) => !v)}
           darkMode={editor.darkMode}
           fontSize={editor.fontSize}
           onFontSizeChange={editor.setFontSize}
           showAIPanel={showAIPanel}
+          showCitationPanel={showCitationPanel}
           backendStatus={showPackagedBackendStatus ? backendStatus : "ready"}
           backendMessage={showPackagedBackendStatus ? backendMessage : null}
         />
@@ -910,6 +924,9 @@ export default function HomePage() {
             initialTab={aiPanelInitialTab}
           />
         )}
+
+        {/* Citation Panel */}
+        {showCitationPanel && <CitationPanel onInsert={insertCitation} />}
       </div>
 
       {/* Status bar */}

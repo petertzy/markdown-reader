@@ -18,6 +18,7 @@ dependencies = [
     "weasyprint>=62.0",
     "requests>=2.28.0",
     "keyring>=25.0.0",
+    "bibtexparser>=1.4.0",
     "docling",
     # --- FastAPI backend (new architecture) ---
     "fastapi>=0.111.0",

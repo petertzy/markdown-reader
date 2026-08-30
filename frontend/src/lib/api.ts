@@ -523,3 +523,30 @@ export const Export = {
       body: JSON.stringify(payload),
     }),
 };
+
+// ── Citations API ────────────────────────────────────────────────────────────
+
+export type CitationEntry = {
+  key: string;
+  entry_type: string;
+  title: string;
+  author: string;
+  year: string;
+  container: string;
+};
+
+export const Citations = {
+  load: (path: string) =>
+    apiFetch<{ path: string; count: number; entries: CitationEntry[] }>(
+      "/api/citations/load",
+      { method: "POST", body: JSON.stringify({ path }) }
+    ),
+
+  list: () =>
+    apiFetch<{ path: string; entries: CitationEntry[] }>("/api/citations/list"),
+
+  search: (query: string) =>
+    apiFetch<{ entries: CitationEntry[] }>(
+      `/api/citations/search?q=${encodeURIComponent(query)}`
+    ),
+};
