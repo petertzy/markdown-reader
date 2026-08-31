@@ -419,6 +419,11 @@ export default function HomePage() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // Tauri's packaged WebView and Monaco can handle bubbling key events
+      // before they reach this listener. Capture the event so app shortcuts
+      // remain available regardless of which editor element has focus.
+      // Never intercept keys while an IME composition is in progress.
+      if (event.isComposing) return;
       const editableTarget = isEditableTarget(event.target);
       const isMonacoTarget =
         event.target instanceof HTMLElement && Boolean(event.target.closest(".monaco-editor"));
@@ -434,8 +439,8 @@ export default function HomePage() {
       }
     };
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [actions, shortcuts]);
 
   const handleAIApplyAction = useCallback(
