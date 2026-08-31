@@ -211,9 +211,8 @@ export function useEditor() {
           .then(({ entries }) => setRecentFiles(entries))
           .catch(console.error);
         return;
-      } catch (err) {
-        console.error("Failed to open native save dialog:", err);
-        throw err;
+      } catch {
+        // Outside Tauri native runtime, keep silent.
       }
 
       // No explicit path available and no native save dialog capability.

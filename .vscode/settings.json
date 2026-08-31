@@ -1,6 +1,3 @@
 {
     "python-envs.defaultEnvManager": "ms-python.python:system",
-    "rust-analyzer.linkedProjects": [
-        "frontend/src-tauri/Cargo.toml"
-    ]
 }

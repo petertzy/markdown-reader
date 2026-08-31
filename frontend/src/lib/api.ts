@@ -229,12 +229,12 @@ export type AgentResponse = {
   assistant_message: string;
   proposed_action: {
     type:
-    | "replace_document"
-    | "replace_selection"
-    | "insert_below_document"
-    | "insert_below_selection"
-    | "insert_below"
-    | "none";
+      | "replace_document"
+      | "replace_selection"
+      | "insert_below_document"
+      | "insert_below_selection"
+      | "insert_below"
+      | "none";
     content: string;
     reason: string;
   };
@@ -336,8 +336,8 @@ function normalizeAISettings(raw: PartialAISettings): AISettings {
     Array.isArray(raw.provider_order) && raw.provider_order.length > 0
       ? raw.provider_order
       : AI_PROVIDER_ORDER.filter((name) => name in rawProviders).concat(
-        AI_PROVIDER_ORDER.filter((name) => !(name in rawProviders))
-      );
+          AI_PROVIDER_ORDER.filter((name) => !(name in rawProviders))
+        );
   const normalizedProviderOrder = Array.from(new Set(providerOrder));
   const normalizedProviders: Record<string, AIProviderInfo> = {};
 
