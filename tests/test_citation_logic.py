@@ -6,9 +6,11 @@ from pathlib import Path
 from unittest import mock
 
 from docx import Document
+from pypdf import PdfReader
 
 from backend import citation_logic
 from backend.docx_exporter import export_html_to_docx
+from backend.pdf_exporter import export_markdown_to_pdf
 from backend.renderer import render_markdown
 
 SAMPLE_BIB = """
@@ -59,8 +61,10 @@ class TestCitationLogic(unittest.TestCase):
 
     def test_load_library_persists_path_for_later_searches(self):
         citation_logic.load_citation_library(str(self.bib_path))
-        self.assertEqual(
-            citation_logic.get_persisted_library_path(), str(self.bib_path.resolve())
+        self.assertTrue(
+            citation_logic._same_path(
+                citation_logic.get_persisted_library_path(), str(self.bib_path)
+            )
         )
         entries = citation_logic.get_active_library_entries()
         self.assertEqual(len(entries), 2)
@@ -93,6 +97,16 @@ class TestCitationSyntaxSurvivesExport(unittest.TestCase):
             export_html_to_docx(html, output_path)
             document = Document(output_path)
             full_text = "\n".join(p.text for p in document.paragraphs)
+            self.assertIn("[@doe2024]", full_text)
+            self.assertIn("[@smith2020]", full_text)
+
+    def test_citation_key_survives_pdf_export(self):
+        html = render_markdown(self.CONTENT)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = f"{tmp_dir}/export.pdf"
+            export_markdown_to_pdf(html, output_path)
+            reader = PdfReader(output_path)
+            full_text = "".join(page.extract_text() for page in reader.pages)
             self.assertIn("[@doe2024]", full_text)
             self.assertIn("[@smith2020]", full_text)
 

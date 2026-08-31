@@ -66,6 +66,16 @@ def get_persisted_library_path() -> str:
     return path if path and os.path.isfile(path) else ""
 
 
+def _same_path(path_a: str, path_b: str) -> bool:
+    if not path_a or not path_b:
+        return False
+    try:
+        return os.path.samefile(path_a, path_b)
+    except OSError:
+        # Fall back to comparing realpaths if one side doesn't exist yet.
+        return os.path.realpath(path_a) == os.path.realpath(path_b)
+
+
 def _set_persisted_library_path(path: str) -> None:
     settings = _load_app_settings()
     settings[_SETTINGS_KEY_LIBRARY_PATH] = path
