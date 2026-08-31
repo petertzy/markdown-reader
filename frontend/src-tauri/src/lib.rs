@@ -1,6 +1,6 @@
 use std::process::Command as StdCommand;
 use std::sync::{Arc, Mutex};
-use tauri::{Emitter, Manager};
+use tauri::{Manager};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 

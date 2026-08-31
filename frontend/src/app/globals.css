@@ -3,7 +3,9 @@
 @tailwind utilities;
 
 /* Ensure full-height layout */
-html, body, #__next {
+html,
+body,
+#__next {
   height: 100%;
   margin: 0;
 }

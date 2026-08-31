@@ -7,6 +7,9 @@ Start the server:
     uvicorn backend.main:app --reload --port 8000
 or:
     python -m backend.main
+or:
+    cd backend
+    python run.py
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ import time
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 # Ensure the project root is importable
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
