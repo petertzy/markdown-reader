@@ -12,10 +12,12 @@ type Props = {
   onExport: (format: "html" | "pdf" | "docx") => void;
   onToggleDark: () => void;
   onToggleAIPanel: () => void;
+  onToggleCitationPanel: () => void;
   darkMode: boolean;
   fontSize: number;
   onFontSizeChange: (size: number) => void;
   showAIPanel: boolean;
+  showCitationPanel: boolean;
   backendStatus?: "starting" | "ready" | "error";
   backendMessage?: string | null;
 };
@@ -26,10 +28,12 @@ export default function Toolbar({
   onExport,
   onToggleDark,
   onToggleAIPanel,
+  onToggleCitationPanel,
   darkMode,
   fontSize,
   onFontSizeChange,
   showAIPanel,
+  showCitationPanel,
   backendStatus = "ready",
   backendMessage = null,
 }: Props) {
@@ -85,6 +89,13 @@ export default function Toolbar({
         title="AI Assistant"
       >
         🤖 AI
+      </button>
+      <button
+        onClick={onToggleCitationPanel}
+        className={`${btnCls} ${showCitationPanel ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
+        title="Citations"
+      >
+        📚 Cite
       </button>
       <button onClick={onToggleDark} className={btnCls} title="Toggle dark mode">
         {darkMode ? "☀️" : "🌙"}

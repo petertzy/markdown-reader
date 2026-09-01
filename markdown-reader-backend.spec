@@ -8,9 +8,12 @@ a = Analysis(
     datas=[],
     hiddenimports=[
         'backend.ai_logic',
+        'backend.citation_logic',
         'backend.converters',
         'backend.docx_exporter',
         'backend.pdf_exporter',
+        'backend.routers.citations',
+        'bibtexparser',
     ],
     hookspath=[],
     hooksconfig={},

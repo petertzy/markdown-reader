@@ -29,7 +29,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.routers import ai, export, files, markdown
+from backend.routers import ai, citations, export, files, markdown
 
 app = FastAPI(
     title="Markdown Reader API",
@@ -58,6 +58,7 @@ app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(markdown.router, prefix="/api/markdown", tags=["markdown"])
 app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
 app.include_router(export.router, prefix="/api/export", tags=["export"])
+app.include_router(citations.router, prefix="/api/citations", tags=["citations"])
 
 
 @app.get("/api/health")
