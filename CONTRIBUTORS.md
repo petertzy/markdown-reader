@@ -29,7 +29,7 @@ Thank you to all the contributors who have helped make Markdown Reader better!
 - [@korbonits](https://github.com/korbonits) - chore: migrate to uv, ruff, and ty (#158)
 - [@Yolsh](https://github.com/Yolsh) - moved the installation instructions round so that it made more sense … (#164)
 - [@dhuhaaf](https://github.com/dhuhaaf) - new features: add word count status bar and recent files menu (#165)
-- [@Dhruv-Sharma29](https://github.com/Dhruv-Sharma29) - Local packaging scripts and release workflow improvements
+- [@Dhruv-Sharma29](https://github.com/Dhruv-Sharma29) - Keyboard shortcuts and local packaging improvements (#232,#237)
 
 ## How to Contribute
 

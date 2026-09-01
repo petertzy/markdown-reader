@@ -86,6 +86,23 @@ complete, but WeasyPrint generally provides better layout fidelity.
 
 > **Note for Contributors:** After cloning, run `uv sync --extra dev` and `uv run pre-commit install` to set up linting hooks.
 
+### Build release artifacts locally
+
+To package the desktop app without using GitHub Actions, run the platform-specific helper from the project root:
+
+```bash
+# Linux
+./scripts/package-linux.sh
+
+# macOS
+./scripts/package-macos.sh
+
+# Windows (PowerShell)
+./scripts/package-windows.ps1
+```
+
+Each script stages the Python backend sidecar, installs the frontend dependencies, runs the matching Tauri release build, and copies the final bundle(s) into `release-artifacts/` for easy distribution. Pass `--help` to see the default target and override options.
+
 ---
 
 ## 📦 Desktop Downloads
