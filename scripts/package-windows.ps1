@@ -73,13 +73,21 @@ $env:NEXT_EXPORT = "1"
 npx tauri build --target $Target
 
 Write-Host "==> Collecting packaged artifacts..."
-$bundleDir = Join-Path $frontend "src-tauri\target\release\bundle"
-if (Test-Path $bundleDir) {
-    New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
-    Copy-Item (Join-Path $bundleDir "*") $artifacts -Recurse -Force
-    Write-Host "Done. Bundles are ready in $artifacts"
-} else {
-    throw "No Tauri bundle directory was found under $bundleDir. The build may have failed before producing artifacts."
+$targetBundleDir = Join-Path $frontend ("src-tauri\target\{0}\release\bundle" -f $Target)
+$nativeBundleDir = Join-Path $frontend "src-tauri\target\release\bundle"
+$bundleDir = @($targetBundleDir, $nativeBundleDir) |
+    Where-Object {
+        (Test-Path -LiteralPath $_ -PathType Container) -and
+        (@(Get-ChildItem -LiteralPath $_ -Force).Count -gt 0)
+    } |
+    Select-Object -First 1
+
+if (-not $bundleDir) {
+    throw "No packaged artifacts found for target $Target. Checked: $targetBundleDir and $nativeBundleDir"
 }
+
+New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
+Copy-Item (Join-Path $bundleDir "*") $artifacts -Recurse -Force
+Write-Host "Done. Bundles are ready in $artifacts"
 
 Write-Host "Windows package build completed successfully."

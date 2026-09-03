@@ -126,24 +126,29 @@ run_tauri_build() {
 }
 
 collect_release_artifacts() {
+  local target="$1"
   mkdir -p "${ARTIFACT_DIR}"
-  local bundle_dir="${FRONTEND_DIR}/src-tauri/target/release/bundle"
+  local target_bundle_dir="${FRONTEND_DIR}/src-tauri/target/${target}/release/bundle"
+  local native_bundle_dir="${FRONTEND_DIR}/src-tauri/target/release/bundle"
+  local bundle_dir=""
 
-  if [[ -d "${bundle_dir}" ]]; then
-    info "Collecting packaged artifacts into ${ARTIFACT_DIR}..."
-    cp -a "${bundle_dir}"/. "${ARTIFACT_DIR}/"
-  else
-    warn "No Tauri bundle directory was found under ${bundle_dir}."
-    warn "The build may have failed before producing artifacts."
+  # Tauri places explicitly targeted builds below target/<triple>. Keep the
+  # native path as a fallback for older Tauri versions and native builds.
+  for candidate in "${target_bundle_dir}" "${native_bundle_dir}"; do
+    if [[ -d "${candidate}" ]] &&
+       [[ -n "$(find "${candidate}" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+      bundle_dir="${candidate}"
+      break
+    fi
+  done
+
+  if [[ -z "${bundle_dir}" ]]; then
+    die "No packaged artifacts found for target ${target}; checked ${target_bundle_dir} and ${native_bundle_dir}."
   fi
 
-  # `find` exits successfully even when the directory is empty, so inspect
-  # whether it actually returned an entry before claiming success.
-  if [[ -n "$(find "${ARTIFACT_DIR}" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
-    info "Done. Bundles are ready in ${ARTIFACT_DIR}"
-  else
-    warn "The release-artifacts directory is empty; check the build logs above for errors."
-  fi
+  info "Collecting packaged artifacts from ${bundle_dir} into ${ARTIFACT_DIR}..."
+  cp -a "${bundle_dir}"/. "${ARTIFACT_DIR}/"
+  info "Done. Bundles are ready in ${ARTIFACT_DIR}"
 }
 
 check_run_on_supported_platform() {

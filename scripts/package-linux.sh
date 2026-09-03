@@ -40,6 +40,6 @@ ensure_rust_target "$TARGET"
 build_backend_sidecar "$TARGET"
 install_frontend_dependencies
 run_tauri_build "$TARGET"
-collect_release_artifacts
+collect_release_artifacts "$TARGET"
 
 info "Linux package build completed successfully."
