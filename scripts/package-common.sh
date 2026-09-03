@@ -125,9 +125,56 @@ run_tauri_build() {
   npx tauri build --target "$target" "$@"
 }
 
+cleanup_macos_dmg_work_files() {
+  local target="$1"
+
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    return 0
+  fi
+
+  local bundle_dir="${FRONTEND_DIR}/src-tauri/target/${target}/release/bundle"
+  local macos_dir="${bundle_dir}/macos"
+
+  if command -v hdiutil >/dev/null 2>&1; then
+    while IFS= read -r device_name; do
+      if [[ -n "${device_name}" ]]; then
+        info "Detaching stale temporary DMG ${device_name}..."
+        hdiutil detach "${device_name}" >/dev/null 2>&1 || true
+      fi
+    done < <(
+      hdiutil info | awk -v prefix="${macos_dir}/rw." '
+        /^image-path[[:space:]]*:/ {
+          image = substr($0, index($0, ":") + 2)
+          matched = index(image, prefix) == 1 && image ~ /\.dmg$/
+          next
+        }
+        matched && /^\/dev\/disk[0-9]+[[:space:]]/ {
+          print $1
+          matched = 0
+        }
+      '
+    )
+  fi
+
+  if [[ -d "${macos_dir}" ]]; then
+    find "${macos_dir}" -maxdepth 1 -type f -name 'rw.*.dmg' -delete
+  fi
+}
+
+clean_tauri_bundle_dir() {
+  local target="$1"
+  local target_bundle_dir="${FRONTEND_DIR}/src-tauri/target/${target}/release/bundle"
+
+  if [[ -d "${target_bundle_dir}" ]]; then
+    info "Removing stale Tauri bundle directory ${target_bundle_dir}..."
+    rm -rf "${target_bundle_dir}"
+  fi
+}
+
 collect_release_artifacts() {
   local target="$1"
-  mkdir -p "${ARTIFACT_DIR}"
+  local target_artifact_dir="${ARTIFACT_DIR}/${target}"
+  mkdir -p "${target_artifact_dir}"
   local target_bundle_dir="${FRONTEND_DIR}/src-tauri/target/${target}/release/bundle"
   local native_bundle_dir="${FRONTEND_DIR}/src-tauri/target/release/bundle"
   local bundle_dir=""
@@ -146,9 +193,11 @@ collect_release_artifacts() {
     die "No packaged artifacts found for target ${target}; checked ${target_bundle_dir} and ${native_bundle_dir}."
   fi
 
-  info "Collecting packaged artifacts from ${bundle_dir} into ${ARTIFACT_DIR}..."
-  cp -a "${bundle_dir}"/. "${ARTIFACT_DIR}/"
-  info "Done. Bundles are ready in ${ARTIFACT_DIR}"
+  info "Collecting packaged artifacts from ${bundle_dir} into ${target_artifact_dir}..."
+  find "${target_artifact_dir}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  cp -a "${bundle_dir}"/. "${target_artifact_dir}/"
+  find "${target_artifact_dir}" -type f -name 'rw.*.dmg' -delete
+  info "Done. Bundles are ready in ${target_artifact_dir}"
 }
 
 check_run_on_supported_platform() {

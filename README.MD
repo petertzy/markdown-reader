@@ -101,7 +101,39 @@ To package the desktop app without using GitHub Actions, run the platform-specif
 ./scripts/package-windows.ps1
 ```
 
-Each script stages the Python backend sidecar, installs the frontend dependencies, runs the matching Tauri release build, and copies the final bundle(s) into `release-artifacts/` for easy distribution. Pass `--help` to see the default target and override options.
+Each script stages the Python backend sidecar, installs the frontend dependencies, runs the matching Tauri release build, and copies the final bundle(s) into `release-artifacts/<target>/` for easy distribution.
+
+On macOS, the default command builds the `.app` bundle. To also build a DMG installer, run:
+
+```bash
+./scripts/package-macos.sh --dmg
+```
+
+To explicitly set a build target:
+
+```bash
+# Linux x64
+./scripts/package-linux.sh --target x86_64-unknown-linux-gnu
+
+# macOS Apple Silicon
+./scripts/package-macos.sh --target aarch64-apple-darwin
+
+# Windows x64
+./scripts/package-windows.ps1 -Target x86_64-pc-windows-msvc
+```
+
+To see platform-specific options:
+
+```bash
+# Linux
+./scripts/package-linux.sh --help
+
+# macOS
+./scripts/package-macos.sh --help
+
+# Windows (PowerShell)
+./scripts/package-windows.ps1 -Help
+```
 
 ---
 
