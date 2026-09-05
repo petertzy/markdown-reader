@@ -10,6 +10,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { Files, Markdown, Export, type ExportPayload, type WordCountResult } from "@/lib/api";
+import { needsConversion } from "@/lib/supportedFormats";
 
 export type Tab = {
   id: string;
@@ -19,12 +20,6 @@ export type Tab = {
   content: string;
   dirty: boolean;
 };
-
-const CONVERTIBLE_EXTENSIONS = new Set(["pdf", "html", "htm", "docx"]);
-
-function fileExtension(name: string) {
-  return name.split(".").pop()?.toLowerCase() ?? "";
-}
 
 function convertedMarkdownLabel(name: string) {
   const baseName = name.split(/[/\\]/).pop() ?? name;
@@ -104,9 +99,7 @@ export function useEditor() {
   // ── file ops ───────────────────────────────────────────────────────────────
   const openFile = useCallback(
     async (filePath: string) => {
-      const ext = fileExtension(filePath);
-
-      if (CONVERTIBLE_EXTENSIONS.has(ext)) {
+      if (needsConversion(filePath)) {
         try {
           const { markdown } = await Files.convertToMarkdown({ path: filePath });
           const label = convertedMarkdownLabel(filePath);

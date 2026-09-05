@@ -28,18 +28,15 @@ import {
   isEditableTarget,
   type ActionId,
 } from "@/lib/keyboardShortcuts";
-
-const OPEN_FILE_EXTENSIONS = ["md", "markdown", "txt", "html", "htm", "pdf", "docx"];
-const CONVERTIBLE_EXTENSIONS = new Set(["html", "htm", "pdf", "docx"]);
-const SUPPORTED_FILE_EXTENSIONS = new Set(OPEN_FILE_EXTENSIONS);
-
-function fileExtension(name: string) {
-  return name.split(".").pop()?.toLowerCase() ?? "";
-}
-
-function isSupportedFile(name: string) {
-  return SUPPORTED_FILE_EXTENSIONS.has(fileExtension(name));
-}
+import {
+  isSupportedFile,
+  needsConversion,
+  MARKITDOWN_EXTENSIONS,
+  NATIVE_CONVERTIBLE_EXTENSIONS,
+  OPEN_FILE_ACCEPT,
+  OPEN_FILE_EXTENSIONS,
+  PLAIN_TEXT_EXTENSIONS,
+} from "@/lib/supportedFormats";
 
 function convertedMarkdownLabel(name: string) {
   const withoutExtension = name.replace(/\.[^/.]+$/, "");
@@ -233,8 +230,9 @@ export default function HomePage() {
         multiple: false,
         filters: [
           { name: "Supported documents", extensions: OPEN_FILE_EXTENSIONS },
-          { name: "Markdown", extensions: ["md", "markdown", "txt"] },
-          { name: "Convertible documents", extensions: ["html", "htm", "pdf", "docx"] },
+          { name: "Markdown", extensions: [...PLAIN_TEXT_EXTENSIONS] },
+          { name: "Convertible documents", extensions: NATIVE_CONVERTIBLE_EXTENSIONS },
+          { name: "Universal import (MarkItDown)", extensions: MARKITDOWN_EXTENSIONS },
         ],
       });
       if (!selected) return;
@@ -261,8 +259,7 @@ export default function HomePage() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const ext = fileExtension(file.name);
-      if (CONVERTIBLE_EXTENSIONS.has(ext)) {
+      if (needsConversion(file.name)) {
         const content_base64 = arrayBufferToBase64(await file.arrayBuffer());
         const { markdown } = await Files.convertToMarkdown({
           filename: file.name,
@@ -804,8 +801,7 @@ export default function HomePage() {
         for (const file of files) {
           if (!isSupportedFile(file.name)) continue;
 
-          const ext = fileExtension(file.name);
-          if (CONVERTIBLE_EXTENSIONS.has(ext)) {
+          if (needsConversion(file.name)) {
             try {
               const content_base64 = arrayBufferToBase64(await file.arrayBuffer());
               const { markdown } = await Files.convertToMarkdown({
@@ -843,7 +839,7 @@ export default function HomePage() {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".md,.markdown,.txt,.html,.htm,.pdf,.docx"
+        accept={OPEN_FILE_ACCEPT}
         className="hidden"
         onChange={handleFileInputChange}
       />
