@@ -10,6 +10,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import { useEditor } from "@/hooks/useEditor";
+import { useAIActions } from "@/hooks/useAIActions";
 import { useSlashCommands, isSlashTriggerPosition, type SlashCommand } from "@/hooks/useSlashCommands";
 import TabBar from "@/components/TabBar";
 import Toolbar from "@/components/Toolbar";
@@ -21,7 +22,7 @@ import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
 import SlashCommandMenu from "@/components/SlashCommandMenu";
 import StatusBar from "@/components/StatusBar";
-import { AI, Export, Files, getBaseUrl, type ExportPayload } from "@/lib/api";
+import { Export, Files, getBaseUrl, type ExportPayload } from "@/lib/api";
 import {
   resolveShortcutDefinitions,
   shortcutMatchesEvent,
@@ -93,13 +94,22 @@ export default function HomePage() {
   const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">("ready");
   const [backendMessage, setBackendMessage] = useState<string | null>(null);
   const [monacoReady, setMonacoReady] = useState(false);
-  const [selectedText, setSelectedText] = useState("");
   const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const dragCounterRef = useRef(0);
   const openFileRef = useRef(editor.openFile);
   const openTextAsTabRef = useRef(editor.openTextAsTab);
   const lastDroppedPathsRef = useRef<{ signature: string; at: number } | null>(null);
   const showPackagedBackendStatus = shouldShowPackagedBackendStatus();
+  const {
+    selectedText,
+    syncSelectedText,
+    applyAction: handleAIApplyAction,
+    executePrompt: executeAIPrompt,
+  } = useAIActions({
+    documentText: editor.activeTab.content,
+    editorRef: monacoRef,
+    onDocumentChange: editor.handleContentChange,
+  });
 
   const handleSaveFile = useCallback(async () => {
     try {
@@ -455,62 +465,6 @@ export default function HomePage() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [actions, shortcuts]);
 
-  const handleAIApplyAction = useCallback(
-    (type: string, content: string) => {
-      if (type === "replace_document") {
-        editor.handleContentChange(content);
-      } else if (type === "insert_below_document") {
-        const currentContent = editor.activeTab.content;
-        const separator = currentContent.endsWith("\n") ? "\n" : "\n\n";
-        editor.handleContentChange(`${currentContent}${separator}${content}`);
-      } else if (type === "replace_selection") {
-        const mono = monacoRef.current;
-        if (mono) {
-          const sel = mono.getSelection();
-          if (sel) {
-            mono.executeEdits("ai-replace", [{ range: sel, text: content }]);
-          } else {
-            editor.handleContentChange(content);
-          }
-        }
-      } else if (type === "insert_below_selection" || type === "insert_below") {
-        const mono = monacoRef.current;
-        const model = mono?.getModel();
-        const sel = mono?.getSelection();
-        if (mono && model && sel && !sel.isEmpty()) {
-          const selectedText = model.getValueInRange(sel);
-          const separator = selectedText.endsWith("\n") ? "\n" : "\n\n";
-          const range = {
-            startLineNumber: sel.endLineNumber,
-            startColumn: sel.endColumn,
-            endLineNumber: sel.endLineNumber,
-            endColumn: sel.endColumn,
-          };
-          mono.executeEdits("ai-insert-below", [
-            { range, text: `${separator}${content}` },
-          ]);
-        } else {
-          const currentContent = editor.activeTab.content;
-          const separator = currentContent.endsWith("\n") ? "\n" : "\n\n";
-          editor.handleContentChange(`${currentContent}${separator}${content}`);
-        }
-      }
-    },
-    [editor]
-  );
-
-  const getSelectedText = useCallback(() => {
-    const mono = monacoRef.current;
-    if (!mono) return "";
-    const sel = mono.getSelection();
-    if (!sel) return "";
-    return mono.getModel()?.getValueInRange(sel) ?? "";
-  }, []);
-
-  const syncSelectedText = useCallback(() => {
-    setSelectedText(getSelectedText());
-  }, [getSelectedText]);
-
   // ── Slash commands ──────────────────────────────────────────────────────────
   const slash = useSlashCommands();
 
@@ -554,22 +508,13 @@ export default function HomePage() {
         return;
       }
       try {
-        const result = await AI.chat({
-          message: command.prompt,
-          document_text: documentText,
-          selected_text: getSelectedText(),
-          chat_history: [],
-        });
-        if (result.proposed_action.type !== "none") {
-          handleAIApplyAction(result.proposed_action.type, result.proposed_action.content);
-        } else if (result.assistant_message) {
-          alert(result.assistant_message);
-        }
+        const message = await executeAIPrompt(command.prompt, documentText);
+        if (message) alert(message);
       } catch (err) {
         alert(`AI command failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
-    [slash, insertTable, editor, handleAIApplyAction, getSelectedText]
+    [slash, insertTable, editor.activeTab.content, executeAIPrompt]
   );
 
   const slashRef = useRef({
