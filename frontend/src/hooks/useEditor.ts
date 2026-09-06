@@ -262,9 +262,9 @@ export function useEditor() {
 
   // ── export ─────────────────────────────────────────────────────────────────
   const exportAs = useCallback(
-    async (format: "html" | "pdf" | "docx", outputPath?: string) => {
+    async (format: "html" | "pdf" | "docx", outputPath?: string, contentOverride?: string) => {
       const payload: ExportPayload = {
-        content: activeTab.content,
+        content: contentOverride ?? activeTab.content,
         base_dir: activeTab.filePath?.replace(/[^/\\]+$/, ""),
         dark_mode: darkMode,
         font_size: fontSize,
