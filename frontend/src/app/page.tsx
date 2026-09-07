@@ -28,18 +28,16 @@ import {
   isEditableTarget,
   type ActionId,
 } from "@/lib/keyboardShortcuts";
-
-const OPEN_FILE_EXTENSIONS = ["md", "markdown", "txt", "html", "htm", "pdf", "docx"];
-const CONVERTIBLE_EXTENSIONS = new Set(["html", "htm", "pdf", "docx"]);
-const SUPPORTED_FILE_EXTENSIONS = new Set(OPEN_FILE_EXTENSIONS);
-
-function fileExtension(name: string) {
-  return name.split(".").pop()?.toLowerCase() ?? "";
-}
-
-function isSupportedFile(name: string) {
-  return SUPPORTED_FILE_EXTENSIONS.has(fileExtension(name));
-}
+import {
+  isSupportedFile,
+  needsConversion,
+  MARKITDOWN_EXTENSIONS,
+  NATIVE_CONVERTIBLE_EXTENSIONS,
+  OPEN_FILE_ACCEPT,
+  openFileAccept,
+  openFileExtensions,
+  PLAIN_TEXT_EXTENSIONS,
+} from "@/lib/supportedFormats";
 
 function convertedMarkdownLabel(name: string) {
   const withoutExtension = name.replace(/\.[^/.]+$/, "");
@@ -91,6 +89,7 @@ export default function HomePage() {
   const [split, setSplit] = useState(50);
   const [isLikelyTauriRuntime, setIsLikelyTauriRuntime] = useState(false);
   const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">("ready");
+  const [universalImportAvailable, setUniversalImportAvailable] = useState(true);
   const [backendMessage, setBackendMessage] = useState<string | null>(null);
   const [monacoReady, setMonacoReady] = useState(false);
   const [selectedText, setSelectedText] = useState("");
@@ -192,6 +191,17 @@ export default function HomePage() {
         if (cancelled) return;
         setBackendStatus("ready");
         setBackendMessage(null);
+        Files.getSupportedFormats()
+          .then((formats) => {
+            if (!cancelled) {
+              setUniversalImportAvailable(formats.markitdown_available);
+            }
+          })
+          .catch(() => {
+            if (!cancelled) {
+              setUniversalImportAvailable(false);
+            }
+          });
         await editor.loadRecentFiles();
         if (!cancelled && editor.activeTab.content) {
           editor.refreshPreview(editor.activeTab.content);
@@ -229,13 +239,21 @@ export default function HomePage() {
 
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
+      const supportedExtensions = openFileExtensions(universalImportAvailable);
+      const filters = [
+        { name: "Supported documents", extensions: supportedExtensions },
+        { name: "Markdown", extensions: [...PLAIN_TEXT_EXTENSIONS] },
+        { name: "Convertible documents", extensions: NATIVE_CONVERTIBLE_EXTENSIONS },
+      ];
+      if (universalImportAvailable) {
+        filters.push({
+          name: "Universal import (MarkItDown)",
+          extensions: MARKITDOWN_EXTENSIONS,
+        });
+      }
       const selected = await open({
         multiple: false,
-        filters: [
-          { name: "Supported documents", extensions: OPEN_FILE_EXTENSIONS },
-          { name: "Markdown", extensions: ["md", "markdown", "txt"] },
-          { name: "Convertible documents", extensions: ["html", "htm", "pdf", "docx"] },
-        ],
+        filters,
       });
       if (!selected) return;
       filePath = Array.isArray(selected) ? selected[0] : selected;
@@ -255,14 +273,13 @@ export default function HomePage() {
     } catch (err) {
       alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [backendStatus, editor, isLikelyTauriRuntime]);
+  }, [backendStatus, editor, isLikelyTauriRuntime, universalImportAvailable]);
 
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const ext = fileExtension(file.name);
-      if (CONVERTIBLE_EXTENSIONS.has(ext)) {
+      if (needsConversion(file.name)) {
         const content_base64 = arrayBufferToBase64(await file.arrayBuffer());
         const { markdown } = await Files.convertToMarkdown({
           filename: file.name,
@@ -804,8 +821,7 @@ export default function HomePage() {
         for (const file of files) {
           if (!isSupportedFile(file.name)) continue;
 
-          const ext = fileExtension(file.name);
-          if (CONVERTIBLE_EXTENSIONS.has(ext)) {
+          if (needsConversion(file.name)) {
             try {
               const content_base64 = arrayBufferToBase64(await file.arrayBuffer());
               const { markdown } = await Files.convertToMarkdown({
@@ -843,7 +859,7 @@ export default function HomePage() {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".md,.markdown,.txt,.html,.htm,.pdf,.docx"
+        accept={universalImportAvailable ? OPEN_FILE_ACCEPT : openFileAccept(false)}
         className="hidden"
         onChange={handleFileInputChange}
       />
