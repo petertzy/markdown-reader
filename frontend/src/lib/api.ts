@@ -204,6 +204,11 @@ export type WordCountResult = {
   reading_time: string;
 };
 
+export type BrowserPreviewResult = {
+  path: string;
+  url: string;
+};
+
 export const Markdown = {
   render: (payload: RenderPayload) =>
     apiFetch<{ html: string }>("/api/markdown/render", {
@@ -227,6 +232,12 @@ export const Markdown = {
     apiFetch<WordCountResult>("/api/markdown/wordcount", {
       method: "POST",
       body: JSON.stringify({ content }),
+    }),
+
+  openPreviewInBrowser: (payload: RenderPayload) =>
+    apiFetch<BrowserPreviewResult>("/api/markdown/open-preview", {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 };
 

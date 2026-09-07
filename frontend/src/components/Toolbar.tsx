@@ -10,6 +10,7 @@ type Props = {
   onOpenFile: () => void;
   onSaveFile: () => void;
   onExport: (format: "html" | "pdf" | "docx") => void;
+  onOpenBrowserPreview: () => void;
   onToggleDark: () => void;
   onToggleAIPanel: () => void;
   onToggleCitationPanel: () => void;
@@ -26,6 +27,7 @@ export default function Toolbar({
   onOpenFile,
   onSaveFile,
   onExport,
+  onOpenBrowserPreview,
   onToggleDark,
   onToggleAIPanel,
   onToggleCitationPanel,
@@ -60,6 +62,15 @@ export default function Toolbar({
           {fmt.toUpperCase()}
         </button>
       ))}
+
+      <button
+        onClick={onOpenBrowserPreview}
+        className={buttonClass(backendDisabled)}
+        title="Open rendered preview in browser"
+        disabled={backendDisabled}
+      >
+        🌐 Browser
+      </button>
 
       <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
 

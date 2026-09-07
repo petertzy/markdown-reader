@@ -15,6 +15,8 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 # ---------------------------------------------------------------------------
 # Import the modules under test.
@@ -31,6 +33,7 @@ from backend.routers.files import (
     convert_to_markdown,
     get_supported_formats,
 )
+from backend.routers.markdown import OpenPreviewPayload, open_preview_in_browser
 from backend.word_count import count_words as _count_words
 from backend.word_count import reading_time as _reading_time
 from backend.word_count import strip_markdown as _strip_markdown
@@ -157,6 +160,29 @@ class TestReadingTime(unittest.TestCase):
         # 357 words / 238 wpm ≈ 1.5 → rounds to 2
         result = _reading_time(357)
         self.assertEqual(result, "2 min read")
+
+
+class TestBrowserPreview(unittest.TestCase):
+    """Browser preview should render Markdown to a temporary HTML file."""
+
+    def test_open_preview_in_browser_writes_html_and_opens_url(self):
+        with patch(
+            "backend.routers.markdown.webbrowser.open", return_value=True
+        ) as open_mock:
+            result = open_preview_in_browser(
+                OpenPreviewPayload(content="# Browser Preview\n\nA rendered page.")
+            )
+
+        preview_path = Path(result["path"])
+        try:
+            self.assertTrue(preview_path.is_file())
+            self.assertEqual(result["url"], preview_path.as_uri())
+            html = preview_path.read_text(encoding="utf-8")
+            self.assertIn("<h1>Browser Preview</h1>", html)
+            self.assertIn("A rendered page.", html)
+            open_mock.assert_called_once_with(result["url"], new=2)
+        finally:
+            preview_path.unlink(missing_ok=True)
 
 
 # ===========================================================================

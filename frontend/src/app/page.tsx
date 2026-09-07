@@ -24,6 +24,7 @@ import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
 import SlashCommandMenu from "@/components/SlashCommandMenu";
 import StatusBar from "@/components/StatusBar";
+import { Markdown } from "@/lib/api";
 import {
   resolveShortcutDefinitions,
   shortcutMatchesEvent,
@@ -61,6 +62,20 @@ export default function HomePage() {
       alert(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, [editor]);
+
+  const handleOpenBrowserPreview = useCallback(async () => {
+    if (backendStatus !== "ready") return;
+    try {
+      await Markdown.openPreviewInBrowser({
+        content: monacoRef.current?.getValue() ?? editor.activeTab.content,
+        base_dir: editor.activeTab.filePath?.replace(/[^/\\]+$/, ""),
+        dark_mode: editor.darkMode,
+        font_size: editor.fontSize,
+      });
+    } catch (err) {
+      alert(`Open browser preview failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [backendStatus, editor.activeTab.content, editor.activeTab.filePath, editor.darkMode, editor.fontSize]);
 
   const runMonacoAction = useCallback((actionId: string) => {
     const mono = monacoRef.current;
@@ -153,6 +168,7 @@ export default function HomePage() {
       "table.insert": insertTable,
       "view.toggleDarkMode": () => editor.setDarkMode((dark) => !dark),
       "view.toggleAIPanel": () => setShowAIPanel((visible) => !visible),
+      "view.openBrowserPreview": () => { void handleOpenBrowserPreview(); },
       "view.fullEditor": () => setSplit(100),
       "view.balancedSplit": () => setSplit(50),
       "view.fullPreview": () => setSplit(0),
@@ -162,6 +178,7 @@ export default function HomePage() {
       editor,
       handleOpenFile,
       handleExport,
+      handleOpenBrowserPreview,
       handleSaveFile,
       insertTable,
       runMonacoAction,
@@ -217,6 +234,7 @@ export default function HomePage() {
         items: [
           { id: "view.toggleDarkMode", label: "Toggle Dark Mode", onSelect: actions["view.toggleDarkMode"] },
           { id: "view.toggleAIPanel", label: "Show AI Agent Panel", onSelect: actions["view.toggleAIPanel"] },
+          { id: "view.openBrowserPreview", label: "Open Preview in Browser", onSelect: actions["view.openBrowserPreview"], disabled: backendDisabled },
           "separator",
           { id: "view.fullEditor", label: "Full Width Editor", onSelect: actions["view.fullEditor"] },
           { id: "view.balancedSplit", label: "Balanced Split View", onSelect: actions["view.balancedSplit"] },
@@ -447,6 +465,7 @@ export default function HomePage() {
           onOpenFile={() => { void handleOpenFile(); }}
           onSaveFile={() => { void handleSaveFile(); }}
           onExport={handleExport}
+          onOpenBrowserPreview={() => { void handleOpenBrowserPreview(); }}
           onToggleDark={() => editor.setDarkMode((d) => !d)}
           onToggleAIPanel={() => setShowAIPanel((v) => !v)}
           onToggleCitationPanel={() => setShowCitationPanel((v) => !v)}
