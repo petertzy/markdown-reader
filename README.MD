@@ -7,7 +7,7 @@
   [![Linux x64](https://img.shields.io/badge/Linux-x64-yellow?logo=linux)](#desktop-downloads)
   
   <br />
-  <img src="https://github.com/user-attachments/assets/ac3351a8-dd2a-445b-9f1f-4754faeef509" alt="Markdown Reader desktop preview" width="800">
+  <img width="1430" height="747" alt="Image" src="https://github.com/user-attachments/assets/e7de0730-82ef-425c-9190-8c6a4fc88c14" />
 </div>
 
 ---
