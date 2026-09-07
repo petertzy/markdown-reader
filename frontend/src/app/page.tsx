@@ -491,7 +491,7 @@ export default function HomePage() {
       <input
         ref={fileIO.fileInputRef}
         type="file"
-        accept=".md,.markdown,.txt,.html,.htm,.pdf,.docx"
+        accept={fileIO.fileInputAccept}
         className="hidden"
         onChange={fileIO.handleFileInputChange}
       />

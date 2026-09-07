@@ -1,18 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, MutableRefObject } from "react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import type { useEditor } from "@/hooks/useEditor";
 import { Export, Files, type ExportPayload } from "@/lib/api";
+import {
+  isSupportedFile,
+  MARKITDOWN_EXTENSIONS,
+  needsConversion,
+  NATIVE_CONVERTIBLE_EXTENSIONS,
+  OPEN_FILE_ACCEPT,
+  openFileAccept,
+  openFileExtensions,
+  PLAIN_TEXT_EXTENSIONS,
+} from "@/lib/supportedFormats";
 
-const OPEN_FILE_EXTENSIONS = ["md", "markdown", "txt", "html", "htm", "pdf", "docx"];
-const CONVERTIBLE_EXTENSIONS = new Set(["html", "htm", "pdf", "docx"]);
-const SUPPORTED_FILE_EXTENSIONS = new Set(OPEN_FILE_EXTENSIONS);
 type EditorController = ReturnType<typeof useEditor>;
 
-function fileExtension(name: string) { return name.split(".").pop()?.toLowerCase() ?? ""; }
-function isSupportedFile(name: string) { return SUPPORTED_FILE_EXTENSIONS.has(fileExtension(name)); }
 function convertedMarkdownLabel(name: string) {
   const withoutExtension = name.replace(/\.[^/.]+$/, "");
   return `${withoutExtension || "converted"}.md`;
@@ -20,13 +25,20 @@ function convertedMarkdownLabel(name: string) {
 function arrayBufferToBase64(buffer: ArrayBuffer) {
   const bytes = new Uint8Array(buffer);
   let binary = "";
-  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
   return window.btoa(binary);
 }
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
-  link.href = url; link.download = filename; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 type Options = {
@@ -42,22 +54,58 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
   const openTextAsTabRef = useRef(editor.openTextAsTab);
   const lastDroppedPathsRef = useRef<{ signature: string; at: number } | null>(null);
   const dragCounterRef = useRef(0);
+  const [universalImportAvailable, setUniversalImportAvailable] = useState(true);
+
+  const fileInputAccept = universalImportAvailable
+    ? OPEN_FILE_ACCEPT
+    : openFileAccept(false);
 
   useEffect(() => {
     openFileRef.current = editor.openFile;
     openTextAsTabRef.current = editor.openTextAsTab;
   }, [editor.openFile, editor.openTextAsTab]);
 
+  useEffect(() => {
+    if (backendStatus !== "ready") return;
+
+    let cancelled = false;
+    Files.getSupportedFormats()
+      .then((formats) => {
+        if (!cancelled) {
+          setUniversalImportAvailable(formats.markitdown_available);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUniversalImportAvailable(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [backendStatus]);
+
   const handleOpenFile = useCallback(async () => {
     if (isDesktopRuntime && backendStatus !== "ready") return;
     let filePath: string | null = null;
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({ multiple: false, filters: [
-        { name: "Supported documents", extensions: OPEN_FILE_EXTENSIONS },
-        { name: "Markdown", extensions: ["md", "markdown", "txt"] },
-        { name: "Convertible documents", extensions: ["html", "htm", "pdf", "docx"] },
-      ] });
+      const filters = [
+        {
+          name: "Supported documents",
+          extensions: openFileExtensions(universalImportAvailable),
+        },
+        { name: "Markdown", extensions: [...PLAIN_TEXT_EXTENSIONS] },
+        { name: "Convertible documents", extensions: NATIVE_CONVERTIBLE_EXTENSIONS },
+      ];
+      if (universalImportAvailable) {
+        filters.push({
+          name: "Universal import (MarkItDown)",
+          extensions: MARKITDOWN_EXTENSIONS,
+        });
+      }
+      const selected = await open({ multiple: false, filters });
       filePath = selected ? (Array.isArray(selected) ? selected[0] : selected) : null;
     } catch {
       if (isDesktopRuntime) return;
@@ -65,20 +113,31 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
       return;
     }
     if (!filePath) return;
-    try { await editor.openFile(filePath); }
-    catch (error) { alert(`Open failed: ${error instanceof Error ? error.message : String(error)}`); }
-  }, [backendStatus, editor, isDesktopRuntime]);
+    try {
+      await editor.openFile(filePath);
+    } catch (error) {
+      alert(`Open failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [backendStatus, editor, isDesktopRuntime, universalImportAvailable]);
 
   const handleFileInputChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      if (CONVERTIBLE_EXTENSIONS.has(fileExtension(file.name))) {
-        const result = await Files.convertToMarkdown({ filename: file.name, content_base64: arrayBufferToBase64(await file.arrayBuffer()) });
+      if (needsConversion(file.name)) {
+        const result = await Files.convertToMarkdown({
+          filename: file.name,
+          content_base64: arrayBufferToBase64(await file.arrayBuffer()),
+        });
         editor.openTextAsTab(convertedMarkdownLabel(file.name), result.markdown, null, null, true);
-      } else editor.openTextAsTab(file.name, await file.text(), null);
-    } catch (error) { alert(`Open failed: ${error instanceof Error ? error.message : String(error)}`); }
-    finally { event.target.value = ""; }
+      } else {
+        editor.openTextAsTab(file.name, await file.text(), null);
+      }
+    } catch (error) {
+      alert(`Open failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      event.target.value = "";
+    }
   }, [editor]);
 
   const handleExport = useCallback(async (format: "html" | "pdf" | "docx") => {
@@ -93,14 +152,19 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
         if (!selected) return;
         outputPath = Array.isArray(selected) ? selected[0] : selected;
       } catch {
-        if (format !== "html") { alert("PDF/DOCX export requires Tauri desktop app for save dialog."); return; }
+        if (format !== "html") {
+          alert("PDF/DOCX export requires Tauri desktop app for save dialog.");
+          return;
+        }
         const payload: ExportPayload = { content, base_dir: editor.activeTab.filePath?.replace(/[^/\\]+$/, ""), dark_mode: editor.darkMode, font_size: editor.fontSize };
         downloadBlob(await Export.downloadHtml(payload), defaultName);
         return;
       }
       const result = await editor.exportAs(format, outputPath, content);
       if (result) alert(`Exported to:\n${result.path}`);
-    } catch (error) { alert(`Export failed: ${error instanceof Error ? error.message : String(error)}`); }
+    } catch (error) {
+      alert(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }, [editor, monacoRef]);
 
   const openDroppedPaths = useCallback(async (paths: string[]) => {
@@ -112,8 +176,11 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
     if (previous?.signature === signature && now - previous.at < 750) return;
     lastDroppedPathsRef.current = { signature, at: now };
     for (const path of supportedPaths) {
-      try { await openFileRef.current(path); }
-      catch (error) { alert(`Open failed: ${error instanceof Error ? error.message : String(error)}`); }
+      try {
+        await openFileRef.current(path);
+      } catch (error) {
+        alert(`Open failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   }, []);
 
@@ -144,7 +211,8 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
   const handleDragLeave = useCallback((event: DragEvent) => { event.preventDefault(); dragCounterRef.current -= 1; }, []);
   const handleDragOver = useCallback((event: DragEvent) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }, []);
   const handleDrop = useCallback(async (event: DragEvent) => {
-    event.preventDefault(); dragCounterRef.current = 0;
+    event.preventDefault();
+    dragCounterRef.current = 0;
     const files = Array.from(event.dataTransfer.files);
     if (!files.length) return;
     if (isDesktopRuntime) {
@@ -154,13 +222,30 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
     for (const file of files) {
       if (!isSupportedFile(file.name)) continue;
       try {
-        if (CONVERTIBLE_EXTENSIONS.has(fileExtension(file.name))) {
-          const result = await Files.convertToMarkdown({ filename: file.name, content_base64: arrayBufferToBase64(await file.arrayBuffer()) });
+        if (needsConversion(file.name)) {
+          const result = await Files.convertToMarkdown({
+            filename: file.name,
+            content_base64: arrayBufferToBase64(await file.arrayBuffer()),
+          });
           openTextAsTabRef.current(convertedMarkdownLabel(file.name), result.markdown, null, null, true);
-        } else openTextAsTabRef.current(file.name, await file.text(), null);
-      } catch (error) { alert(`Open failed: ${error instanceof Error ? error.message : String(error)}`); }
+        } else {
+          openTextAsTabRef.current(file.name, await file.text(), null);
+        }
+      } catch (error) {
+        alert(`Open failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   }, [isDesktopRuntime, openDroppedPaths]);
 
-  return { fileInputRef, handleOpenFile, handleFileInputChange, handleExport, handleDragEnter, handleDragLeave, handleDragOver, handleDrop };
+  return {
+    fileInputRef,
+    fileInputAccept,
+    handleOpenFile,
+    handleFileInputChange,
+    handleExport,
+    handleDragEnter,
+    handleDragLeave,
+    handleDragOver,
+    handleDrop,
+  };
 }
