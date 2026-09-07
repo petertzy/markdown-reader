@@ -510,6 +510,30 @@ export const AI = {
       method: "POST",
       body: JSON.stringify({ content, source_language, target_language }),
     }),
+
+  translateSentences: (content: string, source_language: string, target_language: string) =>
+    apiFetch<{ translated: string; pairs: { source: string; translated: string }[] }>(
+      "/api/ai/translate/sentences",
+      {
+        method: "POST",
+        body: JSON.stringify({ content, source_language, target_language }),
+      }
+    ),
+
+  translateSentenceBatch: (
+    items: string[],
+    source_language: string,
+    target_language: string,
+    signal?: AbortSignal
+  ) =>
+    apiFetch<{ translated: string; pairs: { source: string; translated: string }[] }>(
+      "/api/ai/translate/sentences/batch",
+      {
+        method: "POST",
+        body: JSON.stringify({ items, source_language, target_language }),
+        signal,
+      }
+    ),
 };
 
 // ── Export API ────────────────────────────────────────────────────────────────

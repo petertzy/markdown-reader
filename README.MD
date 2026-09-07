@@ -33,7 +33,7 @@ Most modern writing apps force you to choose between **privacy** and **power**. 
 
 - 🔒 **Local-First Architecture**: Your files never leave your machine unless you explicitly call an external AI API.
 - 🤖 **Bring-Your-Own-AI**: Configure OpenAI, Anthropic, OpenRouter, OpenAI-compatible providers, or local models.
-- ✍️ **Intelligent Editing**: AI-assisted translation, summarization, formatting, and code-block cleanup.
+- ✍️ **Intelligent Editing**: AI-assisted translation, sentence-by-sentence comparison, summarization, formatting, and code-block cleanup.
 - ⚡ **Slash Commands**: Type `/` in the editor to trigger AI actions or insert a table inline, without opening the AI panel.
 - 🛡️ **Audit & Rollback**: Review all AI suggestions before applying them. Reject or rollback changes with a single click.
 - 🖥️ **Native Desktop Feel**: Built with Next.js and packaged with Tauri for blazing-fast performance.

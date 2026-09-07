@@ -406,6 +406,99 @@ class TestAIProviderConfigLogic(unittest.TestCase):
         self.assertNotIn("Authorization", called_headers)
         self.assertEqual(translated, "Hallo")
 
+    def test_split_text_into_translation_units_keeps_code_block_together(self):
+        units = logic.split_text_into_translation_units(
+            "First sentence. Second sentence!\n\n```css\n.a { color: red; }\n```\n\nFinal sentence?"
+        )
+
+        self.assertEqual(
+            units,
+            [
+                "First sentence.",
+                "Second sentence!",
+                "```css\n.a { color: red; }\n```",
+                "Final sentence?",
+            ],
+        )
+
+    def test_translate_sentences_returns_source_translation_pairs(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            settings_file = Path(tmp_dir) / "settings.json"
+            with (
+                patch.object(logic, "APP_SETTINGS_FILE_PATH", settings_file),
+                patch.object(logic, "keyring", None),
+                patch.dict(
+                    os.environ,
+                    {
+                        "AI_PROVIDER": "",
+                        "LOCAL_AI_BASE_URL": "http://127.0.0.1:1234/v1",
+                        "LOCAL_AI_MODEL": "local-test",
+                        "LOCAL_AI_API_KEY": "",
+                    },
+                ),
+                patch.object(
+                    logic,
+                    "_request_sentence_translation_batch_from_provider",
+                    side_effect=lambda _provider,
+                    _api_key,
+                    _model,
+                    items,
+                    _source,
+                    _target: [
+                        {"source": item, "translated": f"DE: {item}"} for item in items
+                    ],
+                ) as mock_translate,
+            ):
+                logic._save_app_settings({"ai_provider": "local"})
+                pairs = logic.translate_markdown_sentences_with_ai(
+                    "Hello world. Good morning.", "English", "German"
+                )
+
+        self.assertEqual(
+            pairs,
+            [
+                {"source": "Hello world.", "translated": "DE: Hello world."},
+                {"source": "Good morning.", "translated": "DE: Good morning."},
+            ],
+        )
+        self.assertEqual(mock_translate.call_count, 1)
+
+    def test_translate_sentences_batches_longer_input(self):
+        with (
+            patch.object(logic, "_get_current_ai_provider", return_value="local"),
+            patch.object(
+                logic, "_get_ai_api_key_for_provider", return_value=("", "", "")
+            ),
+            patch.object(logic, "_get_ai_model_for_request", return_value="local-test"),
+            patch.object(
+                logic, "_batch_translation_units", return_value=[["One."], ["Two."]]
+            ),
+            patch.object(
+                logic,
+                "_request_sentence_translation_batch_from_provider",
+                side_effect=lambda _provider,
+                _api_key,
+                _model,
+                items,
+                _source,
+                _target: [
+                    {"source": item, "translated": f"DE: {item}"} for item in items
+                ],
+            ) as mock_translate,
+        ):
+            pairs = logic.translate_markdown_sentences_with_ai(
+                "One. Two.", "English", "German"
+            )
+
+        self.assertEqual(mock_translate.call_count, 2)
+        self.assertEqual(
+            pairs,
+            [
+                {"source": "One.", "translated": "DE: One."},
+                {"source": "Two.", "translated": "DE: Two."},
+            ],
+        )
+
     def test_chat_uses_configured_provider_for_general_messages(self):
         class _DummyResp:
             def raise_for_status(self):
