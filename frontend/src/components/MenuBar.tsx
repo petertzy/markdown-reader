@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   DEFAULT_SHORTCUTS,
   type ActionId,
@@ -31,6 +35,12 @@ export default function MenuBar({ groups, shortcuts }: Props) {
   const shortcutLabelById = new Map(
     shortcuts.map((shortcut) => [shortcut.id, formatShortcut(shortcut.bindings[0])])
   );
+  const keepEditorFocused = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+  };
+  const keepEditorFocusedOnPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+  };
 
   useEffect(() => {
     const closeOnOutsidePointerDown = (event: PointerEvent) => {
@@ -74,6 +84,8 @@ export default function MenuBar({ groups, shortcuts }: Props) {
               openMenu === group.label ? "bg-gray-200 dark:bg-[#3a3a3a]" : ""
             }`}
             onClick={() => setOpenMenu((current) => (current === group.label ? null : group.label))}
+            onPointerDown={keepEditorFocusedOnPointerDown}
+            onMouseDown={keepEditorFocused}
             onMouseEnter={() => {
               if (openMenu) setOpenMenu(group.label);
             }}
@@ -107,6 +119,8 @@ export default function MenuBar({ groups, shortcuts }: Props) {
                       item.onSelect();
                       setOpenMenu(null);
                     }}
+                    onPointerDown={keepEditorFocusedOnPointerDown}
+                    onMouseDown={keepEditorFocused}
                     disabled={item.disabled}
                     role="menuitem"
                   >

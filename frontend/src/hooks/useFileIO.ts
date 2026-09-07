@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, MutableRefObject } from "react";
+import { flushSync } from "react-dom";
 import type { editor as MonacoEditor } from "monaco-editor";
 import type { useEditor } from "@/hooks/useEditor";
 import { Export, Files, type ExportPayload } from "@/lib/api";
@@ -143,6 +144,19 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
   const handleExport = useCallback(async (format: "html" | "pdf" | "docx") => {
     try {
       const content = monacoRef.current?.getValue() ?? editor.activeTab.content;
+      const restoreExportContent = () => {
+        flushSync(() => {
+          editor.handleContentChange(content);
+        });
+        const monaco = monacoRef.current;
+        const model = monaco?.getModel();
+        if (model && model.getValue() !== content) {
+          const position = monaco?.getPosition();
+          model.setValue(content);
+          if (position) monaco?.setPosition(position);
+        }
+      };
+      restoreExportContent();
       const extension = format === "pdf" ? "pdf" : format === "docx" ? "docx" : "html";
       const defaultName = `${editor.activeTab.label.replace(/\.[^/.]+$/, "") || "document"}.${extension}`;
       let outputPath: string | undefined;
@@ -158,10 +172,15 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
         }
         const payload: ExportPayload = { content, base_dir: editor.activeTab.filePath?.replace(/[^/\\]+$/, ""), dark_mode: editor.darkMode, font_size: editor.fontSize };
         downloadBlob(await Export.downloadHtml(payload), defaultName);
+        restoreExportContent();
         return;
       }
       const result = await editor.exportAs(format, outputPath, content);
-      if (result) alert(`Exported to:\n${result.path}`);
+      restoreExportContent();
+      if (result) {
+        alert(`Exported to:\n${result.path}`);
+        restoreExportContent();
+      }
     } catch (error) {
       alert(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
     }

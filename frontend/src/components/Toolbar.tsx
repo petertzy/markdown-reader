@@ -6,6 +6,11 @@
  * Top action bar: file open/save, export, view toggles, settings.
  */
 
+import type {
+  MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
+
 type Props = {
   onOpenFile: () => void;
   onSaveFile: () => void;
@@ -42,14 +47,20 @@ export default function Toolbar({
   const backendBusy = backendStatus === "starting";
   const backendFailed = backendStatus === "error";
   const backendDisabled = backendBusy || backendFailed;
+  const keepEditorFocused = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+  };
+  const keepEditorFocusedOnPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+  };
 
   return (
     <div className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-[#252526] border-b border-gray-200 dark:border-gray-700 shrink-0 text-sm">
       {/* File ops */}
-      <button onClick={onOpenFile} className={buttonClass(backendDisabled)} title="Open file" disabled={backendDisabled}>
+      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onOpenFile} className={buttonClass(backendDisabled)} title="Open file" disabled={backendDisabled}>
         📂 Open
       </button>
-      <button onClick={onSaveFile} className={buttonClass(backendDisabled)} title="Save (Ctrl+S)" disabled={backendDisabled}>
+      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onSaveFile} className={buttonClass(backendDisabled)} title="Save (Ctrl+S)" disabled={backendDisabled}>
         💾 Save
       </button>
 
@@ -58,12 +69,14 @@ export default function Toolbar({
       {/* Export */}
       <span className="text-gray-400 text-xs">Export:</span>
       {(["html", "pdf", "docx"] as const).map((fmt) => (
-        <button key={fmt} onClick={() => onExport(fmt)} className={buttonClass(backendDisabled)} disabled={backendDisabled}>
+        <button key={fmt} onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onExport(fmt)} className={buttonClass(backendDisabled)} disabled={backendDisabled}>
           {fmt.toUpperCase()}
         </button>
       ))}
 
       <button
+        onPointerDown={keepEditorFocusedOnPointerDown}
+        onMouseDown={keepEditorFocused}
         onClick={onOpenBrowserPreview}
         className={buttonClass(backendDisabled)}
         title="Open rendered preview in browser"
@@ -76,9 +89,9 @@ export default function Toolbar({
 
       {/* Font size */}
       <span className="text-gray-500 dark:text-gray-400 text-xs">Font:</span>
-      <button onClick={() => onFontSizeChange(Math.max(10, fontSize - 1))} className={btnCls}>A-</button>
+      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onFontSizeChange(Math.max(10, fontSize - 1))} className={btnCls}>A-</button>
       <span className="text-xs text-gray-600 dark:text-gray-300 w-5 text-center">{fontSize}</span>
-      <button onClick={() => onFontSizeChange(Math.min(32, fontSize + 1))} className={btnCls}>A+</button>
+      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onFontSizeChange(Math.min(32, fontSize + 1))} className={btnCls}>A+</button>
 
       <div className="flex-1" />
 
@@ -95,6 +108,8 @@ export default function Toolbar({
 
       {/* Toggles */}
       <button
+        onPointerDown={keepEditorFocusedOnPointerDown}
+        onMouseDown={keepEditorFocused}
         onClick={onToggleAIPanel}
         className={`${btnCls} ${showAIPanel ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
         title="AI Assistant"
@@ -102,13 +117,15 @@ export default function Toolbar({
         🤖 AI
       </button>
       <button
+        onPointerDown={keepEditorFocusedOnPointerDown}
+        onMouseDown={keepEditorFocused}
         onClick={onToggleCitationPanel}
         className={`${btnCls} ${showCitationPanel ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
         title="Citations"
       >
         📚 Cite
       </button>
-      <button onClick={onToggleDark} className={btnCls} title="Toggle dark mode">
+      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onToggleDark} className={btnCls} title="Toggle dark mode">
         {darkMode ? "☀️" : "🌙"}
       </button>
     </div>
