@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from base64 import b64encode
 from pathlib import Path
 from unittest import mock
 
@@ -75,9 +76,26 @@ class TestCitationLogic(unittest.TestCase):
         self.assertEqual(len(citation_logic.search_citations("doe2024")), 1)
         self.assertEqual(len(citation_logic.search_citations("smith")), 1)
         self.assertEqual(len(citation_logic.search_citations("great book")), 1)
+        self.assertEqual(len(citation_logic.search_citations("journal of examples")), 1)
         self.assertEqual(len(citation_logic.search_citations("2020")), 1)
         self.assertEqual(len(citation_logic.search_citations("")), 2)
         self.assertEqual(len(citation_logic.search_citations("nonexistent")), 0)
+
+    def test_load_library_content_saves_and_persists_uploaded_bib(self):
+        content_base64 = b64encode(SAMPLE_BIB.encode("utf-8")).decode("ascii")
+
+        path, entries = citation_logic.load_citation_library_content(
+            "../unsafe name.bib", content_base64
+        )
+
+        imported_path = Path(path)
+        self.assertTrue(imported_path.is_file())
+        self.assertEqual(imported_path.name, "unsafe_name.bib")
+        self.assertTrue(
+            citation_logic._same_path(path, citation_logic.get_persisted_library_path())
+        )
+        self.assertEqual({entry["key"] for entry in entries}, {"doe2024", "smith2020"})
+        self.assertEqual(len(citation_logic.search_citations("doe2024")), 1)
 
 
 class TestCitationSyntaxSurvivesExport(unittest.TestCase):

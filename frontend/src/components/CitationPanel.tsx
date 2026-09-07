@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Citations, type CitationEntry } from "@/lib/api";
 
 type Props = {
@@ -8,6 +8,7 @@ type Props = {
 };
 
 export default function CitationPanel({ onInsert }: Props) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [libraryPath, setLibraryPath] = useState("");
   const [pathInput, setPathInput] = useState("");
   const [query, setQuery] = useState("");
@@ -21,6 +22,7 @@ export default function CitationPanel({ onInsert }: Props) {
     try {
       const result = await Citations.list();
       setLibraryPath(result.path);
+      setPathInput(result.path);
       setEntries(result.entries);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -29,6 +31,16 @@ export default function CitationPanel({ onInsert }: Props) {
     }
   }, []);
 
+  const applyLoadedLibrary = useCallback(
+    (result: { path: string; entries: CitationEntry[] }) => {
+      setLibraryPath(result.path);
+      setPathInput(result.path);
+      setEntries(result.entries);
+      setQuery("");
+    },
+    []
+  );
+
   const handleLoadLibrary = async () => {
     const path = pathInput.trim();
     if (!path) return;
@@ -36,15 +48,65 @@ export default function CitationPanel({ onInsert }: Props) {
     setError(null);
     try {
       const result = await Citations.load(path);
-      setLibraryPath(result.path);
-      setEntries(result.entries);
-      setQuery("");
+      applyLoadedLibrary(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
   };
+
+  const fileToBase64 = useCallback(async (file: File) => {
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+    }
+    return window.btoa(binary);
+  }, []);
+
+  const loadLibraryFile = useCallback(
+    async (file: File) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await Citations.loadContent(file.name, await fileToBase64(file));
+        applyLoadedLibrary(result);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [applyLoadedLibrary, fileToBase64]
+  );
+
+  const handleSelectLibrary = useCallback(async () => {
+    setError(null);
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "BibTeX files", extensions: ["bib"] }],
+      });
+      const selectedPath = selected ? (Array.isArray(selected) ? selected[0] : selected) : null;
+      if (!selectedPath) return;
+
+      setPathInput(selectedPath);
+      setLoading(true);
+      try {
+        const result = await Citations.load(selectedPath);
+        applyLoadedLibrary(result);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setLoading(false);
+      }
+    } catch {
+      fileInputRef.current?.click();
+    }
+  }, [applyLoadedLibrary]);
 
   const handleSearch = async (nextQuery: string) => {
     setQuery(nextQuery);
@@ -67,6 +129,17 @@ export default function CitationPanel({ onInsert }: Props) {
 
   return (
     <div className="flex flex-col w-80 min-w-[280px] max-w-[380px] border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] text-sm">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".bib"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void loadLibraryFile(file);
+          event.target.value = "";
+        }}
+      />
       <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700 shrink-0">
         <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">
           Citations
@@ -88,6 +161,14 @@ export default function CitationPanel({ onInsert }: Props) {
             placeholder="/path/to/library.bib"
             className="flex-1 text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
           />
+          <button
+            onClick={() => { void handleSelectLibrary(); }}
+            disabled={loading}
+            className="px-2 text-xs border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded hover:bg-gray-100 dark:hover:bg-[#2d2d2d] disabled:opacity-40"
+            title="Select BibTeX file"
+          >
+            Select
+          </button>
           <button
             onClick={() => { void handleLoadLibrary(); }}
             disabled={loading || !pathInput.trim()}

@@ -190,6 +190,14 @@ Markdown Reader can import Markdown/text files directly and convert HTML, PDF, D
 
 ---
 
+## 📚 Academic Citations
+
+Use the **Cite** panel to load a BibTeX `.bib` library, search by citation key, author, title, year, publication venue, or entry type, and insert citation references such as `[@doe2024]` at the current cursor position. In the desktop app, click **Select** to choose a `.bib` file with the native file picker. In browser development mode, the same button uploads the selected `.bib` file to the local backend and stores it as the active citation library.
+
+Markdown Reader preserves citation syntax during editing and export, including HTML, DOCX, and PDF output.
+
+---
+
 ## 🤝 Contributing
 
 Contributions are highly welcome! Whether you're fixing a bug, suggesting a feature, or helping us write documentation, we'd love to have you.

@@ -567,6 +567,12 @@ export const Citations = {
       { method: "POST", body: JSON.stringify({ path }) }
     ),
 
+  loadContent: (filename: string, content_base64: string) =>
+    apiFetch<{ path: string; count: number; entries: CitationEntry[] }>(
+      "/api/citations/load-content",
+      { method: "POST", body: JSON.stringify({ filename, content_base64 }) }
+    ),
+
   list: () =>
     apiFetch<{ path: string; entries: CitationEntry[] }>("/api/citations/list"),
 
