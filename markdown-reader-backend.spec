@@ -1,5 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_submodules
+
 
 a = Analysis(
     ['backend/main.py'],
@@ -14,6 +16,7 @@ a = Analysis(
         'backend.pdf_exporter',
         'backend.routers.citations',
         'bibtexparser',
+        *collect_submodules('markitdown'),
     ],
     hookspath=[],
     hooksconfig={},
@@ -21,7 +24,6 @@ a = Analysis(
     excludes=[
         'docling',
         'docling_core',
-        'pandas',
         'scipy',
         'sklearn',
         'torch',

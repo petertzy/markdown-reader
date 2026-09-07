@@ -135,6 +135,17 @@ export type ConvertToMarkdownPayload = {
   content_base64?: string;
 };
 
+export type SupportedFileFormat = {
+  extension: string;
+  description: string;
+};
+
+export type SupportedFormatsResponse = {
+  native: SupportedFileFormat[];
+  markitdown: SupportedFileFormat[];
+  markitdown_available: boolean;
+};
+
 export const Files = {
   read: (path: string) =>
     apiFetch<{ path: string; content: string }>(
@@ -152,6 +163,9 @@ export const Files = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  getSupportedFormats: () =>
+    apiFetch<SupportedFormatsResponse>("/api/files/supported-formats"),
 
   list: (path: string, extensions?: string) => {
     const qs = `path=${encodeURIComponent(path)}${extensions ? `&extensions=${extensions}` : ""}`;

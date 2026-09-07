@@ -34,7 +34,8 @@ import {
   MARKITDOWN_EXTENSIONS,
   NATIVE_CONVERTIBLE_EXTENSIONS,
   OPEN_FILE_ACCEPT,
-  OPEN_FILE_EXTENSIONS,
+  openFileAccept,
+  openFileExtensions,
   PLAIN_TEXT_EXTENSIONS,
 } from "@/lib/supportedFormats";
 
@@ -88,6 +89,7 @@ export default function HomePage() {
   const [split, setSplit] = useState(50);
   const [isLikelyTauriRuntime, setIsLikelyTauriRuntime] = useState(false);
   const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">("ready");
+  const [universalImportAvailable, setUniversalImportAvailable] = useState(true);
   const [backendMessage, setBackendMessage] = useState<string | null>(null);
   const [monacoReady, setMonacoReady] = useState(false);
   const [selectedText, setSelectedText] = useState("");
@@ -189,6 +191,17 @@ export default function HomePage() {
         if (cancelled) return;
         setBackendStatus("ready");
         setBackendMessage(null);
+        Files.getSupportedFormats()
+          .then((formats) => {
+            if (!cancelled) {
+              setUniversalImportAvailable(formats.markitdown_available);
+            }
+          })
+          .catch(() => {
+            if (!cancelled) {
+              setUniversalImportAvailable(false);
+            }
+          });
         await editor.loadRecentFiles();
         if (!cancelled && editor.activeTab.content) {
           editor.refreshPreview(editor.activeTab.content);
@@ -226,14 +239,21 @@ export default function HomePage() {
 
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
+      const supportedExtensions = openFileExtensions(universalImportAvailable);
+      const filters = [
+        { name: "Supported documents", extensions: supportedExtensions },
+        { name: "Markdown", extensions: [...PLAIN_TEXT_EXTENSIONS] },
+        { name: "Convertible documents", extensions: NATIVE_CONVERTIBLE_EXTENSIONS },
+      ];
+      if (universalImportAvailable) {
+        filters.push({
+          name: "Universal import (MarkItDown)",
+          extensions: MARKITDOWN_EXTENSIONS,
+        });
+      }
       const selected = await open({
         multiple: false,
-        filters: [
-          { name: "Supported documents", extensions: OPEN_FILE_EXTENSIONS },
-          { name: "Markdown", extensions: [...PLAIN_TEXT_EXTENSIONS] },
-          { name: "Convertible documents", extensions: NATIVE_CONVERTIBLE_EXTENSIONS },
-          { name: "Universal import (MarkItDown)", extensions: MARKITDOWN_EXTENSIONS },
-        ],
+        filters,
       });
       if (!selected) return;
       filePath = Array.isArray(selected) ? selected[0] : selected;
@@ -253,7 +273,7 @@ export default function HomePage() {
     } catch (err) {
       alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [backendStatus, editor, isLikelyTauriRuntime]);
+  }, [backendStatus, editor, isLikelyTauriRuntime, universalImportAvailable]);
 
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -839,7 +859,7 @@ export default function HomePage() {
       <input
         ref={fileInputRef}
         type="file"
-        accept={OPEN_FILE_ACCEPT}
+        accept={universalImportAvailable ? OPEN_FILE_ACCEPT : openFileAccept(false)}
         className="hidden"
         onChange={handleFileInputChange}
       />

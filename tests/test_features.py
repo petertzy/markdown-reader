@@ -26,7 +26,11 @@ from backend.recent_files import (
     _middle_ellipsis,
     _safe_write_json,
 )
-from backend.routers.files import ConvertToMarkdownPayload, convert_to_markdown
+from backend.routers.files import (
+    ConvertToMarkdownPayload,
+    convert_to_markdown,
+    get_supported_formats,
+)
 from backend.word_count import count_words as _count_words
 from backend.word_count import reading_time as _reading_time
 from backend.word_count import strip_markdown as _strip_markdown
@@ -340,6 +344,18 @@ class TestRecentFilesManager(unittest.TestCase):
 
 class TestConvertToMarkdown(unittest.TestCase):
     """File conversion endpoint helpers should return Markdown content."""
+
+    def test_supported_formats_reports_native_and_universal_import(self):
+        result = get_supported_formats()
+
+        native_extensions = {entry["extension"] for entry in result["native"]}
+        markitdown_extensions = {entry["extension"] for entry in result["markitdown"]}
+
+        self.assertIn(".md", native_extensions)
+        self.assertIn(".docx", native_extensions)
+        self.assertIn(".xlsx", markitdown_extensions)
+        self.assertIn(".pptx", markitdown_extensions)
+        self.assertIsInstance(result["markitdown_available"], bool)
 
     def test_converts_html_upload_to_markdown(self):
         html = b"<h1>Title</h1><p>Hello <strong>world</strong>.</p>"

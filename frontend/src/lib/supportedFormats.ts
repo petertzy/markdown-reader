@@ -34,9 +34,23 @@ export const OPEN_FILE_EXTENSIONS = [
   ...MARKITDOWN_EXTENSIONS,
 ];
 
+export function openFileExtensions(includeUniversalImport = true) {
+  return [
+    ...PLAIN_TEXT_EXTENSIONS,
+    ...NATIVE_CONVERTIBLE_EXTENSIONS,
+    ...(includeUniversalImport ? MARKITDOWN_EXTENSIONS : []),
+  ];
+}
+
 export const SUPPORTED_FILE_EXTENSIONS = new Set(OPEN_FILE_EXTENSIONS);
 
-export const OPEN_FILE_ACCEPT = OPEN_FILE_EXTENSIONS.map((ext) => `.${ext}`).join(",");
+export function openFileAccept(includeUniversalImport = true) {
+  return openFileExtensions(includeUniversalImport)
+    .map((ext) => `.${ext}`)
+    .join(",");
+}
+
+export const OPEN_FILE_ACCEPT = openFileAccept();
 
 export function fileExtension(name: string) {
   return name.split(".").pop()?.toLowerCase() ?? "";
