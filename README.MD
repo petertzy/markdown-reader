@@ -45,7 +45,7 @@ Most modern writing apps force you to choose between **privacy** and **power**. 
 Get the app running locally for development in under a minute:
 
 ```bash
-# Prerequisites: Python 3.11+, Node.js 18+, and uv
+# Prerequisites: Python 3.11-3.13, Node.js 18+, and uv
 git clone https://github.com/petertzy/markdown-reader.git
 cd markdown-reader
 
@@ -181,6 +181,12 @@ Use the arrow keys to navigate, Enter to run a command, or Escape to dismiss the
 ## 🧠 Local Model Support
 
 Markdown Reader can call locally hosted OpenAI-compatible model servers. In the AI settings panel, choose **Local Model**, select **LM Studio**, **Ollama**, or **Custom**, fetch available models, and save the model you want to use. Local endpoints do not require an API key unless your local server is configured to require one.
+
+---
+
+## 📥 Universal File Import
+
+Markdown Reader can import Markdown/text files directly and convert HTML, PDF, DOCX, Office files, CSV, EPUB, XML, archives, images, audio, Outlook messages, and Jupyter notebooks to Markdown through the bundled MarkItDown converter. Python 3.14 is not currently supported because some MarkItDown optional dependencies do not publish Python 3.14 wheels yet.
 
 ---
 
