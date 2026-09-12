@@ -50,11 +50,59 @@ fn stop_backend(app: &tauri::AppHandle) {
     }
 }
 
+fn normalize_windows_path(arg: &str) -> Option<String> {
+    let trimmed = arg.trim_matches('"').trim();
+
+    if trimmed.starts_with('-') || trimmed.is_empty() {
+        return None;
+    }
+
+    let path = std::path::Path::new(trimmed);
+    let lower = trimmed.to_lowercase();
+
+    if (lower.ends_with(".md") || lower.ends_with(".markdown")) && path.exists() {
+        if let Ok(canonical) = path.canonicalize() {
+            let mut path_str = canonical.to_string_lossy().to_string();
+            if path_str.starts_with(r"\\?\") {
+                path_str = path_str[4..].to_string();
+            }
+            Some(path_str.replace('\\', "/"))
+        } else {
+            Some(trimmed.replace('\\', "/"))
+        }
+    } else {
+        None
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let port_state = Arc::new(Mutex::new(None::<u16>));
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            let mut paths = Vec::new();
+            for arg in argv.into_iter().skip(1) {
+                if let Some(valid_path) = normalize_windows_path(&arg) {
+                    paths.push(valid_path);
+                }
+            }
+            if !paths.is_empty() {
+                app.state::<PendingOpenFiles>()
+                    .0
+                    .lock()
+                    .unwrap()
+                    .extend(paths.clone());
+
+                let _ = app.emit("open-file-paths", paths);
+
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(BackendPort(port_state))
@@ -71,6 +119,22 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            let args: Vec<String> = std::env::args().collect();
+            let mut initial_files = Vec::new();
+            for arg in args.into_iter().skip(1) {
+                if let Some(valid_path) = normalize_windows_path(&arg) {
+                    initial_files.push(valid_path);
+                }
+            }
+
+            if !initial_files.is_empty() {
+                app.state::<PendingOpenFiles>()
+                    .0
+                    .lock()
+                    .unwrap()
+                    .extend(initial_files);
+            }
+
             if cfg!(debug_assertions) {
                 let backend_port = std::env::var("MARKDOWN_READER_BACKEND_PORT")
                     .ok()
@@ -120,9 +184,9 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|app_handle, event| {
+    app.run(|app_handle, event| match event {
         #[cfg(target_os = "macos")]
-        if let tauri::RunEvent::Opened { urls } = event {
+        tauri::RunEvent::Opened { urls } => {
             let paths: Vec<String> = urls
                 .into_iter()
                 .filter_map(|url| url.to_file_path().ok())
@@ -138,14 +202,63 @@ pub fn run() {
                     .extend(paths.clone());
                 let _ = app_handle.emit("open-file-paths", paths);
             }
-            return;
         }
-
-        if matches!(
-            event,
-            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
-        ) {
+        tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
             stop_backend(app_handle);
         }
+        _ => {}
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_normalize_windows_path_valid_md() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("test_note.md");
+        File::create(&file_path).unwrap();
+
+        let path_str = file_path.to_string_lossy().to_string();
+
+        let quoted_path = format!("\"{}\"", path_str);
+
+        let result = normalize_windows_path(&quoted_path);
+        assert!(result.is_some());
+        assert!(result.unwrap().ends_with("test_note.md"));
+    }
+
+    #[test]
+    fn test_normalize_windows_path_ignore_cli_flags() {
+        assert_eq!(normalize_windows_path("--config"), None);
+        assert_eq!(normalize_windows_path("-v"), None);
+        assert_eq!(normalize_windows_path(""), None);
+    }
+
+    #[test]
+    fn test_normalize_windows_path_non_md_file() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("image.png");
+        File::create(&file_path).unwrap();
+
+        let path_str = file_path.to_string_lossy().to_string();
+        assert_eq!(normalize_windows_path(&path_str), None);
+    }
+
+    #[test]
+    fn test_normalize_windows_path_slashes_conversion() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("nested_file.markdown");
+        File::create(&file_path).unwrap();
+
+        let path_str = file_path.to_string_lossy().to_string(); // В Windows содержит '\'
+        let result = normalize_windows_path(&path_str).unwrap();
+
+        // Убеждаемся, что обратные слэши конвертированы в прямой '/' для JS
+        assert!(!result.contains('\\'));
+        assert!(result.contains('/'));
+    }
 }

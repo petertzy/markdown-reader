@@ -18,6 +18,12 @@ if [ -d "/opt/homebrew/lib" ]; then
 fi
 
 resolve_python_runner() {
+  # Добавлена проверка для Windows (Scripts/python.exe)
+  if [ -x "${ROOT}/.venv/Scripts/python.exe" ] || [ -f "${ROOT}/.venv/Scripts/python.exe" ]; then
+    PYTHON_RUNNER=("${ROOT}/.venv/Scripts/python.exe")
+    return 0
+  fi
+
   if [ -x "${ROOT}/.venv/bin/python" ]; then
     PYTHON_RUNNER=("${ROOT}/.venv/bin/python")
     return 0
@@ -37,7 +43,7 @@ resolve_python_runner() {
 }
 
 backend_healthy() {
-  curl --connect-timeout 1 --max-time 2 -fsS "$1/api/health" >/dev/null 2>&1
+  "${PYTHON_RUNNER[@]}" -c "import urllib.request; urllib.request.urlopen('$1/api/health', timeout=2)" >/dev/null 2>&1
 }
 
 start_backend() {
@@ -55,12 +61,12 @@ start_backend() {
   cd "$ROOT"
   "${PYTHON_RUNNER[@]}" -m uvicorn backend.main:app --host 127.0.0.1 --port "${port}" --reload &
   BACKEND_PID=$!
-  sleep 1
 
-  if kill -0 "$BACKEND_PID" 2>/dev/null; then
+  sleep 2
+  if backend_healthy "${url}"; then
     BACKEND_PORT="${port}"
     BACKEND_URL="${url}"
-    echo "  Backend PID: $BACKEND_PID"
+    echo "  Backend started successfully on ${url}"
     return 0
   fi
 
@@ -124,4 +130,4 @@ echo ""
 cd "$FRONTEND"
 MARKDOWN_READER_BACKEND_PORT="${BACKEND_PORT}" \
 NEXT_PUBLIC_API_BASE_URL="${BACKEND_URL}" \
-npx tauri dev
+npx tauri dev -- "$@"

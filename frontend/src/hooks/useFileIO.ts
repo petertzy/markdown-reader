@@ -215,16 +215,37 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
 
   useEffect(() => {
     if (!isDesktopRuntime) return;
-    let cancelled = false; let unlisten: (() => void) | null = null;
-    const openPaths = (paths: string[]) => { if (paths.length) void openDroppedPaths(paths); };
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+
+    const openPaths = (paths: string[]) => {
+      if (paths && paths.length > 0) void openDroppedPaths(paths);
+    };
+
     import("@tauri-apps/api/event")
       .then(({ listen }) => listen<string[]>("open-file-paths", (event) => openPaths(event.payload)))
-      .then((cleanup) => { if (cancelled) cleanup(); else unlisten = cleanup; return import("@tauri-apps/api/core"); })
-      .then(({ invoke }) => invoke<string[]>("take_pending_open_files"))
-      .then((paths) => { if (!cancelled) openPaths(paths); })
+      .then((cleanup) => {
+        if (cancelled) cleanup();
+        else unlisten = cleanup;
+      })
       .catch(console.error);
-    return () => { cancelled = true; unlisten?.(); };
-  }, [isDesktopRuntime, openDroppedPaths]);
+
+    if (backendStatus === "ready") {
+      console.log("[DEBUG JS] Backend is READY, requesting pending files...");
+      import("@tauri-apps/api/core")
+        .then(({ invoke }) => invoke<string[]>("take_pending_open_files"))
+        .then((paths) => {
+          console.log("[DEBUG JS] Received pending paths from Rust:", paths);
+          if (!cancelled && paths) openPaths(paths);
+        })
+        .catch((err) => console.error("[DEBUG JS] Error in take_pending_open_files:", err));
+    }
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [isDesktopRuntime, backendStatus, openDroppedPaths]);
 
   const handleDragEnter = useCallback((event: DragEvent) => { event.preventDefault(); dragCounterRef.current += 1; }, []);
   const handleDragLeave = useCallback((event: DragEvent) => { event.preventDefault(); dragCounterRef.current -= 1; }, []);
