@@ -7,7 +7,7 @@
   [![Linux x64](https://img.shields.io/badge/Linux-x64-yellow?logo=linux)](#desktop-downloads)
   
   <br />
-  <img src="https://github.com/user-attachments/assets/ac3351a8-dd2a-445b-9f1f-4754faeef509" alt="Markdown Reader desktop preview" width="800">
+  <img width="1071" height="671" alt="Image" src="https://github.com/user-attachments/assets/188edc7c-ea77-4153-9ac6-c56c970d930c" />
 </div>
 
 ---
@@ -33,7 +33,7 @@ Most modern writing apps force you to choose between **privacy** and **power**. 
 
 - 🔒 **Local-First Architecture**: Your files never leave your machine unless you explicitly call an external AI API.
 - 🤖 **Bring-Your-Own-AI**: Configure OpenAI, Anthropic, OpenRouter, OpenAI-compatible providers, or local models.
-- ✍️ **Intelligent Editing**: AI-assisted translation, summarization, formatting, and code-block cleanup.
+- ✍️ **Intelligent Editing**: AI-assisted translation, sentence-by-sentence comparison, summarization, formatting, and code-block cleanup.
 - ⚡ **Slash Commands**: Type `/` in the editor to trigger AI actions or insert a table inline, without opening the AI panel.
 - 🛡️ **Audit & Rollback**: Review all AI suggestions before applying them. Reject or rollback changes with a single click.
 - 🖥️ **Native Desktop Feel**: Built with Next.js and packaged with Tauri for blazing-fast performance.
@@ -45,7 +45,7 @@ Most modern writing apps force you to choose between **privacy** and **power**. 
 Get the app running locally for development in under a minute:
 
 ```bash
-# Prerequisites: Python 3.11+, Node.js 18+, and uv
+# Prerequisites: Python 3.11-3.13, Node.js 18+, and uv
 git clone https://github.com/petertzy/markdown-reader.git
 cd markdown-reader
 
@@ -181,6 +181,20 @@ Use the arrow keys to navigate, Enter to run a command, or Escape to dismiss the
 ## 🧠 Local Model Support
 
 Markdown Reader can call locally hosted OpenAI-compatible model servers. In the AI settings panel, choose **Local Model**, select **LM Studio**, **Ollama**, or **Custom**, fetch available models, and save the model you want to use. Local endpoints do not require an API key unless your local server is configured to require one.
+
+---
+
+## 📥 Universal File Import
+
+Markdown Reader can import Markdown/text files directly and convert HTML, PDF, DOCX, Office files, CSV, EPUB, XML, archives, images, audio, Outlook messages, and Jupyter notebooks to Markdown through the bundled MarkItDown converter. Python 3.14 is not currently supported because some MarkItDown optional dependencies do not publish Python 3.14 wheels yet.
+
+---
+
+## 📚 Academic Citations
+
+Use the **Cite** panel to load a BibTeX `.bib` library, search by citation key, author, title, year, publication venue, or entry type, and insert citation references such as `[@doe2024]` at the current cursor position. In the desktop app, click **Select** to choose a `.bib` file with the native file picker. In browser development mode, the same button uploads the selected `.bib` file to the local backend and stores it as the active citation library.
+
+Markdown Reader preserves citation syntax during editing and export, including HTML, DOCX, and PDF output.
 
 ---
 

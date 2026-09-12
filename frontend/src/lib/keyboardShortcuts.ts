@@ -23,6 +23,7 @@ export type ActionId =
   | "table.insert"
   | "view.toggleDarkMode"
   | "view.toggleAIPanel"
+  | "view.openBrowserPreview"
   | "view.fullEditor"
   | "view.balancedSplit"
   | "view.fullPreview";
@@ -108,6 +109,12 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
     label: "Toggle AI Agent Panel",
     scope: "global",
     bindings: [primary("a", { shift: true })],
+  },
+  {
+    id: "view.openBrowserPreview",
+    label: "Open Preview in Browser",
+    scope: "global",
+    bindings: [primaryAlt("b")],
   },
   {
     id: "view.fullEditor",

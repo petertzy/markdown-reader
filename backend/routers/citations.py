@@ -34,6 +34,11 @@ class LoadLibraryPayload(BaseModel):
     path: str
 
 
+class LoadLibraryContentPayload(BaseModel):
+    filename: str
+    content_base64: str
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
@@ -45,7 +50,24 @@ def load_library(payload: LoadLibraryPayload):
         entries = logic.load_citation_library(payload.path)
     except logic.CitationLibraryError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    return {"path": os.path.abspath(payload.path), "count": len(entries), "entries": entries}
+    return {
+        "path": os.path.abspath(payload.path),
+        "count": len(entries),
+        "entries": entries,
+    }
+
+
+@router.post("/load-content")
+def load_library_content(payload: LoadLibraryContentPayload):
+    """Persist uploaded .bib content and set it as the active citation library."""
+    logic = _logic()
+    try:
+        path, entries = logic.load_citation_library_content(
+            payload.filename, payload.content_base64
+        )
+    except logic.CitationLibraryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"path": path, "count": len(entries), "entries": entries}
 
 
 @router.get("/list")

@@ -72,6 +72,17 @@ class TranslatePayload(BaseModel):
     target_language: str
 
 
+class TranslationPair(BaseModel):
+    source: str
+    translated: str
+
+
+class TranslateSentenceBatchPayload(BaseModel):
+    items: list[str]
+    source_language: str
+    target_language: str
+
+
 # ── Settings endpoints ─────────────────────────────────────────────────────────
 
 
@@ -329,3 +340,59 @@ def translate(payload: TranslatePayload):
         )
 
     return {"translated": result}
+
+
+@router.post("/translate/sentences")
+def translate_sentences(payload: TranslatePayload):
+    """Translate text sentence by sentence and return source/translation pairs."""
+    logic = _logic()
+    try:
+        pairs = logic.translate_markdown_sentences_with_ai(
+            payload.content,
+            payload.source_language,
+            payload.target_language,
+        )
+    except logic.TranslationConfigError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": str(exc),
+                "provider": exc.provider_name,
+                "env_var": exc.env_var,
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {
+        "pairs": pairs,
+        "translated": "\n\n".join(pair["translated"] for pair in pairs),
+    }
+
+
+@router.post("/translate/sentences/batch")
+def translate_sentence_batch(payload: TranslateSentenceBatchPayload):
+    """Translate one sentence batch and return source/translation pairs."""
+    logic = _logic()
+    try:
+        pairs = logic.translate_markdown_sentence_batch_with_ai(
+            payload.items,
+            payload.source_language,
+            payload.target_language,
+        )
+    except logic.TranslationConfigError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": str(exc),
+                "provider": exc.provider_name,
+                "env_var": exc.env_var,
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {
+        "pairs": pairs,
+        "translated": "\n\n".join(pair["translated"] for pair in pairs),
+    }

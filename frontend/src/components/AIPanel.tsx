@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, type ReactNode } from "react";
-import { useAIChat } from "@/hooks/useAIChat";
+import { useAIChat, type TranslationPair, type TranslationProgress } from "@/hooks/useAIChat";
 import { AI, getDefaultAISettings, type AISettings } from "@/lib/api";
 
 export type AIPanelTab = "chat" | "translate" | "settings";
@@ -173,7 +173,7 @@ export default function AIPanel({
   onApplyAction,
   initialTab,
 }: Props) {
-  const { messages, loading, error, sendMessage, translate, clearHistory } = useAIChat();
+  const { messages, loading, error, sendMessage, translate, translateSentences, cancelTranslation, clearHistory } = useAIChat();
   const [tab, setTab] = useState<Tab>(initialTab ?? "chat");
 
   useEffect(() => {
@@ -184,7 +184,10 @@ export default function AIPanel({
   const [sourceLang, setSourceLang] = useState("Auto Detect");
   const [targetLang, setTargetLang] = useState("English");
   const [translateScope, setTranslateScope] = useState<"selection" | "document">("document");
+  const [translationMode, setTranslationMode] = useState<"full" | "sentences">("full");
   const [translatedPreview, setTranslatedPreview] = useState<string | null>(null);
+  const [translationPairs, setTranslationPairs] = useState<TranslationPair[]>([]);
+  const [translationProgress, setTranslationProgress] = useState<TranslationProgress | null>(null);
   const [settings, setSettings] = useState<AISettings>(() => getDefaultAISettings());
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -503,29 +506,60 @@ export default function AIPanel({
     const content = translateScope === "selection" && selectedText ? selectedText : documentText;
     if (!content.trim()) return;
     setTranslatedPreview(null);
+    setTranslationPairs([]);
+    setTranslationProgress(null);
     if (provider === "local") {
       await AI.setProvider(provider);
       await AI.setLocalAIBaseUrlChoice(localBaseUrlChoice, localBaseUrl);
     }
-    const result = await translate(content, sourceLang === "Auto Detect" ? "auto" : sourceLang, targetLang);
+    const normalizedSourceLang = sourceLang === "Auto Detect" ? "auto" : sourceLang;
+    if (translationMode === "sentences") {
+      const result = await translateSentences(
+        content,
+        normalizedSourceLang,
+        targetLang,
+        setTranslationProgress
+      );
+      if (result) {
+        setTranslatedPreview(result.translated);
+        setTranslationPairs(result.pairs);
+      }
+      setTranslationProgress(null);
+      return;
+    }
+    const result = await translate(content, normalizedSourceLang, targetLang);
     if (result) setTranslatedPreview(result);
   };
 
+  const sentencePairApplyContent = () =>
+    translationPairs
+      .map((pair) => `${pair.source}\n\n${pair.translated}`)
+      .join("\n\n");
+
+  const translationApplyContent = () =>
+    translationMode === "sentences" && translationPairs.length > 0
+      ? sentencePairApplyContent()
+      : translatedPreview ?? "";
+
   const applyTranslation = (type: "replace_document" | "replace_selection") => {
-    if (translatedPreview && onApplyAction) {
-      onApplyAction(type, translatedPreview);
+    const content = translationApplyContent();
+    if (content && onApplyAction) {
+      onApplyAction(type, content);
       setTranslatedPreview(null);
+      setTranslationPairs([]);
     }
   };
 
   const insertBelow = () => {
-    if (translatedPreview && onApplyAction) {
+    const content = translationApplyContent();
+    if (content && onApplyAction) {
       const actionType =
         translateScope === "selection" && selectedText
           ? "insert_below_selection"
           : "insert_below_document";
-      onApplyAction(actionType, translatedPreview);
+      onApplyAction(actionType, content);
       setTranslatedPreview(null);
+      setTranslationPairs([]);
     }
   };
 
@@ -643,6 +677,30 @@ export default function AIPanel({
           </div>
 
           <div className="flex flex-col gap-1">
+            <label className="text-xs text-gray-500 dark:text-gray-400">Mode</label>
+            <div className="grid grid-cols-2 gap-1">
+              {(["full", "sentences"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => {
+                    setTranslationMode(mode);
+                    setTranslatedPreview(null);
+                    setTranslationPairs([]);
+                    setTranslationProgress(null);
+                  }}
+                  className={`py-1 text-xs rounded border ${
+                    translationMode === mode
+                      ? "bg-blue-500 text-white border-blue-500"
+                      : "border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-[#2d2d2d]"
+                  }`}
+                >
+                  {mode === "full" ? "Full Text" : "Sentence Pairs"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500 dark:text-gray-400">From</label>
             <select
               value={sourceLang}
@@ -666,17 +724,91 @@ export default function AIPanel({
 
           <button
             onClick={handleTranslate}
-            disabled={loading || !documentText.trim()}
+            disabled={loading || !(translateScope === "selection" && selectedText ? selectedText : documentText).trim()}
             className="py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40"
           >
             {loading ? "Translating…" : "Translate"}
           </button>
 
+          {translationMode === "sentences" && (translationProgress || loading) && (
+            <div className="flex flex-col gap-1 rounded border border-blue-100 bg-blue-50 p-2 text-xs text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+              <div className="flex items-center justify-between">
+                <span>{translationProgress ? "Translating batches" : "Preparing translation"}</span>
+                <div className="flex items-center gap-2">
+                  <span>
+                    {translationProgress
+                      ? `${translationProgress.currentBatch}/${translationProgress.totalBatches}`
+                      : "0/0"}
+                  </span>
+                  <button
+                    onClick={cancelTranslation}
+                    className="rounded border border-blue-200 px-1.5 py-0.5 text-[11px] font-medium hover:bg-blue-100 dark:border-blue-700 dark:hover:bg-blue-900/50"
+                  >
+                    Stop
+                  </button>
+                </div>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded bg-blue-100 dark:bg-blue-900/60">
+                <div
+                  className="h-full rounded bg-blue-500 transition-all"
+                  style={{
+                    width: `${Math.round(
+                      translationProgress && translationProgress.totalBatches > 0
+                        ? (translationProgress.currentBatch / translationProgress.totalBatches) * 100
+                        : 0
+                    )}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">{error}</div>
           )}
 
-          {translatedPreview && (
+          {translationMode === "sentences" && translationPairs.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">Preview</div>
+              <div className="flex max-h-72 flex-col gap-2 overflow-y-auto">
+                {translationPairs.map((pair, index) => (
+                  <div
+                    key={`${pair.source}-${index}`}
+                    className="rounded border border-gray-200 bg-gray-50 p-2 text-xs dark:border-gray-600 dark:bg-[#2d2d2d]"
+                  >
+                    <div className="mb-1 whitespace-pre-wrap text-gray-500 dark:text-gray-400">
+                      {pair.source}
+                    </div>
+                    <div className="whitespace-pre-wrap border-t border-gray-200 pt-1 text-gray-900 dark:border-gray-600 dark:text-gray-100">
+                      {pair.translated}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={() => applyTranslation("replace_document")}
+                  className="py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
+                >
+                  Replace Document
+                </button>
+                {selectedText && (
+                  <button
+                    onClick={() => applyTranslation("replace_selection")}
+                    className="py-1 text-xs bg-yellow-500 text-white rounded hover:bg-yellow-600"
+                  >
+                    Replace Selection
+                  </button>
+                )}
+                <button
+                  onClick={insertBelow}
+                  className="py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-[#2d2d2d] text-gray-700 dark:text-gray-300"
+                >
+                  Insert Below
+                </button>
+              </div>
+            </div>
+          ) : translatedPreview && (
             <div className="flex flex-col gap-2">
               <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">Preview</div>
               <div className="text-xs bg-gray-50 dark:bg-[#2d2d2d] border border-gray-200 dark:border-gray-600 rounded p-2 max-h-48 overflow-y-auto whitespace-pre-wrap text-gray-800 dark:text-gray-100">

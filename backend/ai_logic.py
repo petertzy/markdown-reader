@@ -77,6 +77,7 @@ AI_PROVIDER_MODEL_ENV = {
     "anthropic": "ANTHROPIC_MODEL",
 }
 AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES = 300
+AI_SENTENCE_TRANSLATION_BATCH_CHAR_LIMIT = 3000
 AI_AUTOMATION_TASK_TEMPLATES = [
     {
         "id": "format_selection",
@@ -1006,6 +1007,249 @@ def translate_markdown_with_ai(
         api_key,
         _get_ai_model_for_request(provider, api_key),
         content,
+        source_language,
+        target_language,
+    )
+
+
+_SENTENCE_END_CHARS = ".!?。！？"
+
+
+def _strip_json_code_fence(text: str) -> str:
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    stripped = re.sub(r"^```(?:json)?\s*", "", stripped, flags=re.IGNORECASE)
+    stripped = re.sub(r"\s*```$", "", stripped)
+    return stripped.strip()
+
+
+def _coerce_translation_pairs(
+    response_text: str, source_units: list[str]
+) -> list[dict[str, str]]:
+    try:
+        data = json.loads(_strip_json_code_fence(response_text))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "AI provider returned invalid sentence translation JSON."
+        ) from exc
+
+    raw_pairs = data.get("pairs") if isinstance(data, dict) else data
+    if not isinstance(raw_pairs, list):
+        raise RuntimeError("AI provider did not return sentence translation pairs.")
+
+    pairs: list[dict[str, str]] = []
+    for index, source in enumerate(source_units):
+        raw_pair = raw_pairs[index] if index < len(raw_pairs) else {}
+        translated = ""
+        if isinstance(raw_pair, dict):
+            translated_value = raw_pair.get("translated") or raw_pair.get("translation")
+            translated = translated_value if isinstance(translated_value, str) else ""
+        elif isinstance(raw_pair, str):
+            translated = raw_pair
+        pairs.append({"source": source, "translated": translated.strip()})
+
+    if any(not pair["translated"] for pair in pairs):
+        raise RuntimeError("AI provider returned incomplete sentence translations.")
+    return pairs
+
+
+def _batch_translation_units(
+    units: list[str], char_limit: int = AI_SENTENCE_TRANSLATION_BATCH_CHAR_LIMIT
+) -> list[list[str]]:
+    batches: list[list[str]] = []
+    current: list[str] = []
+    current_size = 0
+    for unit in units:
+        unit_size = len(unit)
+        if current and current_size + unit_size > char_limit:
+            batches.append(current)
+            current = []
+            current_size = 0
+        current.append(unit)
+        current_size += unit_size
+    if current:
+        batches.append(current)
+    return batches
+
+
+def _request_sentence_translation_batch_from_provider(
+    provider: str,
+    api_key: str,
+    model: str,
+    source_units: list[str],
+    source_language: str,
+    target_language: str,
+) -> list[dict[str, str]]:
+    system_prompt = (
+        "Translate Markdown text units for sentence-by-sentence comparison. "
+        "Preserve Markdown syntax, code fences, inline code, links, math, and HTML. "
+        "Return only valid JSON with this shape: "
+        '{"pairs":[{"source":"original text","translated":"translated text"}]}. '
+        "Return exactly one pair for each input item, in the same order."
+    )
+    user_prompt = json.dumps(
+        {
+            "source_language": source_language or "auto",
+            "target_language": target_language,
+            "items": [
+                {"index": index, "source": unit}
+                for index, unit in enumerate(source_units)
+            ],
+        },
+        ensure_ascii=False,
+    )
+    base_url = _get_ai_base_url(provider)
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    if provider == "anthropic":
+        headers["anthropic-version"] = "2023-06-01"
+        response = requests.post(
+            f"{base_url}/messages",
+            headers=headers,
+            json={
+                "model": model,
+                "max_tokens": 4096,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": user_prompt}],
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        response_text = _extract_anthropic_text(response.json()).strip()
+    else:
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers=headers,
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "temperature": 0.1,
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        response_text = _extract_openai_compatible_text(response.json()).strip()
+
+    if not response_text:
+        raise RuntimeError("AI provider returned an empty sentence translation.")
+    return _coerce_translation_pairs(response_text, source_units)
+
+
+def split_text_into_translation_units(content: str) -> list[str]:
+    """Split text into sentence-like units while preserving Markdown blocks."""
+    text = (content or "").strip()
+    if not text:
+        return []
+
+    units: list[str] = []
+    buffer: list[str] = []
+    in_code_block = False
+
+    def flush_buffer() -> None:
+        unit = "".join(buffer).strip()
+        if unit:
+            units.append(unit)
+        buffer.clear()
+
+    lines = text.splitlines()
+    for line_index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            if not in_code_block:
+                flush_buffer()
+                buffer.append(line)
+                in_code_block = True
+            else:
+                buffer.append("\n")
+                buffer.append(line)
+                flush_buffer()
+                in_code_block = False
+            continue
+
+        if in_code_block:
+            if buffer:
+                buffer.append("\n")
+            buffer.append(line)
+            continue
+
+        if not stripped:
+            flush_buffer()
+            continue
+
+        if stripped.startswith(("#", ">", "-", "*", "+")) or re.match(
+            r"^\d+\.\s+", stripped
+        ):
+            flush_buffer()
+            units.append(line)
+            continue
+
+        for char_index, char in enumerate(line):
+            buffer.append(char)
+            next_char = line[char_index + 1] if char_index + 1 < len(line) else ""
+            if char in _SENTENCE_END_CHARS and next_char in {
+                "",
+                " ",
+                "\t",
+                '"',
+                "'",
+                ")",
+                "]",
+            }:
+                flush_buffer()
+        if line_index < len(lines) - 1 and buffer:
+            buffer.append(" ")
+
+    flush_buffer()
+    return units
+
+
+def translate_markdown_sentences_with_ai(
+    content: str, source_language: str, target_language: str
+) -> list[dict[str, str]]:
+    units = split_text_into_translation_units(content)
+    if not units:
+        return []
+
+    pairs: list[dict[str, str]] = []
+    for batch in _batch_translation_units(units):
+        pairs.extend(
+            translate_markdown_sentence_batch_with_ai(
+                batch,
+                source_language,
+                target_language,
+            )
+        )
+    return pairs
+
+
+def translate_markdown_sentence_batch_with_ai(
+    units: list[str], source_language: str, target_language: str
+) -> list[dict[str, str]]:
+    units = [unit for unit in units if (unit or "").strip()]
+    if not units:
+        return []
+
+    provider = _get_current_ai_provider()
+    api_key, _key_slot, env_var = _get_ai_api_key_for_provider(provider)
+    if provider != "local" and not api_key:
+        raise TranslationConfigError(
+            "AI translation requires a configured provider API key.",
+            provider_name=provider,
+            env_var=env_var,
+        )
+
+    model = _get_ai_model_for_request(provider, api_key)
+    return _request_sentence_translation_batch_from_provider(
+        provider,
+        api_key,
+        model,
+        units,
         source_language,
         target_language,
     )

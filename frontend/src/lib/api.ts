@@ -135,6 +135,17 @@ export type ConvertToMarkdownPayload = {
   content_base64?: string;
 };
 
+export type SupportedFileFormat = {
+  extension: string;
+  description: string;
+};
+
+export type SupportedFormatsResponse = {
+  native: SupportedFileFormat[];
+  markitdown: SupportedFileFormat[];
+  markitdown_available: boolean;
+};
+
 export const Files = {
   read: (path: string) =>
     apiFetch<{ path: string; content: string }>(
@@ -152,6 +163,9 @@ export const Files = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  getSupportedFormats: () =>
+    apiFetch<SupportedFormatsResponse>("/api/files/supported-formats"),
 
   list: (path: string, extensions?: string) => {
     const qs = `path=${encodeURIComponent(path)}${extensions ? `&extensions=${extensions}` : ""}`;
@@ -190,6 +204,11 @@ export type WordCountResult = {
   reading_time: string;
 };
 
+export type BrowserPreviewResult = {
+  path: string;
+  url: string;
+};
+
 export const Markdown = {
   render: (payload: RenderPayload) =>
     apiFetch<{ html: string }>("/api/markdown/render", {
@@ -213,6 +232,12 @@ export const Markdown = {
     apiFetch<WordCountResult>("/api/markdown/wordcount", {
       method: "POST",
       body: JSON.stringify({ content }),
+    }),
+
+  openPreviewInBrowser: (payload: RenderPayload) =>
+    apiFetch<BrowserPreviewResult>("/api/markdown/open-preview", {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 };
 
@@ -485,6 +510,30 @@ export const AI = {
       method: "POST",
       body: JSON.stringify({ content, source_language, target_language }),
     }),
+
+  translateSentences: (content: string, source_language: string, target_language: string) =>
+    apiFetch<{ translated: string; pairs: { source: string; translated: string }[] }>(
+      "/api/ai/translate/sentences",
+      {
+        method: "POST",
+        body: JSON.stringify({ content, source_language, target_language }),
+      }
+    ),
+
+  translateSentenceBatch: (
+    items: string[],
+    source_language: string,
+    target_language: string,
+    signal?: AbortSignal
+  ) =>
+    apiFetch<{ translated: string; pairs: { source: string; translated: string }[] }>(
+      "/api/ai/translate/sentences/batch",
+      {
+        method: "POST",
+        body: JSON.stringify({ items, source_language, target_language }),
+        signal,
+      }
+    ),
 };
 
 // ── Export API ────────────────────────────────────────────────────────────────
@@ -540,6 +589,12 @@ export const Citations = {
     apiFetch<{ path: string; count: number; entries: CitationEntry[] }>(
       "/api/citations/load",
       { method: "POST", body: JSON.stringify({ path }) }
+    ),
+
+  loadContent: (filename: string, content_base64: string) =>
+    apiFetch<{ path: string; count: number; entries: CitationEntry[] }>(
+      "/api/citations/load-content",
+      { method: "POST", body: JSON.stringify({ filename, content_base64 }) }
     ),
 
   list: () =>

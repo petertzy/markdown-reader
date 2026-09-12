@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import tempfile
+from base64 import b64decode
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ def _get_settings_file_path() -> Path:
 
 APP_SETTINGS_FILE_PATH = _get_settings_file_path()
 _SETTINGS_KEY_LIBRARY_PATH = "citation_library_path"
+_IMPORTED_LIBRARY_DIR = "citation-libraries"
 
 
 class CitationLibraryError(RuntimeError):
@@ -82,6 +84,24 @@ def _set_persisted_library_path(path: str) -> None:
     _save_app_settings(settings)
 
 
+def _safe_library_filename(filename: str) -> str:
+    name = Path(filename or "library.bib").name
+    stem = Path(name).stem or "library"
+    suffix = Path(name).suffix.lower()
+    if suffix != ".bib":
+        suffix = ".bib"
+    safe_stem = "".join(
+        char if char.isalnum() or char in "._-" else "_" for char in stem
+    )
+    return f"{safe_stem}{suffix}"
+
+
+def _imported_library_path(filename: str) -> Path:
+    directory = APP_SETTINGS_FILE_PATH.parent / _IMPORTED_LIBRARY_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory / _safe_library_filename(filename)
+
+
 def _format_authors(raw_author: str) -> str:
     """Turn BibTeX 'Last, First and Last, First' into 'First Last, First Last'."""
     if not raw_author:
@@ -104,9 +124,9 @@ def _entry_to_dict(entry: dict[str, str]) -> dict[str, str]:
         "title": entry.get("title", "").strip("{}"),
         "author": _format_authors(entry.get("author", "")),
         "year": entry.get("year", ""),
-        "container": entry.get("journal") or entry.get("booktitle") or entry.get(
-            "publisher", ""
-        ),
+        "container": entry.get("journal")
+        or entry.get("booktitle")
+        or entry.get("publisher", ""),
     }
 
 
@@ -144,6 +164,27 @@ def load_citation_library(path: str) -> list[dict[str, str]]:
     return entries
 
 
+def load_citation_library_content(
+    filename: str, content_base64: str
+) -> tuple[str, list[dict[str, str]]]:
+    """Persist uploaded BibTeX content, parse it, and set it as active."""
+    if not content_base64:
+        raise CitationLibraryError("BibTeX content is empty.")
+    try:
+        content = b64decode(content_base64).decode("utf-8", errors="replace")
+    except Exception as exc:
+        raise CitationLibraryError(f"Could not decode BibTeX content: {exc}") from exc
+
+    path = _imported_library_path(filename)
+    try:
+        path.write_text(content, encoding="utf-8")
+    except OSError as exc:
+        raise CitationLibraryError(f"Could not save BibTeX library: {exc}") from exc
+
+    entries = load_citation_library(str(path))
+    return str(path), entries
+
+
 def get_active_library_entries() -> list[dict[str, str]]:
     """Return entries from the currently persisted library, if any."""
     path = get_persisted_library_path()
@@ -170,6 +211,8 @@ def search_citations(
         if query in entry["key"].lower()
         or query in entry["author"].lower()
         or query in entry["title"].lower()
+        or query in entry["container"].lower()
+        or query in entry["entry_type"].lower()
         or query in entry["year"]
     ]
     return matches[:limit]

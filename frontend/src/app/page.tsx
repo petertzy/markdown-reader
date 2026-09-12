@@ -10,7 +10,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import { useEditor } from "@/hooks/useEditor";
+import { useAIActions } from "@/hooks/useAIActions";
 import { useSlashCommands, isSlashTriggerPosition, type SlashCommand } from "@/hooks/useSlashCommands";
+import { useFileIO } from "@/hooks/useFileIO";
+import { useTauriBackend } from "@/hooks/useTauriBackend";
 import TabBar from "@/components/TabBar";
 import Toolbar from "@/components/Toolbar";
 import MenuBar, { type MenuGroup } from "@/components/MenuBar";
@@ -22,66 +25,13 @@ import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
 import SlashCommandMenu from "@/components/SlashCommandMenu";
 import StatusBar from "@/components/StatusBar";
-import { AI, Export, Files, getBaseUrl, type ExportPayload } from "@/lib/api";
+import { Markdown } from "@/lib/api";
 import {
   resolveShortcutDefinitions,
   shortcutMatchesEvent,
   isEditableTarget,
   type ActionId,
 } from "@/lib/keyboardShortcuts";
-
-const OPEN_FILE_EXTENSIONS = ["md", "markdown", "txt", "html", "htm", "pdf", "docx"];
-const CONVERTIBLE_EXTENSIONS = new Set(["html", "htm", "pdf", "docx"]);
-const SUPPORTED_FILE_EXTENSIONS = new Set(OPEN_FILE_EXTENSIONS);
-
-function fileExtension(name: string) {
-  return name.split(".").pop()?.toLowerCase() ?? "";
-}
-
-function isSupportedFile(name: string) {
-  return SUPPORTED_FILE_EXTENSIONS.has(fileExtension(name));
-}
-
-function convertedMarkdownLabel(name: string) {
-  const withoutExtension = name.replace(/\.[^/.]+$/, "");
-  return `${withoutExtension || "converted"}.md`;
-}
-
-function arrayBufferToBase64(buffer: ArrayBuffer) {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  return window.btoa(binary);
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-function isLikelyDesktopRuntime() {
-  return (
-    typeof window !== "undefined" &&
-    ("__TAURI_INTERNALS__" in window ||
-      "__TAURI__" in window ||
-      window.location.hostname === "tauri.localhost" ||
-      window.navigator.userAgent.includes("Tauri"))
-  );
-}
-
-function shouldShowPackagedBackendStatus() {
-  return process.env.NODE_ENV !== "development" && isLikelyDesktopRuntime();
-}
 
 export default function HomePage() {
   const [focusMode, setFocusMode] = useState(false);
@@ -92,17 +42,21 @@ export default function HomePage() {
   const [showCitationPanel, setShowCitationPanel] = useState(false);
   const [aiPanelInitialTab, setAiPanelInitialTab] = useState<AIPanelTab | undefined>(undefined);
   const [split, setSplit] = useState(50);
-  const [isLikelyTauriRuntime, setIsLikelyTauriRuntime] = useState(false);
-  const [backendStatus, setBackendStatus] = useState<"starting" | "ready" | "error">("ready");
-  const [backendMessage, setBackendMessage] = useState<string | null>(null);
   const [monacoReady, setMonacoReady] = useState(false);
-  const [selectedText, setSelectedText] = useState("");
   const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
-  const dragCounterRef = useRef(0);
-  const openFileRef = useRef(editor.openFile);
-  const openTextAsTabRef = useRef(editor.openTextAsTab);
-  const lastDroppedPathsRef = useRef<{ signature: string; at: number } | null>(null);
-  const showPackagedBackendStatus = shouldShowPackagedBackendStatus();
+  const { isDesktopRuntime, backendStatus, backendMessage, showPackagedBackendStatus } = useTauriBackend(editor);
+  const fileIO = useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef });
+  const { handleOpenFile, handleExport } = fileIO;
+  const {
+    selectedText,
+    syncSelectedText,
+    applyAction: handleAIApplyAction,
+    executePrompt: executeAIPrompt,
+  } = useAIActions({
+    documentText: editor.activeTab.content,
+    editorRef: monacoRef,
+    onDocumentChange: editor.handleContentChange,
+  });
 
   const handleSaveFile = useCallback(async () => {
     try {
@@ -111,6 +65,20 @@ export default function HomePage() {
       alert(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, [editor]);
+
+  const handleOpenBrowserPreview = useCallback(async () => {
+    if (backendStatus !== "ready") return;
+    try {
+      await Markdown.openPreviewInBrowser({
+        content: monacoRef.current?.getValue() ?? editor.activeTab.content,
+        base_dir: editor.activeTab.filePath?.replace(/[^/\\]+$/, ""),
+        dark_mode: editor.darkMode,
+        font_size: editor.fontSize,
+      });
+    } catch (err) {
+      alert(`Open browser preview failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [backendStatus, editor.activeTab.content, editor.activeTab.filePath, editor.darkMode, editor.fontSize]);
 
   const runMonacoAction = useCallback((actionId: string) => {
     const mono = monacoRef.current;
@@ -201,149 +169,6 @@ export default function HomePage() {
     [replaceSelection]
   );
 
-  // Warm the packaged sidecar on mount so the first user action is not silent.
-  useEffect(() => {
-    let cancelled = false;
-    const detectedTauriRuntime = isLikelyDesktopRuntime();
-    const showPackagedBackendStatus = shouldShowPackagedBackendStatus();
-    setIsLikelyTauriRuntime(detectedTauriRuntime);
-
-    async function initialiseBackend() {
-      try {
-        if (showPackagedBackendStatus) {
-          setBackendStatus("starting");
-          await getBaseUrl();
-        }
-        if (cancelled) return;
-        setBackendStatus("ready");
-        setBackendMessage(null);
-        await editor.loadRecentFiles();
-        if (!cancelled && editor.activeTab.content) {
-          editor.refreshPreview(editor.activeTab.content);
-        }
-      } catch (err) {
-        console.error(err);
-        if (!cancelled) {
-          if (showPackagedBackendStatus) {
-            setBackendStatus("error");
-            setBackendMessage(err instanceof Error ? err.message : String(err));
-          } else {
-            setBackendStatus("ready");
-            setBackendMessage(null);
-          }
-        }
-      }
-    }
-
-    void initialiseBackend();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // "Open file" — uses a hidden file-input because Tauri/browser can't call
-  // the native dialog directly without the Tauri API.  In Tauri mode this
-  // would be replaced by window.__TAURI__.dialog.open().
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleOpenFile = useCallback(async () => {
-    if (isLikelyTauriRuntime && backendStatus !== "ready") return;
-
-    let filePath: string | null = null;
-
-    try {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const selected = await open({
-        multiple: false,
-        filters: [
-          { name: "Supported documents", extensions: OPEN_FILE_EXTENSIONS },
-          { name: "Markdown", extensions: ["md", "markdown", "txt"] },
-          { name: "Convertible documents", extensions: ["html", "htm", "pdf", "docx"] },
-        ],
-      });
-      if (!selected) return;
-      filePath = Array.isArray(selected) ? selected[0] : selected;
-    } catch {
-      // In desktop runtime, avoid browser picker fallback to prevent permission dialogs.
-      if (isLikelyTauriRuntime) return;
-
-      // Browser mode fallback.
-      fileInputRef.current?.click();
-      return;
-    }
-
-    if (!filePath) return;
-
-    try {
-      await editor.openFile(filePath);
-    } catch (err) {
-      alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }, [backendStatus, editor, isLikelyTauriRuntime]);
-
-  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const ext = fileExtension(file.name);
-      if (CONVERTIBLE_EXTENSIONS.has(ext)) {
-        const content_base64 = arrayBufferToBase64(await file.arrayBuffer());
-        const { markdown } = await Files.convertToMarkdown({
-          filename: file.name,
-          content_base64,
-        });
-        editor.openTextAsTab(convertedMarkdownLabel(file.name), markdown, null, null, true);
-      } else {
-        // In pure browser we do not have an absolute path, so use filename as tab label.
-        const text = await file.text();
-        editor.openTextAsTab(file.name, text, null);
-      }
-    } catch (err) {
-      alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      e.target.value = "";
-    }
-  };
-
-  const handleExport = useCallback(async (format: "html" | "pdf" | "docx") => {
-    try {
-      let outputPath: string | undefined;
-      const extension = format === "pdf" ? "pdf" : format === "docx" ? "docx" : "html";
-      const defaultName = `${editor.activeTab.label.replace(/\.[^/.]+$/, "") || "document"}.${extension}`;
-
-      try {
-        const { save } = await import("@tauri-apps/plugin-dialog");
-        const selected = await save({
-          defaultPath: defaultName,
-          filters: [{ name: `${extension.toUpperCase()} files`, extensions: [extension] }],
-        });
-        if (!selected) return;
-        outputPath = Array.isArray(selected) ? selected[0] : selected;
-      } catch {
-        if (format === "html") {
-          const payload: ExportPayload = {
-            content: editor.activeTab.content,
-            base_dir: editor.activeTab.filePath?.replace(/[^/\\]+$/, ""),
-            dark_mode: editor.darkMode,
-            font_size: editor.fontSize,
-          };
-          const blob = await Export.downloadHtml(payload);
-          downloadBlob(blob, defaultName);
-          return;
-        }
-        alert("PDF/DOCX export requires Tauri desktop app for save dialog.");
-        return;
-      }
-      const result = await editor.exportAs(format, outputPath);
-      if (result) {
-        alert(`Exported to:\n${result.path}`);
-      }
-    } catch (err) {
-      alert(`Export failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }, [editor]);
-
   const actions = useMemo<Record<ActionId, () => void>>(
     () => ({
       "file.new": editor.newTab,
@@ -369,6 +194,7 @@ export default function HomePage() {
       "view.toggleDarkMode": () => editor.setDarkMode((dark) => !dark),
       "view.toggleFocusMode": () => editor.setDarkMode((focus) => !focus),
       "view.toggleAIPanel": () => setShowAIPanel((visible) => !visible),
+      "view.openBrowserPreview": () => { void handleOpenBrowserPreview(); },
       "view.fullEditor": () => setSplit(100),
       "view.balancedSplit": () => setSplit(50),
       "view.fullPreview": () => setSplit(0),
@@ -378,6 +204,7 @@ export default function HomePage() {
       editor,
       handleOpenFile,
       handleExport,
+      handleOpenBrowserPreview,
       handleSaveFile,
       insertTable,
       runMonacoAction,
@@ -434,6 +261,7 @@ export default function HomePage() {
         items: [
           { id: "view.toggleDarkMode", label: "Toggle Dark Mode", onSelect: actions["view.toggleDarkMode"] },
           { id: "view.toggleAIPanel", label: "Show AI Agent Panel", onSelect: actions["view.toggleAIPanel"] },
+          { id: "view.openBrowserPreview", label: "Open Preview in Browser", onSelect: actions["view.openBrowserPreview"], disabled: backendDisabled },
           "separator",
           { id: "view.fullEditor", label: "Full Width Editor", onSelect: actions["view.fullEditor"] },
           { id: "view.balancedSplit", label: "Balanced Split View", onSelect: actions["view.balancedSplit"] },
@@ -583,22 +411,13 @@ export default function HomePage() {
         return;
       }
       try {
-        const result = await AI.chat({
-          message: command.prompt,
-          document_text: documentText,
-          selected_text: getSelectedText(),
-          chat_history: [],
-        });
-        if (result.proposed_action.type !== "none") {
-          handleAIApplyAction(result.proposed_action.type, result.proposed_action.content);
-        } else if (result.assistant_message) {
-          alert(result.assistant_message);
-        }
+        const message = await executeAIPrompt(command.prompt, documentText);
+        if (message) alert(message);
       } catch (err) {
         alert(`AI command failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
-    [slash, insertTable, editor, handleAIApplyAction, getSelectedText]
+    [slash, insertTable, editor.activeTab.content, executeAIPrompt]
   );
 
   const slashRef = useRef({
@@ -706,175 +525,22 @@ export default function HomePage() {
       ? monacoRef.current.getScrolledVisiblePosition(slash.triggerPosition)
       : null;
 
-  useEffect(() => {
-    openFileRef.current = editor.openFile;
-    openTextAsTabRef.current = editor.openTextAsTab;
-  }, [editor.openFile, editor.openTextAsTab]);
-
-  const openDroppedPaths = useCallback(
-    async (paths: string[]) => {
-      const supportedPaths = paths.filter(isSupportedFile);
-      if (supportedPaths.length === 0) return;
-
-      const signature = supportedPaths.join("\n");
-      const previousDrop = lastDroppedPathsRef.current;
-      const now = Date.now();
-      if (previousDrop?.signature === signature && now - previousDrop.at < 750) return;
-      lastDroppedPathsRef.current = { signature, at: now };
-
-      for (const path of supportedPaths) {
-        try {
-          await openFileRef.current(path);
-        } catch (err) {
-          alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
-    },
-    []
-  );
-
-  useEffect(() => {
-    if (!isLikelyTauriRuntime) return;
-
-    let cancelled = false;
-    let unlisten: (() => void) | null = null;
-
-    import("@tauri-apps/api/webview")
-      .then(({ getCurrentWebview }) =>
-        getCurrentWebview().onDragDropEvent((event) => {
-          if (event.payload.type === "drop") {
-            void openDroppedPaths(event.payload.paths);
-          }
-        })
-      )
-      .then((cleanup) => {
-        if (cancelled) {
-          cleanup();
-        } else {
-          unlisten = cleanup;
-        }
-      })
-      .catch(console.error);
-
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, [isLikelyTauriRuntime, openDroppedPaths]);
-
-  useEffect(() => {
-    if (!isLikelyTauriRuntime) return;
-
-    let cancelled = false;
-    let unlisten: (() => void) | null = null;
-    const openPaths = (paths: string[]) => {
-      if (paths.length > 0) {
-        void openDroppedPaths(paths);
-      }
-    };
-
-    import("@tauri-apps/api/event")
-      .then(({ listen }) => listen<string[]>("open-file-paths", (event) => openPaths(event.payload)))
-      .then((cleanup) => {
-        if (cancelled) {
-          cleanup();
-        } else {
-          unlisten = cleanup;
-        }
-        return import("@tauri-apps/api/core");
-      })
-      .then(({ invoke }) => invoke<string[]>("take_pending_open_files"))
-      .then((paths) => {
-        if (!cancelled) openPaths(paths);
-      })
-      .catch(console.error);
-
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, [isLikelyTauriRuntime, openDroppedPaths]);
-
-  // ── Drag-and-drop file handling ────────────────────────────────────────────
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    dragCounterRef.current += 1;
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    dragCounterRef.current -= 1;
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
-  }, []);
-
-  const handleDrop = useCallback(
-    async (e: React.DragEvent) => {
-      e.preventDefault();
-      dragCounterRef.current = 0;
-
-      const files = Array.from(e.dataTransfer.files);
-
-      if (files.length === 0) return;
-
-      // In Tauri mode, the native webview event is the reliable source of paths.
-      // Keep this fallback for runtimes that still expose a File.path value.
-      if (isLikelyTauriRuntime) {
-        const paths = files
-          .map((file) => (file as File & { path?: string }).path)
-          .filter((path): path is string => Boolean(path));
-        await openDroppedPaths(paths);
-        return;
-      } else {
-        // Browser mode — read file contents
-        for (const file of files) {
-          if (!isSupportedFile(file.name)) continue;
-
-          const ext = fileExtension(file.name);
-          if (CONVERTIBLE_EXTENSIONS.has(ext)) {
-            try {
-              const content_base64 = arrayBufferToBase64(await file.arrayBuffer());
-              const { markdown } = await Files.convertToMarkdown({
-                filename: file.name,
-                content_base64,
-              });
-              openTextAsTabRef.current(convertedMarkdownLabel(file.name), markdown, null, null, true);
-            } catch (err) {
-              alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
-            }
-          } else {
-            try {
-              const text = await file.text();
-              openTextAsTabRef.current(file.name, text, null);
-            } catch (err) {
-              alert(`Open failed: ${err instanceof Error ? err.message : String(err)}`);
-            }
-          }
-        }
-      }
-    },
-    [isLikelyTauriRuntime, openDroppedPaths]
-  );
-
   return (
     <div
       className={`flex flex-col h-screen overflow-hidden ${editor.darkMode ? "dark" : ""}`}
       style={{ background: editor.darkMode ? "#1e1e1e" : "#fff" }}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      onDragEnter={fileIO.handleDragEnter}
+      onDragLeave={fileIO.handleDragLeave}
+      onDragOver={fileIO.handleDragOver}
+      onDrop={fileIO.handleDrop}
     >
       {/* Hidden file input for open-file */}
       <input
-        ref={fileInputRef}
+        ref={fileIO.fileInputRef}
         type="file"
-        accept=".md,.markdown,.txt,.html,.htm,.pdf,.docx"
+        accept={fileIO.fileInputAccept}
         className="hidden"
-        onChange={handleFileInputChange}
+        onChange={fileIO.handleFileInputChange}
       />
 
       {/* Toolbar */}
@@ -884,6 +550,7 @@ export default function HomePage() {
           onOpenFile={() => { void handleOpenFile(); }}
           onSaveFile={() => { void handleSaveFile(); }}
           onExport={handleExport}
+          onOpenBrowserPreview={() => { void handleOpenBrowserPreview(); }}
           onToggleDark={() => editor.setDarkMode((d) => !d)}
           onToggleAIPanel={() => setShowAIPanel((v) => !v)}
           onToggleCitationPanel={() => setShowCitationPanel((v) => !v)}

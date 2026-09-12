@@ -9,7 +9,10 @@ from __future__ import annotations
 import os
 import re
 import sys
+import tempfile
 import unicodedata
+import webbrowser
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -48,6 +51,10 @@ class OutlinePayload(BaseModel):
     """Input for the /outline endpoint."""
 
     content: str
+
+
+class OpenPreviewPayload(RenderPayload):
+    """Input for opening the rendered Markdown preview in a browser."""
 
 
 # ── Heading helpers ───────────────────────────────────────────────────────────
@@ -127,6 +134,44 @@ def render(payload: RenderPayload):
         font_size=payload.font_size,
     )
     return {"html": html}
+
+
+@router.post("/open-preview")
+def open_preview_in_browser(payload: OpenPreviewPayload):
+    """Render Markdown to a temporary HTML file and open it in the browser."""
+    html = render_markdown(
+        payload.content,
+        base_dir=payload.base_dir,
+        dark_mode=payload.dark_mode,
+        font_family=payload.font_family,
+        font_size=payload.font_size,
+    )
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            suffix=".html",
+            prefix="markdown-reader-preview-",
+            delete=False,
+        ) as preview_file:
+            preview_file.write(html)
+            preview_path = Path(preview_file.name)
+    except OSError as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create preview file: {exc}"
+        ) from exc
+
+    preview_url = preview_path.as_uri()
+    try:
+        opened = webbrowser.open(preview_url, new=2)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to open browser preview: {exc}"
+        ) from exc
+    if not opened:
+        raise HTTPException(status_code=500, detail="Failed to open browser preview.")
+
+    return {"path": str(preview_path), "url": preview_url}
 
 
 @router.post("/convert/html")
