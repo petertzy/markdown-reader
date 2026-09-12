@@ -11,6 +11,10 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@milkdown/crepe": "^7.22.1",
+    "@milkdown/kit": "^7.22.1",
+    "@milkdown/plugin-math": "^7.5.9",
+    "@milkdown/react": "^7.22.1",
     "@monaco-editor/react": "^4.6.0",
     "@tauri-apps/api": "2.10.1",
     "@tauri-apps/plugin-dialog": "2.7.0",

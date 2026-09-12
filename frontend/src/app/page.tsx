@@ -20,6 +20,7 @@ import MenuBar, { type MenuGroup } from "@/components/MenuBar";
 import EditorPane from "@/components/EditorPane";
 import PreviewPane from "@/components/PreviewPane";
 import SplitPane from "@/components/SplitPane";
+import FocusModePane from "@/components/FocusModePane";
 import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
 import SlashCommandMenu from "@/components/SlashCommandMenu";
@@ -33,6 +34,8 @@ import {
 } from "@/lib/keyboardShortcuts";
 
 export default function HomePage() {
+  const [focusMode, setFocusMode] = useState(false);
+  const [stupidWorkaround, setStupidWorkaround] = useState(false);
   const editor = useEditor();
   const [showPreview] = useState(true);
   const [showAIPanel, setShowAIPanel] = useState(false);
@@ -128,11 +131,33 @@ export default function HomePage() {
     [replaceSelection]
   );
 
+  const insertMarkdownBlock = useCallback((markdown: string) => {
+    if (focusMode) {
+      const updated = `${editor.activeTab.content.trimEnd()}\n\n${markdown}\n`;
+      editor.handleContentChange(updated);
+      setStupidWorkaround(s => !s);
+      return;
+    }
+
+    const mono = monacoRef.current;
+    const model = mono?.getModel();
+    const sel = mono?.getSelection();
+
+    if (mono && model && sel) {
+      replaceSelection("insert-table", () => ({
+        text: markdown,
+      }));
+      return;
+    }
+    editor.handleContentChange(`${editor.activeTab.content.trimEnd()}\n\n${markdown}\n`);
+    setStupidWorkaround(s => !s);
+  }, [focusMode, editor, replaceSelection]);
+
   const insertTable = useCallback(() => {
-    replaceSelection("insert-table", () => ({
-      text: "| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |",
-    }));
-  }, [replaceSelection]);
+    insertMarkdownBlock(
+      "| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |",
+    );
+  }, [insertMarkdownBlock]);
 
   const insertCitation = useCallback(
     (citationKey: string) => {
@@ -154,8 +179,8 @@ export default function HomePage() {
       "file.exportHtml": () => { void handleExport("html"); },
       "file.exportPdf": () => { void handleExport("pdf"); },
       "file.exportDocx": () => { void handleExport("docx"); },
-      "edit.undo": () => runMonacoAction("undo"),
-      "edit.redo": () => runMonacoAction("redo"),
+      "edit.undo": () => {if (!focusMode) runMonacoAction("undo")},
+      "edit.redo": () => {if (!focusMode) runMonacoAction("redo")},
       "edit.search": () => runMonacoAction("actions.find"),
       "edit.replace": () => runMonacoAction("editor.action.startFindReplaceAction"),
       "format.bold": () => wrapSelection("bold", "**"),
@@ -167,6 +192,7 @@ export default function HomePage() {
       "format.normal": () => applyHeading(0),
       "table.insert": insertTable,
       "view.toggleDarkMode": () => editor.setDarkMode((dark) => !dark),
+      "view.toggleFocusMode": () => editor.setDarkMode((focus) => !focus),
       "view.toggleAIPanel": () => setShowAIPanel((visible) => !visible),
       "view.openBrowserPreview": () => { void handleOpenBrowserPreview(); },
       "view.fullEditor": () => setSplit(100),
@@ -183,6 +209,7 @@ export default function HomePage() {
       insertTable,
       runMonacoAction,
       wrapSelection,
+      focusMode
     ]
   );
 
@@ -272,7 +299,8 @@ export default function HomePage() {
         const matches = shortcut.bindings.some((binding) => shortcutMatchesEvent(binding, event));
         if (!matches) continue;
         if (shortcut.scope === "editor" && editableTarget && !isMonacoTarget) return;
-
+        if ( focusMode && (shortcut.id === "edit.undo" || shortcut.id === "edit.redo") )
+          return;
         event.preventDefault();
         actions[shortcut.id]();
         return;
@@ -281,7 +309,64 @@ export default function HomePage() {
 
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [actions, shortcuts]);
+  }, [actions, shortcuts, focusMode]);
+
+  const handleAIApplyAction = useCallback(
+    (type: string, content: string) => {
+      if (type === "replace_document") {
+        editor.handleContentChange(content);
+        setStupidWorkaround((s) => !s);
+      } else if (type === "insert_below_document") {
+        const currentContent = editor.activeTab.content;
+        const separator = currentContent.endsWith("\n") ? "\n" : "\n\n";
+        editor.handleContentChange(`${currentContent}${separator}${content}`);
+      } else if (type === "replace_selection") {
+        const mono = monacoRef.current;
+        if (mono) {
+          const sel = mono.getSelection();
+          if (sel) {
+            mono.executeEdits("ai-replace", [{ range: sel, text: content }]);
+          } else {
+            editor.handleContentChange(content);
+          }
+        }
+      } else if (type === "insert_below_selection" || type === "insert_below") {
+        const mono = monacoRef.current;
+        const model = mono?.getModel();
+        const sel = mono?.getSelection();
+        if (mono && model && sel && !sel.isEmpty()) {
+          const selectedText = model.getValueInRange(sel);
+          const separator = selectedText.endsWith("\n") ? "\n" : "\n\n";
+          const range = {
+            startLineNumber: sel.endLineNumber,
+            startColumn: sel.endColumn,
+            endLineNumber: sel.endLineNumber,
+            endColumn: sel.endColumn,
+          };
+          mono.executeEdits("ai-insert-below", [
+            { range, text: `${separator}${content}` },
+          ]);
+        } else {
+          const currentContent = editor.activeTab.content;
+          const separator = currentContent.endsWith("\n") ? "\n" : "\n\n";
+          editor.handleContentChange(`${currentContent}${separator}${content}`);
+        }
+      }
+    },
+    [editor]
+  );
+
+  const getSelectedText = useCallback(() => {
+    const mono = monacoRef.current;
+    if (!mono) return "";
+    const sel = mono.getSelection();
+    if (!sel) return "";
+    return mono.getModel()?.getValueInRange(sel) ?? "";
+  }, []);
+
+  const syncSelectedText = useCallback(() => {
+    setSelectedText(getSelectedText());
+  }, [getSelectedText]);
 
   // ── Slash commands ──────────────────────────────────────────────────────────
   const slash = useSlashCommands();
@@ -469,11 +554,13 @@ export default function HomePage() {
           onToggleDark={() => editor.setDarkMode((d) => !d)}
           onToggleAIPanel={() => setShowAIPanel((v) => !v)}
           onToggleCitationPanel={() => setShowCitationPanel((v) => !v)}
+          onToggleFocusMode={() => {setFocusMode((f) => !f); setMonacoReady(false)}}
           darkMode={editor.darkMode}
           fontSize={editor.fontSize}
           onFontSizeChange={editor.setFontSize}
           showAIPanel={showAIPanel}
           showCitationPanel={showCitationPanel}
+          showFocusPanel={focusMode}
           backendStatus={showPackagedBackendStatus ? backendStatus : "ready"}
           backendMessage={showPackagedBackendStatus ? backendMessage : null}
         />
@@ -496,40 +583,53 @@ export default function HomePage() {
 
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
-        <SplitPane
-          split={split}
-          onSplitChange={setSplit}
-          left={
-            <div className="relative h-full">
-              <EditorPane
-                value={editor.activeTab.content}
-                onChange={editor.handleContentChange}
-                darkMode={editor.darkMode}
-                fontSize={editor.fontSize}
-                onMount={(e) => { monacoRef.current = e; setMonacoReady(true); }}
-              />
-              {slash.isOpen && slashMenuPosition && (
-                <SlashCommandMenu
-                  commands={slash.filteredCommands}
-                  selectedIndex={slash.selectedIndex}
-                  top={slashMenuPosition.top + slashMenuPosition.height}
-                  left={slashMenuPosition.left}
-                  onSelect={(cmd) => { void executeSlashCommand(cmd); }}
-                  onClose={slash.close}
+        {focusMode ? (
+          <FocusModePane
+            value={editor.activeTab.content}
+            onChange={editor.handleContentChange}
+            darkMode={editor.darkMode}
+            fontSize={editor.fontSize}
+            key={`${editor.activeTabId}-${stupidWorkaround}`}
+            slashCommands={slash.filteredCommands}
+            onSelect={(cmd) => { void executeSlashCommand(cmd); }}
+          />
+        ) :
+        (
+          <SplitPane
+            split={split}
+            onSplitChange={setSplit}
+            left={
+              <div className="relative h-full">
+                <EditorPane
+                  value={editor.activeTab.content}
+                  onChange={editor.handleContentChange}
+                  darkMode={editor.darkMode}
+                  fontSize={editor.fontSize}
+                  onMount={(e) => { monacoRef.current = e; setMonacoReady(true); }}
                 />
-              )}
-            </div>
-          }
-          right={
-            showPreview ? (
-              <PreviewPane
-                html={editor.previewHtml}
-                loading={showPackagedBackendStatus && backendStatus === "starting"}
-                error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null}
-              />
-            ) : null
-          }
-        />
+                {slash.isOpen && slashMenuPosition && (
+                  <SlashCommandMenu
+                    commands={slash.filteredCommands}
+                    selectedIndex={slash.selectedIndex}
+                    top={slashMenuPosition.top + slashMenuPosition.height}
+                    left={slashMenuPosition.left}
+                    onSelect={(cmd) => { void executeSlashCommand(cmd); }}
+                    onClose={slash.close}
+                  />
+                )}
+              </div>
+            }
+            right={
+              showPreview ? (
+                <PreviewPane
+                  html={editor.previewHtml}
+                  loading={showPackagedBackendStatus && backendStatus === "starting"}
+                  error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null}
+                />
+              ) : null
+            }
+          />
+        )}
 
         {/* AI Panel */}
         {showAIPanel && (
