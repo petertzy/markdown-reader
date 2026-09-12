@@ -13,11 +13,13 @@ type Props = {
   onToggleDark: () => void;
   onToggleAIPanel: () => void;
   onToggleCitationPanel: () => void;
+  onToggleFocusMode: () => void;
   darkMode: boolean;
   fontSize: number;
   onFontSizeChange: (size: number) => void;
   showAIPanel: boolean;
   showCitationPanel: boolean;
+  showFocusPanel: boolean;
   backendStatus?: "starting" | "ready" | "error";
   backendMessage?: string | null;
 };
@@ -29,11 +31,13 @@ export default function Toolbar({
   onToggleDark,
   onToggleAIPanel,
   onToggleCitationPanel,
+  onToggleFocusMode,
   darkMode,
   fontSize,
   onFontSizeChange,
   showAIPanel,
   showCitationPanel,
+  showFocusPanel,
   backendStatus = "ready",
   backendMessage = null,
 }: Props) {
@@ -83,6 +87,13 @@ export default function Toolbar({
       )}
 
       {/* Toggles */}
+      <button
+        onClick={onToggleFocusMode}
+        className={`${btnCls} ${showFocusPanel ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
+        title="AI Assistant"
+      >
+        🧠 Focus
+      </button>
       <button
         onClick={onToggleAIPanel}
         className={`${btnCls} ${showAIPanel ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}

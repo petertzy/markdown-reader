@@ -12,3 +12,7 @@ html, body, #__next {
 .monaco-editor {
   height: 100% !important;
 }
+
+.focus-mode-editor .milkdown {
+  --crepe-base-font-size: var(--fme-font-size);
+}
