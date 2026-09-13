@@ -83,7 +83,9 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
     id: "edit.redo",
     label: "Redo",
     scope: "global",
-    bindings: [isMac ? primary("z", { shift: true }) : { key: "y", ctrl: true }],
+    bindings: isMac
+      ? [primary("z", { shift: true })]
+      : [{ key: "y", ctrl: true }, primary("z", { shift: true })],
   },
   { id: "edit.search", label: "Search", scope: "editor", bindings: [primary("f")] },
   {
