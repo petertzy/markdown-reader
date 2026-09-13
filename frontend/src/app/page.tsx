@@ -502,6 +502,7 @@ export default function HomePage() {
           left={
             <div className="relative h-full">
               <EditorPane
+                path={editor.activeTab.id}
                 value={editor.activeTab.content}
                 onChange={editor.handleContentChange}
                 darkMode={editor.darkMode}

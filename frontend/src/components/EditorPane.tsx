@@ -17,6 +17,7 @@ const MonacoEditor = dynamic(
 );
 
 type Props = {
+  path?: string;
   value: string;
   onChange: (value: string | undefined) => void;
   darkMode: boolean;
@@ -25,10 +26,11 @@ type Props = {
   onMount?: (editor: editor.IStandaloneCodeEditor, monaco: typeof Monaco) => void;
 };
 
-export default function EditorPane({ value, onChange, darkMode, fontSize, onMount }: Props) {
+export default function EditorPane({ path, value, onChange, darkMode, fontSize, onMount }: Props) {
   return (
     <div className="flex-1 overflow-hidden h-full">
       <MonacoEditor
+        path={path}
         height="100%"
         language="markdown"
         theme={darkMode ? "vs-dark" : "light"}
