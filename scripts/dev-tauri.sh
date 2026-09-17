@@ -3,8 +3,9 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-FRONTEND="${ROOT}/frontend"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/package-common.sh" 
+FRONTEND="${FRONTEND_DIR}"
+
 BACKEND_PORT="${MARKDOWN_READER_BACKEND_PORT:-8000}"
 BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}"
 
@@ -13,12 +14,10 @@ PYTHON_RUNNER=()
 
 echo "▶ Preparing Markdown Reader development environment…"
 echo "▶ Syncing dependencies…"
-if command -v uv >/dev/null 2>&1; then
-  cd "${ROOT}"
-  uv sync
-else
-  echo "⚠ 'uv' not found; skipping automatic Python dependency sync (falling back to existing Python environment)."
-fi
+ensure_uv
+cd "${ROOT}"
+uv sync
+ensure_node
 (cd "${FRONTEND}" && npm install)
 
 if [ -d "/opt/homebrew/lib" ]; then
