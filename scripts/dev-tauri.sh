@@ -3,9 +3,9 @@
 
 set -euo pipefail
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/package-common.sh" 
-FRONTEND="${FRONTEND_DIR}"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/package-common.sh"
 
+FRONTEND="${FRONTEND_DIR}"
 BACKEND_PORT="${MARKDOWN_READER_BACKEND_PORT:-8000}"
 BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}"
 
