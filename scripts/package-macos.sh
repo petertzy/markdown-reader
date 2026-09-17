@@ -2,6 +2,10 @@
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/package-common.sh"
+info "Syncing dependencies…"
+cd "${ROOT}"
+uv sync
+(cd "${FRONTEND_DIR}" && npm install)
 
 usage() {
   cat <<'EOF'

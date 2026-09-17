@@ -39,6 +39,20 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
     throw "Rust is required for packaging. Install the Rust toolchain from https://rustup.rs and retry."
 }
 
+Write-Host "==> Syncing dependencies..."
+Set-Location $root
+uv sync
+if ($LASTEXITCODE -ne 0) { throw "uv sync failed." }
+
+try {
+    Set-Location $frontend
+    npm install
+    if ($LASTEXITCODE -ne 0) { throw "npm install failed." }
+}
+finally {
+    Set-Location $root
+}
+
 if (-not (rustup target list --installed | Select-String -SimpleMatch $Target)) {
     Write-Host "==> Installing Rust target $Target..."
     rustup target add $Target

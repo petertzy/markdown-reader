@@ -12,6 +12,10 @@ BACKEND_PID=""
 PYTHON_RUNNER=()
 
 echo "▶ Preparing Markdown Reader development environment…"
+echo "▶ Syncing dependencies…"
+cd "${ROOT}"
+uv sync
+(cd "${FRONTEND}" && npm install)
 
 if [ -d "/opt/homebrew/lib" ]; then
   export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib${DYLD_FALLBACK_LIBRARY_PATH:+:${DYLD_FALLBACK_LIBRARY_PATH}}"
