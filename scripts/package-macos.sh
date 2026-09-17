@@ -58,9 +58,15 @@ if ! xcode-select -p >/dev/null 2>&1; then
   die "Xcode Command Line Tools are required for macOS packaging. Run 'xcode-select --install' and retry."
 fi
 
+info "Syncing dependencies…"
+ensure_uv
+cd "${ROOT}"
+uv sync
+ensure_node
+(cd "${FRONTEND_DIR}" && npm install)
+
 ensure_rust_target "$TARGET"
 build_backend_sidecar "$TARGET"
-install_frontend_dependencies
 cleanup_macos_dmg_work_files "$TARGET"
 clean_tauri_bundle_dir "$TARGET"
 if [[ "${BUILD_DMG}" -eq 1 ]]; then

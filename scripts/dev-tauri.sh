@@ -3,8 +3,9 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-FRONTEND="${ROOT}/frontend"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/package-common.sh"
+
+FRONTEND="${FRONTEND_DIR}"
 BACKEND_PORT="${MARKDOWN_READER_BACKEND_PORT:-8000}"
 BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}"
 
@@ -12,6 +13,12 @@ BACKEND_PID=""
 PYTHON_RUNNER=()
 
 echo "▶ Preparing Markdown Reader development environment…"
+echo "▶ Syncing dependencies…"
+ensure_uv
+cd "${ROOT}"
+uv sync
+ensure_node
+(cd "${FRONTEND}" && npm install)
 
 if [ -d "/opt/homebrew/lib" ]; then
   export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib${DYLD_FALLBACK_LIBRARY_PATH:+:${DYLD_FALLBACK_LIBRARY_PATH}}"

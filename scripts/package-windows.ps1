@@ -39,14 +39,24 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
     throw "Rust is required for packaging. Install the Rust toolchain from https://rustup.rs and retry."
 }
 
+Write-Host "==> Syncing dependencies..."
+Set-Location $root
+uv sync
+if ($LASTEXITCODE -ne 0) { throw "uv sync failed." }
+
+try {
+    Set-Location $frontend
+    npm install
+    if ($LASTEXITCODE -ne 0) { throw "npm install failed." }
+}
+finally {
+    Set-Location $root
+}
+
 if (-not (rustup target list --installed | Select-String -SimpleMatch $Target)) {
     Write-Host "==> Installing Rust target $Target..."
     rustup target add $Target
 }
-
-Write-Host "==> Syncing Python dependencies with uv..."
-Set-Location $root
-uv sync --frozen
 
 Write-Host "==> Building backend sidecar with PyInstaller..."
 uv run pyinstaller markdown-reader-backend.spec
@@ -64,9 +74,7 @@ $defaultName = Join-Path $binaryDir "markdown-reader-backend.exe"
 Copy-Item $source $targetName -Force
 Copy-Item $source $defaultName -Force
 
-Write-Host "==> Installing frontend dependencies with npm ci..."
 Set-Location $frontend
-npm ci
 
 Write-Host "==> Building Tauri desktop bundle for target $Target..."
 $env:NEXT_EXPORT = "1"
