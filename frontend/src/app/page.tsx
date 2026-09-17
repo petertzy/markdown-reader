@@ -192,7 +192,7 @@ export default function HomePage() {
       "format.normal": () => applyHeading(0),
       "table.insert": insertTable,
       "view.toggleDarkMode": () => editor.setDarkMode((dark) => !dark),
-      "view.toggleFocusMode": () => editor.setDarkMode((focus) => !focus),
+      "view.toggleFocusMode": () => setFocusMode((focus) => !focus),
       "view.toggleAIPanel": () => setShowAIPanel((visible) => !visible),
       "view.openBrowserPreview": () => { void handleOpenBrowserPreview(); },
       "view.fullEditor": () => setSplit(100),
@@ -593,8 +593,7 @@ export default function HomePage() {
             slashCommands={slash.filteredCommands}
             onSelect={(cmd) => { void executeSlashCommand(cmd); }}
           />
-        ) :
-        (
+        ) : (
           <SplitPane
             split={split}
             onSplitChange={setSplit}
@@ -602,7 +601,7 @@ export default function HomePage() {
               <div className="relative h-full">
                 <EditorPane
                   path={editor.activeTab.id}
-                value={editor.activeTab.content}
+                  value={editor.activeTab.content}
                   onChange={editor.handleContentChange}
                   darkMode={editor.darkMode}
                   fontSize={editor.fontSize}
