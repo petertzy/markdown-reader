@@ -222,24 +222,28 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
       if (paths && paths.length > 0) void openDroppedPaths(paths);
     };
 
-    import("@tauri-apps/api/event")
-      .then(({ listen }) => listen<string[]>("open-file-paths", (event) => openPaths(event.payload)))
-      .then((cleanup) => {
-        if (cancelled) cleanup();
-        else unlisten = cleanup;
-      })
-      .catch(console.error);
+    void (async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        const cleanup = await listen<string[]>("open-file-paths", (event) => openPaths(event.payload));
 
-    if (backendStatus === "ready") {
-      console.log("[DEBUG JS] Backend is READY, requesting pending files...");
-      import("@tauri-apps/api/core")
-        .then(({ invoke }) => invoke<string[]>("take_pending_open_files"))
-        .then((paths) => {
+        if (cancelled) {
+          cleanup();
+          return;
+        }
+        unlisten = cleanup;
+
+        if (backendStatus === "ready") {
+          console.log("[DEBUG JS] Backend is READY, requesting pending files...");
+          const { invoke } = await import("@tauri-apps/api/core");
+          const paths = await invoke<string[]>("take_pending_open_files");
           console.log("[DEBUG JS] Received pending paths from Rust:", paths);
           if (!cancelled && paths) openPaths(paths);
-        })
-        .catch((err) => console.error("[DEBUG JS] Error in take_pending_open_files:", err));
-    }
+        }
+      } catch (error) {
+        console.error("[DEBUG JS] Error setting up file-open handling:", error);
+      }
+    })();
 
     return () => {
       cancelled = true;
