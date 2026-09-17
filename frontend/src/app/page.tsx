@@ -311,63 +311,6 @@ export default function HomePage() {
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [actions, shortcuts, focusMode]);
 
-  const handleAIApplyAction = useCallback(
-    (type: string, content: string) => {
-      if (type === "replace_document") {
-        editor.handleContentChange(content);
-        setStupidWorkaround((s) => !s);
-      } else if (type === "insert_below_document") {
-        const currentContent = editor.activeTab.content;
-        const separator = currentContent.endsWith("\n") ? "\n" : "\n\n";
-        editor.handleContentChange(`${currentContent}${separator}${content}`);
-      } else if (type === "replace_selection") {
-        const mono = monacoRef.current;
-        if (mono) {
-          const sel = mono.getSelection();
-          if (sel) {
-            mono.executeEdits("ai-replace", [{ range: sel, text: content }]);
-          } else {
-            editor.handleContentChange(content);
-          }
-        }
-      } else if (type === "insert_below_selection" || type === "insert_below") {
-        const mono = monacoRef.current;
-        const model = mono?.getModel();
-        const sel = mono?.getSelection();
-        if (mono && model && sel && !sel.isEmpty()) {
-          const selectedText = model.getValueInRange(sel);
-          const separator = selectedText.endsWith("\n") ? "\n" : "\n\n";
-          const range = {
-            startLineNumber: sel.endLineNumber,
-            startColumn: sel.endColumn,
-            endLineNumber: sel.endLineNumber,
-            endColumn: sel.endColumn,
-          };
-          mono.executeEdits("ai-insert-below", [
-            { range, text: `${separator}${content}` },
-          ]);
-        } else {
-          const currentContent = editor.activeTab.content;
-          const separator = currentContent.endsWith("\n") ? "\n" : "\n\n";
-          editor.handleContentChange(`${currentContent}${separator}${content}`);
-        }
-      }
-    },
-    [editor]
-  );
-
-  const getSelectedText = useCallback(() => {
-    const mono = monacoRef.current;
-    if (!mono) return "";
-    const sel = mono.getSelection();
-    if (!sel) return "";
-    return mono.getModel()?.getValueInRange(sel) ?? "";
-  }, []);
-
-  const syncSelectedText = useCallback(() => {
-    setSelectedText(getSelectedText());
-  }, [getSelectedText]);
-
   // ── Slash commands ──────────────────────────────────────────────────────────
   const slash = useSlashCommands();
 
