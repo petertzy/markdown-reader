@@ -58,10 +58,6 @@ if (-not (rustup target list --installed | Select-String -SimpleMatch $Target)) 
     rustup target add $Target
 }
 
-Write-Host "==> Syncing Python dependencies with uv..."
-Set-Location $root
-uv sync --frozen
-
 Write-Host "==> Building backend sidecar with PyInstaller..."
 uv run pyinstaller markdown-reader-backend.spec
 
@@ -78,9 +74,7 @@ $defaultName = Join-Path $binaryDir "markdown-reader-backend.exe"
 Copy-Item $source $targetName -Force
 Copy-Item $source $defaultName -Force
 
-Write-Host "==> Installing frontend dependencies with npm ci..."
 Set-Location $frontend
-npm ci
 
 Write-Host "==> Building Tauri desktop bundle for target $Target..."
 $env:NEXT_EXPORT = "1"

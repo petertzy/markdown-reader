@@ -78,9 +78,7 @@ build_backend_sidecar() {
   local bin_ext="${2:-}"
 
   ensure_uv
-  info "Syncing Python dependencies with uv..."
   cd "${ROOT}"
-  uv sync --frozen
 
   info "Building backend sidecar with PyInstaller..."
   uv run pyinstaller markdown-reader-backend.spec
@@ -101,13 +99,6 @@ build_backend_sidecar() {
   chmod +x "${default_dest}" || true
 
   info "Backend sidecar staged at ${default_dest}"
-}
-
-install_frontend_dependencies() {
-  ensure_node
-  info "Installing frontend dependencies with npm ci..."
-  cd "${FRONTEND_DIR}"
-  npm ci
 }
 
 run_tauri_build() {

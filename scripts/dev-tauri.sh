@@ -13,8 +13,12 @@ PYTHON_RUNNER=()
 
 echo "▶ Preparing Markdown Reader development environment…"
 echo "▶ Syncing dependencies…"
-cd "${ROOT}"
-uv sync
+if command -v uv >/dev/null 2>&1; then
+  cd "${ROOT}"
+  uv sync
+else
+  echo "⚠ 'uv' not found; skipping automatic Python dependency sync (falling back to existing Python environment)."
+fi
 (cd "${FRONTEND}" && npm install)
 
 if [ -d "/opt/homebrew/lib" ]; then

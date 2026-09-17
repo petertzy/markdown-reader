@@ -2,10 +2,6 @@
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/package-common.sh"
-info "Syncing dependencies…"
-cd "${ROOT}"
-uv sync
-(cd "${FRONTEND_DIR}" && npm install)
 
 usage() {
   cat <<'EOF'
@@ -39,10 +35,17 @@ while [[ $# -gt 0 ]]; do
 done
 
 check_run_on_supported_platform linux
+
+info "Syncing dependencies…"
+ensure_uv
+cd "${ROOT}"
+uv sync
+ensure_node
+(cd "${FRONTEND_DIR}" && npm install)
+
 prepare_linux_system_deps
 ensure_rust_target "$TARGET"
 build_backend_sidecar "$TARGET"
-install_frontend_dependencies
 run_tauri_build "$TARGET"
 collect_release_artifacts "$TARGET"
 
