@@ -7,7 +7,7 @@
   [![Linux x64](https://img.shields.io/badge/Linux-x64-yellow?logo=linux)](#desktop-downloads)
   
   <br />
-  <img width="1071" height="671" alt="Image" src="https://github.com/user-attachments/assets/188edc7c-ea77-4153-9ac6-c56c970d930c" />
+  <img width="1105" height="628" alt="Image" src="https://github.com/user-attachments/assets/67ad3306-5a54-44f3-9d8d-386c73d4b814" />
 </div>
 
 ---
