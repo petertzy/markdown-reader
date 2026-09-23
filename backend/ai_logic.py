@@ -585,6 +585,20 @@ def _is_quota_error(text: str) -> bool:
     return "insufficient_quota" in lowered or "insufficient quota" in lowered
 
 
+_CONTEXT_LENGTH_ERROR_MARKERS = (
+    "context_length_exceeded",
+    "context_length_is_too_long",
+    "context length exceeded",
+    "maximum context length",
+    "too many tokens",
+)
+
+
+def _is_context_length_error(text: str) -> bool:
+    lowered = (text or "").lower()
+    return any(marker in lowered for marker in _CONTEXT_LENGTH_ERROR_MARKERS)
+
+
 def _post_with_retry(
     url: str,
     headers: dict[str, str],
@@ -1168,7 +1182,7 @@ def _batch_translation_units(
     return batches
 
 
-def _request_sentence_translation_batch_from_provider(
+def _request_sentence_translation_batch_once(
     provider: str,
     api_key: str,
     model: str,
@@ -1230,6 +1244,55 @@ def _request_sentence_translation_batch_from_provider(
     if not response_text:
         raise RuntimeError("AI provider returned an empty sentence translation.")
     return _coerce_translation_pairs(response_text, source_units)
+
+
+def _request_sentence_translation_batch_from_provider(
+    provider: str,
+    api_key: str,
+    model: str,
+    source_units: list[str],
+    source_language: str,
+    target_language: str,
+) -> list[dict[str, str]]:
+    """Translate a batch, shrinking it when the provider runs out of context.
+
+    A single sentence far below the batch limit can still trip a provider's
+    context limit once the system and user prompts are included. When the
+    provider reports ``context_length_exceeded`` (or an equivalent message),
+    the batch is split in half and each half is retried recursively so only
+    the offending units keep shrinking. A single unit that still fails is
+    surfaced as a fatal error, since there is nothing left to shrink.
+    """
+    try:
+        return _request_sentence_translation_batch_once(
+            provider,
+            api_key,
+            model,
+            source_units,
+            source_language,
+            target_language,
+        )
+    except ProviderRequestError as exc:
+        if not _is_context_length_error(exc.detail) or len(source_units) <= 1:
+            raise
+    mid = max(1, len(source_units) // 2)
+    first_half = _request_sentence_translation_batch_from_provider(
+        provider,
+        api_key,
+        model,
+        source_units[:mid],
+        source_language,
+        target_language,
+    )
+    second_half = _request_sentence_translation_batch_from_provider(
+        provider,
+        api_key,
+        model,
+        source_units[mid:],
+        source_language,
+        target_language,
+    )
+    return first_half + second_half
 
 
 def split_text_into_translation_units(content: str) -> list[str]:
