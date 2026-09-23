@@ -30,17 +30,17 @@ from backend.render_helpers import (
 
 _BARE_URL_RE = re.compile(r"https?://[^\s<]+")
 _AUTOLINK_SKIP_TAGS = {"a", "code", "pre", "script", "style"}
-_TRAILING_URL_PUNCTUATION = ".,;:!?)]}"
+_TRAILING_URL_PUNCTUATION = ".,;:!?)]}\"'"
 _URL_CLOSER_TO_OPENER = {")": "(", "]": "[", "}": "{"}
 
 
 def _trim_trailing_url_punctuation(url: str) -> tuple[str, str]:
     """Split trailing punctuation off a bare URL.
 
-    Closing brackets are only moved outside the link when they are unbalanced:
-    ``http://example.com/a_(b)`` keeps its closing paren (part of the URL),
-    while a stray ``)`` or sentence punctuation such as ``.`` or ``!`` moves
-    after the link.
+    Closing brackets and quotes are moved outside the link when they delimit
+    the URL in prose: ``http://example.com/a_(b)`` keeps its closing paren
+    (balanced, part of the URL), while a stray ``)``, a closing ``"``/``'``,
+    or sentence punctuation such as ``.`` or ``!`` moves after the link.
     """
     trailing = ""
     while url:

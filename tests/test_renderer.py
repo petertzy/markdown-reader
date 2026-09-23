@@ -55,3 +55,14 @@ class TestRenderMarkdown(unittest.TestCase):
             "http://example.com/done</a>) now.",
             html,
         )
+
+    def test_bare_url_in_quotes_leaves_quotes_outside_the_link(self):
+        html = render_markdown('Read "https://example.com/foo" for details.')
+
+        self.assertIn(
+            '<a href="https://example.com/foo" target="_blank" rel="noopener">'
+            "https://example.com/foo</a>",
+            html,
+        )
+        self.assertNotIn('href="https://example.com/foo&quot;"', html)
+        self.assertIn("</a>&quot; for details.", html)
