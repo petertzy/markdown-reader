@@ -5,6 +5,7 @@ import os
 import re
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -549,6 +550,104 @@ def _extract_anthropic_text(response_data: dict[str, Any]) -> str:
     )
 
 
+_AI_RETRYABLE_STATUS_CODES = frozenset({429, 503})
+_AI_REQUEST_RETRY_ATTEMPTS = 3
+_AI_REQUEST_RETRY_BASE_DELAY_SECONDS = 0.5
+
+
+class ProviderRequestError(RuntimeError):
+    """A provider request failed in a way the caller should surface friendlily.
+
+    Attributes:
+        status_code: The HTTP status that caused the failure, or 0 for transport errors.
+        detail: A short, user-safe description of the failure.
+    """
+
+    def __init__(self, status_code: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
+def _retry_after_seconds(response: Any, default: float) -> float:
+    """Return the Retry-After delay from a response, falling back to `default`."""
+    header = (response.headers or {}).get("Retry-After")
+    if not header:
+        return default
+    try:
+        return max(0.0, float(str(header).strip()))
+    except ValueError:
+        return default
+
+
+def _is_quota_error(text: str) -> bool:
+    lowered = (text or "").lower()
+    return "insufficient_quota" in lowered or "insufficient quota" in lowered
+
+
+def _post_with_retry(
+    url: str,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+    *,
+    max_attempts: int = _AI_REQUEST_RETRY_ATTEMPTS,
+    base_delay: float = _AI_REQUEST_RETRY_BASE_DELAY_SECONDS,
+    timeout: float = 60.0,
+) -> Any:
+    """POST JSON after bounded retries of transient provider failures.
+
+    Transient failures (HTTP 429/503 and connection or timeout errors) are
+    retried with a short exponential backoff that honors ``Retry-After``.
+    After the retries are exhausted a :class:`ProviderRequestError` is raised
+    with a status code and a user-safe message. Quota and auth failures stay
+    immediate and fatal because waiting will not resolve them.
+    """
+    for attempt in range(max_attempts):
+        try:
+            response = requests.post(
+                url, headers=headers, json=payload, timeout=timeout
+            )
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            if attempt >= max_attempts - 1:
+                raise ProviderRequestError(
+                    503,
+                    "The AI provider is temporarily unreachable. "
+                    "Please try again shortly.",
+                ) from exc
+            time.sleep(base_delay * (2**attempt))
+            continue
+
+        status_code = getattr(response, "status_code", 200)
+        if status_code in _AI_RETRYABLE_STATUS_CODES:
+            if status_code == 429 and _is_quota_error(response.text):
+                raise ProviderRequestError(
+                    429,
+                    "The AI provider reported an exceeded quota. "
+                    "Please check the account and try again.",
+                )
+            if attempt >= max_attempts - 1:
+                raise ProviderRequestError(
+                    503,
+                    "The AI provider is temporarily unavailable. "
+                    "Please try again shortly.",
+                )
+            time.sleep(_retry_after_seconds(response, base_delay * (2**attempt)))
+            continue
+
+        if status_code >= 400:
+            raise ProviderRequestError(
+                response.status_code,
+                (response.text or "").strip()
+                or response.reason
+                or "The AI provider rejected the request.",
+            )
+        return response
+
+    raise ProviderRequestError(
+        503, "The AI provider is temporarily unavailable. Please try again shortly."
+    )
+
+
 def _request_translation_from_provider(
     provider: str,
     api_key: str,
@@ -575,24 +674,22 @@ def _request_translation_from_provider(
 
     if provider == "anthropic":
         headers["anthropic-version"] = "2023-06-01"
-        response = requests.post(
+        response = _post_with_retry(
             f"{base_url}/messages",
             headers=headers,
-            json={
+            payload={
                 "model": model,
                 "max_tokens": 4096,
                 "system": system_prompt,
                 "messages": [{"role": "user", "content": user_prompt}],
             },
-            timeout=60,
         )
-        response.raise_for_status()
         translated = _extract_anthropic_text(response.json()).strip()
     else:
-        response = requests.post(
+        response = _post_with_retry(
             f"{base_url}/chat/completions",
             headers=headers,
-            json={
+            payload={
                 "model": model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
@@ -600,9 +697,7 @@ def _request_translation_from_provider(
                 ],
                 "temperature": 0.2,
             },
-            timeout=60,
         )
-        response.raise_for_status()
         translated = _extract_openai_compatible_text(response.json()).strip()
 
     if not translated:
@@ -1106,24 +1201,22 @@ def _request_sentence_translation_batch_from_provider(
 
     if provider == "anthropic":
         headers["anthropic-version"] = "2023-06-01"
-        response = requests.post(
+        response = _post_with_retry(
             f"{base_url}/messages",
             headers=headers,
-            json={
+            payload={
                 "model": model,
                 "max_tokens": 4096,
                 "system": system_prompt,
                 "messages": [{"role": "user", "content": user_prompt}],
             },
-            timeout=60,
         )
-        response.raise_for_status()
         response_text = _extract_anthropic_text(response.json()).strip()
     else:
-        response = requests.post(
+        response = _post_with_retry(
             f"{base_url}/chat/completions",
             headers=headers,
-            json={
+            payload={
                 "model": model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
@@ -1131,9 +1224,7 @@ def _request_sentence_translation_batch_from_provider(
                 ],
                 "temperature": 0.1,
             },
-            timeout=60,
         )
-        response.raise_for_status()
         response_text = _extract_openai_compatible_text(response.json()).strip()
 
     if not response_text:

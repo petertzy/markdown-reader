@@ -329,6 +329,11 @@ def translate(payload: TranslatePayload):
                 "env_var": getattr(exc, "env_var", None),
             },
         )
+    except logic.ProviderRequestError as exc:
+        raise HTTPException(
+            status_code=exc.status_code or 502,
+            detail=exc.detail,
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -361,6 +366,11 @@ def translate_sentences(payload: TranslatePayload):
                 "env_var": exc.env_var,
             },
         )
+    except logic.ProviderRequestError as exc:
+        raise HTTPException(
+            status_code=exc.status_code or 502,
+            detail=exc.detail,
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -388,6 +398,11 @@ def translate_sentence_batch(payload: TranslateSentenceBatchPayload):
                 "provider": exc.provider_name,
                 "env_var": exc.env_var,
             },
+        )
+    except logic.ProviderRequestError as exc:
+        raise HTTPException(
+            status_code=exc.status_code or 502,
+            detail=exc.detail,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
