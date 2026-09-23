@@ -877,6 +877,9 @@ def _slugify_heading_text(text: str) -> str:
 
 def _generate_markdown_toc(markdown_text: str) -> str:
     toc_lines = []
+    # Track slugs so duplicate headings get the ``-1``, ``-2`` … suffix that
+    # GitHub applies when rendering anchors (same rule as ``_extract_outline``).
+    slug_counts: dict[str, int] = {}
     for line in (markdown_text or "").replace("\r\n", "\n").split("\n"):
         match = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
         if not match:
@@ -884,8 +887,12 @@ def _generate_markdown_toc(markdown_text: str) -> str:
         level = len(match.group(1))
         title = match.group(2).strip()
         anchor = _slugify_heading_text(title)
-        if anchor:
-            toc_lines.append(f"{'  ' * max(0, level - 1)}- [{title}](#{anchor})")
+        if not anchor:
+            continue
+        count = slug_counts.get(anchor, 0)
+        unique_anchor = anchor if count == 0 else f"{anchor}-{count}"
+        slug_counts[anchor] = count + 1
+        toc_lines.append(f"{'  ' * max(0, level - 1)}- [{title}](#{unique_anchor})")
     return "## Table of Contents\n\n" + "\n".join(toc_lines) + "\n" if toc_lines else ""
 
 
