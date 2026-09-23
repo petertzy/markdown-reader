@@ -31,17 +31,35 @@ from backend.render_helpers import (
 _BARE_URL_RE = re.compile(r"https?://[^\s<]+")
 _AUTOLINK_SKIP_TAGS = {"a", "code", "pre", "script", "style"}
 _TRAILING_URL_PUNCTUATION = ".,;:!?)]}"
+_URL_CLOSER_TO_OPENER = {")": "(", "]": "[", "}": "{"}
+
+
+def _trim_trailing_url_punctuation(url: str) -> tuple[str, str]:
+    """Split trailing punctuation off a bare URL.
+
+    Closing brackets are only moved outside the link when they are unbalanced:
+    ``http://example.com/a_(b)`` keeps its closing paren (part of the URL),
+    while a stray ``)`` or sentence punctuation such as ``.`` or ``!`` moves
+    after the link.
+    """
+    trailing = ""
+    while url:
+        last = url[-1]
+        if last not in _TRAILING_URL_PUNCTUATION:
+            break
+        opener = _URL_CLOSER_TO_OPENER.get(last)
+        if opener is not None and url.count(opener) >= url.count(last):
+            break
+        trailing = last + trailing
+        url = url[:-1]
+    return url, trailing
 
 
 def _linkify_bare_urls(text: str) -> str:
     parts: list[str] = []
     last = 0
     for match in _BARE_URL_RE.finditer(text):
-        url = match.group(0)
-        trailing = ""
-        while url and url[-1] in _TRAILING_URL_PUNCTUATION:
-            trailing = url[-1] + trailing
-            url = url[:-1]
+        url, trailing = _trim_trailing_url_punctuation(match.group(0))
         if not url:
             continue
         parts.append(html_escape(text[last : match.start()]))
