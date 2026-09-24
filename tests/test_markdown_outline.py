@@ -15,9 +15,10 @@ These tests cover:
 
 from __future__ import annotations
 
+from backend.ai_logic import _generate_markdown_toc, _slugify_heading_text
+
 # Import directly from the module under test.
 from backend.routers.markdown import _extract_outline, _slugify
-from backend.ai_logic import _generate_markdown_toc, _slugify_heading_text
 
 
 def test_toc_slug_matches_outline_slug():
@@ -37,6 +38,7 @@ def test_toc_accented_headings():
     toc = _generate_markdown_toc("# Résumé\n\n## Café")
     assert "- [Résumé](#résumé)" in toc
     assert "- [Café](#café)" in toc
+
 
 # ── _slugify ─────────────────────────────────────────────────────────────────
 
