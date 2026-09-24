@@ -66,7 +66,7 @@ export default function HomePage() {
         onExport={fileIO.handleExport} onOpenBrowserPreview={() => { void handleOpenBrowserPreview(); }}
         onToggleDark={() => editor.setDarkMode((dark) => !dark)} onToggleAIPanel={() => setShowAIPanel((visible) => !visible)}
         onToggleCitationPanel={() => setShowCitationPanel((visible) => !visible)}
-        onToggleFocusMode={() => { setFocusMode((enabled) => !enabled); setMonacoReady(false); setFocusRevision((revision) => revision + 1); }}
+        onToggleFocusMode={() => { setFocusMode((enabled) => !enabled); setMonacoReady(false); monacoRef.current = null; setFocusRevision((revision) => revision + 1); }}
         darkMode={editor.darkMode} fontSize={editor.fontSize} onFontSizeChange={editor.setFontSize}
         showAIPanel={showAIPanel} showCitationPanel={showCitationPanel} showFocusPanel={focusMode}
         backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null} />
