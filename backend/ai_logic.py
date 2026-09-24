@@ -1130,6 +1130,72 @@ def translate_markdown_with_ai(
 
 _SENTENCE_END_CHARS = ".!?。！？"
 
+# Abbreviations whose period should not terminate the sentence, e.g. ``Dr.``.
+_PERIOD_NOT_SENTENCE_END = frozenset(
+    {
+        "mr",
+        "mrs",
+        "ms",
+        "dr",
+        "prof",
+        "sr",
+        "jr",
+        "st",
+        "rev",
+        "gen",
+        "col",
+        "capt",
+        "lt",
+        "sgt",
+        "fig",
+        "ed",
+        "vol",
+        "no",
+        "dept",
+        "univ",
+        "corp",
+        "inc",
+        "ltd",
+        "co",
+        "vs",
+        "etc",
+        "al",
+        "approx",
+        "e.g",
+        "i.e",
+        "u.s",
+        "u.k",
+        "a.m",
+        "p.m",
+    }
+)
+
+
+def _is_abbreviation_period(text: str, period_index: int) -> bool:
+    """Return True when ``period_index`` ends a known abbreviation.
+
+    Covers fixed abbreviations (``Dr.``), single-letter initials (``A.``),
+    and dotted acronyms such as ``U.S.`` or ``p.m.``.
+    """
+    start = period_index
+    while start > 0 and text[start - 1] not in " \t":
+        start -= 1
+    token = text[start:period_index].lower().rstrip(".")
+    if not token:
+        return False
+    return (
+        token in _PERIOD_NOT_SENTENCE_END
+        or (len(token) == 1 and token.isalpha())
+        or re.fullmatch(r"(?:[a-z][.])+[a-z]?", token) is not None
+    )
+
+
+def _first_char_after(line: str, index: int) -> str | None:
+    """First non-space / non-closing-quote char from ``index`` on, or None."""
+    while index < len(line) and (line[index].isspace() or line[index] in "\"'`)]}"):
+        index += 1
+    return line[index] if index < len(line) else None
+
 
 def _strip_json_code_fence(text: str) -> str:
     stripped = text.strip()
@@ -1362,7 +1428,19 @@ def split_text_into_translation_units(content: str) -> list[str]:
                 ")",
                 "]",
             }:
-                flush_buffer()
+                ends_sentence = True
+                if char == ".":
+                    # "Dr." / "e.g." / "U.S." do not end a sentence.
+                    if _is_abbreviation_period(line, char_index):
+                        ends_sentence = False
+                    # "Version 1.2. Next" - otherwise only split when the
+                    # following word is capitalized (real sentence boundary).
+                    else:
+                        following = _first_char_after(line, char_index + 1)
+                        if following is not None and not following.isupper():
+                            ends_sentence = False
+                if ends_sentence:
+                    flush_buffer()
         if line_index < len(lines) - 1 and buffer:
             buffer.append(" ")
 
