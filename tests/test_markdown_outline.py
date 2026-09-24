@@ -15,8 +15,30 @@ These tests cover:
 
 from __future__ import annotations
 
+from backend.ai_logic import _generate_markdown_toc, _slugify_heading_text
+
 # Import directly from the module under test.
 from backend.routers.markdown import _extract_outline, _slugify
+
+
+def test_toc_slug_matches_outline_slug():
+    # Generated TOC anchors must resolve to the anchors used by the
+    # rendered document outline.
+    for heading in ["第一章", "Résumé", "Über Alles", "Data 分析", "Hello World"]:
+        assert _slugify_heading_text(heading) == _slugify(heading)
+
+
+def test_toc_keeps_unicode_headings():
+    toc = _generate_markdown_toc("# 第一章\n\n## 数据分析")
+    assert "- [第一章](#第一章)" in toc
+    assert "- [数据分析](#数据分析)" in toc
+
+
+def test_toc_accented_headings():
+    toc = _generate_markdown_toc("# Résumé\n\n## Café")
+    assert "- [Résumé](#résumé)" in toc
+    assert "- [Café](#café)" in toc
+
 
 # ── _slugify ─────────────────────────────────────────────────────────────────
 

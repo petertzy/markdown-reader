@@ -6,6 +6,7 @@ import re
 import sys
 import threading
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -870,9 +871,13 @@ def _format_and_fix_code_blocks(markdown_text: str) -> str:
 
 
 def _slugify_heading_text(text: str) -> str:
-    plain = re.sub(r"[`*_~\[\](){}]", "", text or "").strip().lower()
-    plain = re.sub(r"[^a-z0-9\s-]", "", plain)
-    return re.sub(r"-+", "-", re.sub(r"\s+", "-", plain)).strip("-")
+    # Match the GitHub-compatible anchors used by the rendered document
+    # outline (backend/routers/markdown.py._slugify) so TOC links actually
+    # resolve: unicode word characters are kept, not discarded.
+    text = unicodedata.normalize("NFC", text or "").lower()
+    text = re.sub(r"[`*_~\[\](){}]", "", text).strip()
+    text = re.sub(r"[^\w\s-]", "", text)
+    return re.sub(r"-+", "-", re.sub(r"\s+", "-", text)).strip("-")
 
 
 def _generate_markdown_toc(markdown_text: str) -> str:
