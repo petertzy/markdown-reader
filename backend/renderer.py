@@ -78,31 +78,89 @@ class _BareUrlLinkifier(HTMLParser):
         super().__init__(convert_charrefs=False)
         self.parts: list[str] = []
         self.skip_stack: list[str] = []
+        # Pending text tokens (data and character/entity refs) that have not
+        # yet been enclosed by a tag. Buffering them lets markdown2's
+        # ampersand-entities (e.g. "&amp;" for a bare "&") rejoin the text so
+        # URLs with query strings are not truncated at their first "&".
+        self._buf: list[tuple[bool, str]] = []
+
+    def _flush(self) -> None:
+        if not self._buf:
+            return
+        if self.skip_stack:
+            self.parts.append(html_escape("".join(s for _, s in self._buf)))
+        else:
+            self.parts.append(_linkify_text_with_entities(self._buf))
+        self._buf = []
 
     def handle_starttag(self, tag: str, attrs) -> None:
+        self._flush()
         self.parts.append(self.get_starttag_text() or "")
         if tag.lower() in _AUTOLINK_SKIP_TAGS:
             self.skip_stack.append(tag.lower())
 
     def handle_startendtag(self, tag: str, attrs) -> None:
+        self._flush()
         self.parts.append(self.get_starttag_text() or "")
 
     def handle_endtag(self, tag: str) -> None:
+        self._flush()
         self.parts.append(f"</{tag}>")
         tag = tag.lower()
         if self.skip_stack and self.skip_stack[-1] == tag:
             self.skip_stack.pop()
 
     def handle_data(self, data: str) -> None:
-        self.parts.append(
-            html_escape(data) if self.skip_stack else _linkify_bare_urls(data)
-        )
+        self._buf.append((False, data))
 
     def handle_entityref(self, name: str) -> None:
-        self.parts.append(f"&{name};")
+        # A bare "&" in the source is escaped to "&amp;" by markdown2 before
+        # linkification. Rejoin it as data so the URL regex sees the whole
+        # query string. Other entities stay opaque.
+        if not self.skip_stack and name == "amp":
+            self._buf.append((False, "&"))
+        else:
+            self._buf.append((True, f"&{name};"))
 
     def handle_charref(self, name: str) -> None:
-        self.parts.append(f"&#{name};")
+        self._buf.append((True, f"&#{name};"))
+
+
+def _linkify_text_with_entities(
+    tokens: list[tuple[bool, str]],
+) -> str:
+    raw: list[str] = []
+    kinds: list[str] = []
+    for is_entity, s in tokens:
+        for _ in s:
+            kinds.append("e" if is_entity else "d")
+        raw.append(s)
+    text = "".join(raw)
+
+    def emit(start: int, end: int) -> str:
+        out: list[str] = []
+        for i in range(start, end):
+            char = text[i]
+            out.append(char if kinds[i] == "e" else html_escape(char))
+        return "".join(out)
+
+    parts: list[str] = []
+    last = 0
+    for match in _BARE_URL_RE.finditer(text):
+        parts.append(emit(last, match.start()))
+        url, trailing = _trim_trailing_url_punctuation(match.group(0))
+        if not url:
+            last = match.start()
+            continue
+        escaped_url = html_escape(url, quote=True)
+        parts.append(
+            f'<a href="{escaped_url}" target="_blank" rel="noopener">{html_escape(url)}</a>'
+        )
+        if trailing:
+            parts.append(emit(match.end() - len(trailing), match.end()))
+        last = match.end()
+    parts.append(emit(last, len(text)))
+    return "".join(parts)
 
 
 def linkify_bare_urls(html: str) -> str:

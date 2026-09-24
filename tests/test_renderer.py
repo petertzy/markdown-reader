@@ -35,6 +35,21 @@ class TestRenderMarkdown(unittest.TestCase):
         self.assertNotIn('href="https://example.com/code"', html)
         self.assertNotIn('href="https://example.com/fence"', html)
 
+    def test_bare_urls_keep_query_strings_with_ampersands(self):
+        html = render_markdown("Go to https://example.com/?a=1&b=2 now")
+
+        self.assertIn(
+            '<a href="https://example.com/?a=1&amp;b=2" target="_blank" '
+            'rel="noopener">https://example.com/?a=1&amp;b=2</a>',
+            html,
+        )
+
+    def test_ampersand_in_plain_text_is_not_rejoined_into_url(self):
+        html = render_markdown("Tom & Jerry https://example.com/a")
+
+        self.assertEqual(html.count("&amp;Jerry"), 0)
+        self.assertIn("Tom &amp; Jerry", html)
+
     def test_bare_url_with_balanced_parentheses_is_fully_linked(self):
         html = render_markdown(
             "See http://en.wikipedia.org/wiki/Bracket_(disambiguation)."
