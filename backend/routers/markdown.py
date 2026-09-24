@@ -120,6 +120,16 @@ def _extract_outline(markdown: str) -> list[dict]:
     return outline
 
 
+def _fix_code_block_entities(html: str) -> str:
+    """Fix double-escaped or raw HTML entities inside code blocks."""
+    def _unescape_code(match: re.Match) -> str:
+        code_content = match.group(1)
+        code_content = code_content.replace("&amp;lt;", "&lt;").replace("&lt;", "<")
+        return f"<code{match.group(0)[5:match.start(1) - match.start(0)]}{code_content}</code>"
+
+    return re.sub(r"<code([^>]*)>(.*?)</code>", _unescape_code, html, flags=re.DOTALL)
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
@@ -133,6 +143,7 @@ def render(payload: RenderPayload):
         font_family=payload.font_family,
         font_size=payload.font_size,
     )
+    html = _fix_code_block_entities(html)
     return {"html": html}
 
 
@@ -146,6 +157,7 @@ def open_preview_in_browser(payload: OpenPreviewPayload):
         font_family=payload.font_family,
         font_size=payload.font_size,
     )
+    html = _fix_code_block_entities(html)
     try:
         with tempfile.NamedTemporaryFile(
             "w",
