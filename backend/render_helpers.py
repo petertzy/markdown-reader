@@ -36,9 +36,7 @@ class _PlaceholderFactory:
         return key
 
 
-def _mask_code_regions(
-    markdown_text: str, replacements: dict[str, str]
-) -> str:
+def _mask_code_regions(markdown_text: str, replacements: dict[str, str]) -> str:
     """Temporarily mask code spans so math detection can't touch them."""
     text = markdown_text or ""
     factory = _PlaceholderFactory("CODEPLACEHOLDER", text, replacements)
