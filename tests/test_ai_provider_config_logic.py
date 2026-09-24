@@ -439,12 +439,7 @@ class TestAIProviderConfigLogic(unittest.TestCase):
                 patch.object(
                     logic,
                     "_request_sentence_translation_batch_from_provider",
-                    side_effect=lambda _provider,
-                    _api_key,
-                    _model,
-                    items,
-                    _source,
-                    _target: [
+                    side_effect=lambda _provider, _api_key, _model, items, _source, _target: [
                         {"source": item, "translated": f"DE: {item}"} for item in items
                     ],
                 ) as mock_translate,
@@ -476,12 +471,7 @@ class TestAIProviderConfigLogic(unittest.TestCase):
             patch.object(
                 logic,
                 "_request_sentence_translation_batch_from_provider",
-                side_effect=lambda _provider,
-                _api_key,
-                _model,
-                items,
-                _source,
-                _target: [
+                side_effect=lambda _provider, _api_key, _model, items, _source, _target: [
                     {"source": item, "translated": f"DE: {item}"} for item in items
                 ],
             ) as mock_translate,
