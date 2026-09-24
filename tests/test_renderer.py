@@ -34,3 +34,16 @@ class TestRenderMarkdown(unittest.TestCase):
         self.assertEqual(html.count('href="https://example.com/docs"'), 1)
         self.assertNotIn('href="https://example.com/code"', html)
         self.assertNotIn('href="https://example.com/fence"', html)
+
+    def test_dollar_signs_inside_code_are_not_treated_as_math(self):
+        html = render_markdown("```\nawk '{print $1, $2}'\n```\n\nUse `$1 and $2` here.")
+
+        self.assertIn("awk &#x27;{print $1, $2}&#x27;", html)
+        self.assertIn("<code>$1 and $2</code>", html)
+        self.assertNotIn('class="math-inline"', html)
+
+    def test_math_outside_code_is_still_protected(self):
+        html = render_markdown("A line before.\n\n`keep $1`\n\nInline $e^{i\\pi} + 1 = 0$ good")
+
+        self.assertIn("math-inline", html)
+        self.assertIn("<code>keep $1</code>", html)
