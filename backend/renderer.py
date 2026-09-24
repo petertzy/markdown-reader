@@ -148,11 +148,7 @@ def _linkify_text_with_entities(
     last = 0
     for match in _BARE_URL_RE.finditer(text):
         parts.append(emit(last, match.start()))
-        url = match.group(0)
-        trailing = ""
-        while url and url[-1] in _TRAILING_URL_PUNCTUATION:
-            trailing = url[-1] + trailing
-            url = url[:-1]
+        url, trailing = _trim_trailing_url_punctuation(match.group(0))
         if not url:
             last = match.start()
             continue
@@ -160,7 +156,6 @@ def _linkify_text_with_entities(
         parts.append(
             f'<a href="{escaped_url}" target="_blank" rel="noopener">{html_escape(url)}</a>'
         )
-        last = match.end() - (0 if trailing == "" else len(trailing))
         if trailing:
             parts.append(emit(match.end() - len(trailing), match.end()))
         last = match.end()
