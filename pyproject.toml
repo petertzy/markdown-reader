@@ -33,7 +33,7 @@ docs = [
     "mkdocs-material>=9.7.6",
 ]
 dev = [
-    "ruff>=0.9",
+    "ruff==0.15.10",
     "ty>=0.0.29",
     "pre-commit>=3.0",
     "httpx>=0.27.0",   # for FastAPI TestClient

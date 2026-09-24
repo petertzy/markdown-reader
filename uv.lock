@@ -3,13 +3,13 @@ revision = 3
 requires-python = ">=3.11, <3.14"
 resolution-markers = [
     "python_full_version >= '3.13' and sys_platform == 'win32'",
-    "python_full_version == '3.12.*' and sys_platform == 'win32'",
-    "python_full_version < '3.12' and sys_platform == 'win32'",
     "python_full_version >= '3.13' and sys_platform == 'emscripten'",
-    "python_full_version == '3.12.*' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and sys_platform == 'emscripten'",
     "python_full_version >= '3.13' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version == '3.12.*' and sys_platform == 'win32'",
+    "python_full_version == '3.12.*' and sys_platform == 'emscripten'",
     "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.12' and sys_platform == 'win32'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten'",
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
@@ -1362,7 +1362,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "python-docx", specifier = ">=1.1.0" },
     { name = "requests", specifier = ">=2.28.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = "==0.15.10" },
     { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.29" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29.0" },
     { name = "weasyprint", specifier = ">=62.0" },
