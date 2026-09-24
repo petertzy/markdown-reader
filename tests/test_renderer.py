@@ -47,3 +47,30 @@ class TestRenderMarkdown(unittest.TestCase):
 
         self.assertIn("math-inline", html)
         self.assertIn("<code>keep $1</code>", html)
+
+    def test_code_placeholder_names_in_document_are_not_mangled(self):
+        html = render_markdown(
+            "This is CODEPLACEHOLDER0X text and `real code $x`"
+        )
+
+        self.assertIn("<code>real code $x</code>", html)
+        self.assertIn("CODEPLACEHOLDER0X", html)
+        self.assertNotIn(r"\\(real code", html)
+
+    def test_math_placeholder_names_in_document_are_not_mangled(self):
+        html = render_markdown(
+            "A doc mentioning MATHPLACEHOLDER0X literally. Math $$5+5$$ here."
+        )
+
+        self.assertIn("MATHPLACEHOLDER0X", html)
+        self.assertIn("math-display", html)
+
+    def test_no_placeholder_tokens_leak_into_output(self):
+        import re
+
+        html = render_markdown(
+            "Use `cost is $5` and\n\n```\ntotal $$10$$\n```"
+        )
+
+        token = re.compile(r"[A-Z]+PLACEHOLDER[0-9a-f]{12}[0-9]X")
+        self.assertIsNone(token.search(html))
