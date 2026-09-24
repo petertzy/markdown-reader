@@ -36,22 +36,24 @@ class TestRenderMarkdown(unittest.TestCase):
         self.assertNotIn('href="https://example.com/fence"', html)
 
     def test_dollar_signs_inside_code_are_not_treated_as_math(self):
-        html = render_markdown("```\nawk '{print $1, $2}'\n```\n\nUse `$1 and $2` here.")
+        html = render_markdown(
+            "```\nawk '{print $1, $2}'\n```\n\nUse `$1 and $2` here."
+        )
 
         self.assertIn("awk &#x27;{print $1, $2}&#x27;", html)
         self.assertIn("<code>$1 and $2</code>", html)
         self.assertNotIn('class="math-inline"', html)
 
     def test_math_outside_code_is_still_protected(self):
-        html = render_markdown("A line before.\n\n`keep $1`\n\nInline $e^{i\\pi} + 1 = 0$ good")
+        html = render_markdown(
+            "A line before.\n\n`keep $1`\n\nInline $e^{i\\pi} + 1 = 0$ good"
+        )
 
         self.assertIn("math-inline", html)
         self.assertIn("<code>keep $1</code>", html)
 
     def test_code_placeholder_names_in_document_are_not_mangled(self):
-        html = render_markdown(
-            "This is CODEPLACEHOLDER0X text and `real code $x`"
-        )
+        html = render_markdown("This is CODEPLACEHOLDER0X text and `real code $x`")
 
         self.assertIn("<code>real code $x</code>", html)
         self.assertIn("CODEPLACEHOLDER0X", html)
@@ -68,9 +70,54 @@ class TestRenderMarkdown(unittest.TestCase):
     def test_no_placeholder_tokens_leak_into_output(self):
         import re
 
-        html = render_markdown(
-            "Use `cost is $5` and\n\n```\ntotal $$10$$\n```"
-        )
+        html = render_markdown("Use `cost is $5` and\n\n```\ntotal $$10$$\n```")
 
         token = re.compile(r"[A-Z]+PLACEHOLDER[0-9a-f]{12}[0-9]X")
         self.assertIsNone(token.search(html))
+
+    def test_bare_urls_keep_query_strings_with_ampersands(self):
+        html = render_markdown("Go to https://example.com/?a=1&b=2 now")
+
+        self.assertIn(
+            '<a href="https://example.com/?a=1&amp;b=2" target="_blank" '
+            'rel="noopener">https://example.com/?a=1&amp;b=2</a>',
+            html,
+        )
+
+    def test_ampersand_in_plain_text_is_not_rejoined_into_url(self):
+        html = render_markdown("Tom & Jerry https://example.com/a")
+
+        self.assertEqual(html.count("&amp;Jerry"), 0)
+        self.assertIn("Tom &amp; Jerry", html)
+
+    def test_bare_url_with_balanced_parentheses_is_fully_linked(self):
+        html = render_markdown(
+            "See http://en.wikipedia.org/wiki/Bracket_(disambiguation)."
+        )
+
+        self.assertIn(
+            '<a href="http://en.wikipedia.org/wiki/Bracket_(disambiguation)" '
+            'target="_blank" rel="noopener">'
+            "http://en.wikipedia.org/wiki/Bracket_(disambiguation)</a>.",
+            html,
+        )
+
+    def test_bare_url_with_stray_closing_bracket_is_trimmed(self):
+        html = render_markdown("Jump to http://example.com/done) now.")
+
+        self.assertIn(
+            '<a href="http://example.com/done" target="_blank" rel="noopener">'
+            "http://example.com/done</a>) now.",
+            html,
+        )
+
+    def test_bare_url_in_quotes_leaves_quotes_outside_the_link(self):
+        html = render_markdown('Read "https://example.com/foo" for details.')
+
+        self.assertIn(
+            '<a href="https://example.com/foo" target="_blank" rel="noopener">'
+            "https://example.com/foo</a>",
+            html,
+        )
+        self.assertNotIn('href="https://example.com/foo&quot;"', html)
+        self.assertIn("</a>&quot; for details.", html)

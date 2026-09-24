@@ -6,6 +6,7 @@ import re
 import sys
 import threading
 import time
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -870,13 +871,20 @@ def _format_and_fix_code_blocks(markdown_text: str) -> str:
 
 
 def _slugify_heading_text(text: str) -> str:
-    plain = re.sub(r"[`*_~\[\](){}]", "", text or "").strip().lower()
-    plain = re.sub(r"[^a-z0-9\s-]", "", plain)
-    return re.sub(r"-+", "-", re.sub(r"\s+", "-", plain)).strip("-")
+    # Match the GitHub-compatible anchors used by the rendered document
+    # outline (backend/routers/markdown.py._slugify) so TOC links actually
+    # resolve: unicode word characters are kept, not discarded.
+    text = unicodedata.normalize("NFC", text or "").lower()
+    text = re.sub(r"[`*_~\[\](){}]", "", text).strip()
+    text = re.sub(r"[^\w\s-]", "", text)
+    return re.sub(r"-+", "-", re.sub(r"\s+", "-", text)).strip("-")
 
 
 def _generate_markdown_toc(markdown_text: str) -> str:
     toc_lines = []
+    # Track slugs so duplicate headings get the ``-1``, ``-2`` … suffix that
+    # GitHub applies when rendering anchors (same rule as ``_extract_outline``).
+    slug_counts: dict[str, int] = {}
     for line in (markdown_text or "").replace("\r\n", "\n").split("\n"):
         match = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
         if not match:
@@ -884,8 +892,12 @@ def _generate_markdown_toc(markdown_text: str) -> str:
         level = len(match.group(1))
         title = match.group(2).strip()
         anchor = _slugify_heading_text(title)
-        if anchor:
-            toc_lines.append(f"{'  ' * max(0, level - 1)}- [{title}](#{anchor})")
+        if not anchor:
+            continue
+        count = slug_counts.get(anchor, 0)
+        unique_anchor = anchor if count == 0 else f"{anchor}-{count}"
+        slug_counts[anchor] = count + 1
+        toc_lines.append(f"{'  ' * max(0, level - 1)}- [{title}](#{unique_anchor})")
     return "## Table of Contents\n\n" + "\n".join(toc_lines) + "\n" if toc_lines else ""
 
 
@@ -1123,6 +1135,72 @@ def translate_markdown_with_ai(
 
 _SENTENCE_END_CHARS = ".!?。！？"
 
+# Abbreviations whose period should not terminate the sentence, e.g. ``Dr.``.
+_PERIOD_NOT_SENTENCE_END = frozenset(
+    {
+        "mr",
+        "mrs",
+        "ms",
+        "dr",
+        "prof",
+        "sr",
+        "jr",
+        "st",
+        "rev",
+        "gen",
+        "col",
+        "capt",
+        "lt",
+        "sgt",
+        "fig",
+        "ed",
+        "vol",
+        "no",
+        "dept",
+        "univ",
+        "corp",
+        "inc",
+        "ltd",
+        "co",
+        "vs",
+        "etc",
+        "al",
+        "approx",
+        "e.g",
+        "i.e",
+        "u.s",
+        "u.k",
+        "a.m",
+        "p.m",
+    }
+)
+
+
+def _is_abbreviation_period(text: str, period_index: int) -> bool:
+    """Return True when ``period_index`` ends a known abbreviation.
+
+    Covers fixed abbreviations (``Dr.``), single-letter initials (``A.``),
+    and dotted acronyms such as ``U.S.`` or ``p.m.``.
+    """
+    start = period_index
+    while start > 0 and text[start - 1] not in " \t":
+        start -= 1
+    token = text[start:period_index].lower().rstrip(".")
+    if not token:
+        return False
+    return (
+        token in _PERIOD_NOT_SENTENCE_END
+        or (len(token) == 1 and token.isalpha())
+        or re.fullmatch(r"(?:[a-z][.])+[a-z]?", token) is not None
+    )
+
+
+def _first_char_after(line: str, index: int) -> str | None:
+    """First non-space / non-closing-quote char from ``index`` on, or None."""
+    while index < len(line) and (line[index].isspace() or line[index] in "\"'`)]}"):
+        index += 1
+    return line[index] if index < len(line) else None
+
 
 def _strip_json_code_fence(text: str) -> str:
     stripped = text.strip()
@@ -1355,7 +1433,19 @@ def split_text_into_translation_units(content: str) -> list[str]:
                 ")",
                 "]",
             }:
-                flush_buffer()
+                ends_sentence = True
+                if char == ".":
+                    # "Dr." / "e.g." / "U.S." do not end a sentence.
+                    if _is_abbreviation_period(line, char_index):
+                        ends_sentence = False
+                    # "Version 1.2. Next" - otherwise only split when the
+                    # following word is capitalized (real sentence boundary).
+                    else:
+                        following = _first_char_after(line, char_index + 1)
+                        if following is not None and not following.isupper():
+                            ends_sentence = False
+                if ends_sentence:
+                    flush_buffer()
         if line_index < len(lines) - 1 and buffer:
             buffer.append(" ")
 
