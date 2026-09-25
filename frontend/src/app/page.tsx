@@ -22,13 +22,7 @@ import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
 import SlashCommandMenu from "@/components/SlashCommandMenu";
 import StatusBar from "@/components/StatusBar";
-
-export const PANELS = {
-  AI: "ai",
-  CITATION: "citation",
-} as const;
-
-export type PanelId = typeof PANELS[keyof typeof PANELS] | null;
+import { PANELS, type PanelId } from "@/types/panels";
 
 export default function HomePage() {
   const editor = useEditor();
@@ -51,19 +45,19 @@ export default function HomePage() {
       setActivePanel(null);
     } else {
       setActivePanel(panelId);
-    }  
+    }
   };
 
   /**
    * Adapter function to maintain compatibility with `useActions` and `useSlashCommandWiring`.
-   * Those hooks still expect a standard boolean state setter (`setShowAIPanel`), so this 
+   * Those hooks still expect a standard boolean state setter (`setShowAIPanel`), so this
    * wrapper intercepts those boolean calls and translates them into the unified `activePanel` string state.
    */
   const setShowAIPanel = (action: SetStateAction<boolean>) => {
     setActivePanel((prevPanel) => {
       const isCurrentlyAI = prevPanel === PANELS.AI;
       const shouldShowAI = typeof action === "function" ? action(isCurrentlyAI) : action;
-      
+
       if (shouldShowAI) return PANELS.AI;
       if (!shouldShowAI && isCurrentlyAI) return null;
       return prevPanel;

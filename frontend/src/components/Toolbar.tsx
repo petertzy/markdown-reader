@@ -11,7 +11,7 @@ import type {
   PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { PanelId, PANELS } from "../app/page";
+import { PANELS, type PanelId } from "@/types/panels";
 
 type Props = {
   onOpenFile: () => void;
