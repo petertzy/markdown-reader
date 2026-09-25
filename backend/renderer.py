@@ -88,7 +88,11 @@ class _BareUrlLinkifier(HTMLParser):
         if not self._buf:
             return
         if self.skip_stack:
-            self.parts.append(html_escape("".join(s for _, s in self._buf)))
+            self.parts.append(
+                "".join(
+                    s if is_entity else html_escape(s) for is_entity, s in self._buf
+                )
+            )
         else:
             self.parts.append(_linkify_text_with_entities(self._buf))
         self._buf = []
