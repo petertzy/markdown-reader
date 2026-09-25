@@ -35,6 +35,11 @@ class TestRenderMarkdown(unittest.TestCase):
         self.assertNotIn('href="https://example.com/code"', html)
         self.assertNotIn('href="https://example.com/fence"', html)
 
+    def test_code_block_escapes_html_special_characters(self):
+        html = render_markdown("```\nif a < b and c > d and x & y:\n```")
+
+        self.assertIn("<code>if a &lt; b and c &gt; d and x &amp; y:\n</code>", html)
+
     def test_dollar_signs_inside_code_are_not_treated_as_math(self):
         html = render_markdown(
             "```\nawk '{print $1, $2}'\n```\n\nUse `$1 and $2` here."
