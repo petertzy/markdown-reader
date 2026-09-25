@@ -11,20 +11,20 @@ import type {
   PointerEvent as ReactPointerEvent,
 } from "react";
 
+import { PANELS, type PanelId } from "@/types/panels";
+
 type Props = {
   onOpenFile: () => void;
   onSaveFile: () => void;
   onExport: (format: "html" | "pdf" | "docx") => void;
   onOpenBrowserPreview: () => void;
   onToggleDark: () => void;
-  onToggleAIPanel: () => void;
-  onToggleCitationPanel: () => void;
+  activePanel: PanelId;
+  onTogglePanel: (id: NonNullable<PanelId>) => void;
   onToggleFocusMode: () => void;
   darkMode: boolean;
   fontSize: number;
   onFontSizeChange: (size: number) => void;
-  showAIPanel: boolean;
-  showCitationPanel: boolean;
   showFocusPanel: boolean;
   backendStatus?: "starting" | "ready" | "error";
   backendMessage?: string | null;
@@ -36,14 +36,12 @@ export default function Toolbar({
   onExport,
   onOpenBrowserPreview,
   onToggleDark,
-  onToggleAIPanel,
-  onToggleCitationPanel,
+  onTogglePanel,
   onToggleFocusMode,
+  activePanel,
   darkMode,
   fontSize,
   onFontSizeChange,
-  showAIPanel,
-  showCitationPanel,
   showFocusPanel,
   backendStatus = "ready",
   backendMessage = null,
@@ -121,8 +119,8 @@ export default function Toolbar({
       <button
         onPointerDown={keepEditorFocusedOnPointerDown}
         onMouseDown={keepEditorFocused}
-        onClick={onToggleAIPanel}
-        className={`${btnCls} ${showAIPanel ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
+        onClick={() => onTogglePanel(PANELS.AI)}
+        className={`${btnCls} ${activePanel === PANELS.AI ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
         title="AI Assistant"
       >
         🤖 AI
@@ -130,8 +128,8 @@ export default function Toolbar({
       <button
         onPointerDown={keepEditorFocusedOnPointerDown}
         onMouseDown={keepEditorFocused}
-        onClick={onToggleCitationPanel}
-        className={`${btnCls} ${showCitationPanel ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
+        onClick={() => onTogglePanel(PANELS.CITATION)}
+        className={`${btnCls} ${activePanel === PANELS.CITATION ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
         title="Citations"
       >
         📚 Cite

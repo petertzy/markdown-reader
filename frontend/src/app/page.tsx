@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, type SetStateAction } from "react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import { useEditor } from "@/hooks/useEditor";
 import { useAIActions } from "@/hooks/useAIActions";
@@ -22,14 +22,14 @@ import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
 import SlashCommandMenu from "@/components/SlashCommandMenu";
 import StatusBar from "@/components/StatusBar";
+import { PANELS, type PanelId } from "@/types/panels";
 
 export default function HomePage() {
   const editor = useEditor();
   const [focusMode, setFocusMode] = useState(false);
   const [focusRevision, setFocusRevision] = useState(0);
   const [showPreview] = useState(true);
-  const [showAIPanel, setShowAIPanel] = useState(false);
-  const [showCitationPanel, setShowCitationPanel] = useState(false);
+  const [activePanel, setActivePanel] = useState<PanelId>(null);
   const [aiPanelInitialTab, setAiPanelInitialTab] = useState<AIPanelTab | undefined>();
   const [split, setSplit] = useState(50);
   const [monacoReady, setMonacoReady] = useState(false);
@@ -40,6 +40,30 @@ export default function HomePage() {
   const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt } = useAIActions({
     documentText: editor.activeTab.content, editorRef: monacoRef, onDocumentChange: editor.handleContentChange,
   });
+  const handleToggle = (panelId: PanelId) => {
+    if (activePanel === panelId) {
+      setActivePanel(null);
+    } else {
+      setActivePanel(panelId);
+    }
+  };
+
+  /**
+   * Adapter function to maintain compatibility with `useActions` and `useSlashCommandWiring`.
+   * Those hooks still expect a standard boolean state setter (`setShowAIPanel`), so this
+   * wrapper intercepts those boolean calls and translates them into the unified `activePanel` string state.
+   */
+  const setShowAIPanel = (action: SetStateAction<boolean>) => {
+    setActivePanel((prevPanel) => {
+      const isCurrentlyAI = prevPanel === PANELS.AI;
+      const shouldShowAI = typeof action === "function" ? action(isCurrentlyAI) : action;
+
+      if (shouldShowAI) return PANELS.AI;
+      if (!shouldShowAI && isCurrentlyAI) return null;
+      return prevPanel;
+    });
+  };
+
   const { actions, menuGroups, shortcuts, handleSaveFile, handleOpenBrowserPreview } = useActions({
     editor, fileIO, formatting, backendStatus, monacoRef, setShowAIPanel, setSplit,
   });
@@ -64,11 +88,10 @@ export default function HomePage() {
       <MenuBar groups={menuGroups} shortcuts={shortcuts} />
       <Toolbar onOpenFile={() => { void fileIO.handleOpenFile(); }} onSaveFile={() => { void handleSaveFile(); }}
         onExport={fileIO.handleExport} onOpenBrowserPreview={() => { void handleOpenBrowserPreview(); }}
-        onToggleDark={() => editor.setDarkMode((dark) => !dark)} onToggleAIPanel={() => setShowAIPanel((visible) => !visible)}
-        onToggleCitationPanel={() => setShowCitationPanel((visible) => !visible)}
+        onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={handleToggle}
         onToggleFocusMode={() => { setFocusMode((enabled) => !enabled); setMonacoReady(false); monacoRef.current = null; setFocusRevision((revision) => revision + 1); }}
         darkMode={editor.darkMode} fontSize={editor.fontSize} onFontSizeChange={editor.setFontSize}
-        showAIPanel={showAIPanel} showCitationPanel={showCitationPanel} showFocusPanel={focusMode}
+        showFocusPanel={focusMode}
         backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null} />
       <TabBar tabs={editor.tabs} activeTabId={editor.activeTabId} onSelect={handleTabSelect} onClose={editor.closeTab} onNew={editor.newTab} />
       <div className="flex flex-1 overflow-hidden">
@@ -84,8 +107,8 @@ export default function HomePage() {
                 onSelect={(command) => { void executeSlashCommand(command); }} onClose={slash.close} />}</div>}
             right={showPreview ? <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
               error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : null} />}
-        {showAIPanel && <AIPanel documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} />}
-        {showCitationPanel && <CitationPanel onInsert={formatting.insertCitation} />}
+        {activePanel === PANELS.AI && <AIPanel documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} />}
+        {activePanel === PANELS.CITATION && <CitationPanel onInsert={formatting.insertCitation} />}
       </div>
       <StatusBar stats={editor.wordCount} filePath={editor.activeTab.filePath} dirty={editor.activeTab.dirty} />
     </div>
