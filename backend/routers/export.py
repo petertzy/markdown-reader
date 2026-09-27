@@ -13,6 +13,7 @@ import tempfile
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _ROOT not in sys.path:
@@ -33,8 +34,21 @@ class ExportPayload(BaseModel):
 def _make_output_path(suggested: str | None, suffix: str) -> str:
     if suggested:
         return suggested
-    _, path = tempfile.mkstemp(suffix=suffix)
+    fd, path = tempfile.mkstemp(suffix=suffix)
+    # mkstemp leaves the descriptor open, but the endpoints open() the path
+    # with a separate handle later. Close it right away so each export does
+    # not leak a file descriptor (which also lets open(path, "w") work on
+    # Windows, where an open mkstemp handle blocks re-opening).
+    os.close(fd)
     return path
+
+
+def _remove_file(path: str) -> None:
+    """Best-effort cleanup of a temporary download file after it is sent."""
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -73,10 +87,24 @@ def download_html(payload: ExportPayload):
         font_family=payload.font_family,
         font_size=payload.font_size,
     )
-    _, tmp = tempfile.mkstemp(suffix=".html")
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(html)
-    return FileResponse(tmp, media_type="text/html", filename="export.html")
+    fd, tmp = tempfile.mkstemp(suffix=".html")
+    try:
+        # fdopen adopts the descriptor from mkstemp, so writing the export
+        # without close-on-write leaks an fd when the file is streamed.
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(html)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return FileResponse(
+        tmp,
+        media_type="text/html",
+        filename="export.html",
+        background=BackgroundTask(_remove_file, tmp),
+    )
 
 
 @router.post("/docx")

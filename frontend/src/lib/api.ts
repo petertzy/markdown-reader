@@ -29,15 +29,23 @@ function isTauriRuntime() {
 
 let _resolvedBaseUrl: string | null = null;
 
-function fetchWithTimeout(
+// Timeout for regular API calls. Kept generous: local conversions and AI
+// requests (chat, translation, provider model checks) can legitimately take a
+// while, but a hung request should still surface as an error instead of
+// leaving the UI awaiting forever.
+const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
+
+export function fetchWithTimeout(
   input: RequestInfo | URL,
   init: RequestInit = {},
-  timeoutMs = 10000
+  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
 ) {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  // globalThis works in browsers, the Tauri webview, and non-browser runtimes
+  // (SSR / tests) alike, unlike window.setTimeout.
+  const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs);
   return fetch(input, { ...init, signal: init.signal ?? controller.signal }).finally(
-    () => window.clearTimeout(timeoutId)
+    () => globalThis.clearTimeout(timeoutId)
   );
 }
 
@@ -84,16 +92,21 @@ export async function getBaseUrl(): Promise<string> {
 
 async function apiFetch<T>(
   path: string,
-  init?: RequestInit
+  init?: RequestInit,
+  timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS
 ): Promise<T> {
   const base = await getBaseUrl();
-  const res = await fetch(`${base}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
+  const res = await fetchWithTimeout(
+    `${base}${path}`,
+    {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
     },
-  });
+    timeoutMs
+  );
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(`API ${path} → ${res.status}: ${detail}`);
@@ -103,16 +116,21 @@ async function apiFetch<T>(
 
 async function apiFetchBlob(
   path: string,
-  init?: RequestInit
+  init?: RequestInit,
+  timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS
 ): Promise<Blob> {
   const base = await getBaseUrl();
-  const res = await fetch(`${base}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
+  const res = await fetchWithTimeout(
+    `${base}${path}`,
+    {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {}),
+      },
     },
-  });
+    timeoutMs
+  );
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(`API ${path} → ${res.status}: ${detail}`);
@@ -409,15 +427,7 @@ export function getDefaultAISettings(): AISettings {
 export const AI = {
   getSettings: async () =>
     normalizeAISettings(
-      await Promise.race([
-        apiFetch<PartialAISettings>("/api/ai/settings"),
-        new Promise<never>((_, reject) =>
-          window.setTimeout(
-            () => reject(new Error("AI settings request timed out.")),
-            30000
-          )
-        ),
-      ])
+      await apiFetch<PartialAISettings>("/api/ai/settings")
     ),
 
   setProvider: (provider: string) =>
