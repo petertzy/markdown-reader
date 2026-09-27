@@ -2,6 +2,9 @@
   "name": "markdown-reader-frontend",
   "version": "2.0.8",
   "private": true,
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1 --port 3000",
     "tauri": "tauri",
@@ -25,7 +28,6 @@
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.3.7",
     "@tauri-apps/cli": "2.10.1",
     "@types/node": "20.19.39",
     "@types/react": "^19.3.0",
