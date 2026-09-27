@@ -37,7 +37,7 @@ export default function HomePage() {
   const { isDesktopRuntime, backendStatus, backendMessage, showPackagedBackendStatus } = useTauriBackend(editor);
   const fileIO = useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef });
   const formatting = useEditorFormatting(monacoRef);
-  const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt } = useAIActions({
+  const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt, executeWork, isWorking } = useAIActions({
     documentText: editor.activeTab.content, editorRef: monacoRef, onDocumentChange: editor.handleContentChange,
   });
   const handleToggle = (panelId: PanelId) => {
@@ -107,7 +107,7 @@ export default function HomePage() {
                 onSelect={(command) => { void executeSlashCommand(command); }} onClose={slash.close} />}</div>}
             right={showPreview ? <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
               error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : null} />}
-        {activePanel === PANELS.AI && <AIPanel documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} />}
+        {activePanel === PANELS.AI && <AIPanel documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} />}
         {activePanel === PANELS.CITATION && <CitationPanel onInsert={formatting.insertCitation} />}
       </div>
       <StatusBar stats={editor.wordCount} filePath={editor.activeTab.filePath} dirty={editor.activeTab.dirty} />

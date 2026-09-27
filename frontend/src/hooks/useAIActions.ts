@@ -6,7 +6,7 @@ import { AI } from "@/lib/api";
 
 type UseAIActionsOptions = {
   documentText: string;
-  editorRef: RefObject<MonacoEditor.IStandaloneCodeEditor>;
+  editorRef: RefObject<MonacoEditor.IStandaloneCodeEditor | null>;
   onDocumentChange: (content: string) => void;
 };
 
@@ -16,6 +16,7 @@ export function useAIActions({
   onDocumentChange,
 }: UseAIActionsOptions) {
   const [selectedText, setSelectedText] = useState("");
+  const [isWorking, setIsWorking] = useState(false);
 
   const getSelectedText = useCallback(() => {
     const editor = editorRef.current;
@@ -96,10 +97,38 @@ export function useAIActions({
     [applyAction, documentText, getSelectedText]
   );
 
+  const executeWork = useCallback(async (instruction: string) => {
+    setIsWorking(true);
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/ai/work", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          instruction, 
+          document_content: documentText 
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to process work request");
+      }
+
+      const data = await response.json();
+      onDocumentChange(data.modified_content);
+    } catch (error) {
+      console.error("AI Work Error:", error);
+      alert("Failed to apply AI modifications.");
+    } finally {
+      setIsWorking(false);
+    }
+  }, [documentText, onDocumentChange]);
+
   return {
     selectedText,
     syncSelectedText,
     applyAction,
     executePrompt,
+    executeWork,
+    isWorking,
   };
 }

@@ -1497,3 +1497,67 @@ def translate_markdown_sentence_batch_with_ai(
         source_language,
         target_language,
     )
+
+
+def process_document_work(instruction: str, content: str) -> str:
+    """
+    Applies an AI instruction to the provided Markdown document.
+    """
+    if not (content or "").strip() or not (instruction or "").strip():
+        return content
+
+    system_prompt = (
+        "You are an expert Markdown document editor. You will receive an instruction "
+        "and the current content of a Markdown document. Apply the instruction to the content. "
+        "Return ONLY the modified Markdown content. Do not include greetings, explanations, "
+        "or markdown code block wrappers (```markdown) unless they are part of the document itself."
+    )
+    
+    user_prompt = f"Instruction: {instruction}\n\nDocument:\n{content}"
+    
+    provider = _get_current_ai_provider()
+    api_key, _key_slot, env_var = _get_ai_api_key_for_provider(provider)
+    if provider != "local" and not api_key:
+        raise TranslationConfigError(
+            "AI work panel requires a configured provider API key.",
+            provider_name=provider,
+            env_var=env_var,
+        )
+
+    model = _get_ai_model_for_request(provider, api_key)
+    base_url = _get_ai_base_url(provider)
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    if provider == "anthropic":
+        headers["anthropic-version"] = "2023-06-01"
+        response = _post_with_retry(
+            f"{base_url}/messages",
+            headers=headers,
+            payload={
+                "model": model,
+                "max_tokens": 4096,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": user_prompt}],
+            },
+        )
+        result_text = _extract_anthropic_text(response.json()).strip()
+    else:
+        response = _post_with_retry(
+            f"{base_url}/chat/completions",
+            headers=headers,
+            payload={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "temperature": 0.2,
+            },
+        )
+        result_text = _extract_openai_compatible_text(response.json()).strip()
+
+    if not result_text:
+        raise RuntimeError("AI provider returned an empty response.")
+    return result_text

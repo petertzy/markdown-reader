@@ -66,6 +66,11 @@ class AgentChatPayload(BaseModel):
     chat_history: list[dict[str, Any]] = []
 
 
+class WorkPayload(BaseModel):
+    instruction: str
+    document_content: str
+
+
 class TranslatePayload(BaseModel):
     content: str
     source_language: str
@@ -283,6 +288,35 @@ def ai_chat(payload: AgentChatPayload):
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return result
+
+
+@router.post("/work")
+def ai_work(payload: WorkPayload):
+    """Apply an AI instruction directly to the document and return modified content."""
+    logic = _logic()
+    try:
+        result = logic.process_document_work(
+            instruction=payload.instruction,
+            content=payload.document_content,
+        )
+    except logic.TranslationConfigError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": str(exc),
+                "provider": getattr(exc, "provider_name", None),
+                "env_var": getattr(exc, "env_var", None),
+            },
+        )
+    except logic.ProviderRequestError as exc:
+        raise HTTPException(
+            status_code=exc.status_code or 502,
+            detail=exc.detail,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {"modified_content": result}
 
 
 @router.get("/chat/history")
