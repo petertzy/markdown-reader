@@ -1,6 +1,6 @@
 # Feasibility Study: AI Work Panel and Future Project Direction
 
-> **Issue Reference:** Closes [#274](https://github.com/petertzy/markdown-reader/issues/274)  
+> **Issue Reference:** [#274](https://github.com/petertzy/markdown-reader/issues/274)  
 > **Status:** Proposal & Feasibility Report  
 > **Target Audience:** Maintainers, Contributors, and Extension Developers
 
@@ -19,10 +19,10 @@ This study explores the architectural feasibility, user experience requirements,
 | Dimension | AI Chat Assistant (Existing) | AI Work Panel (Proposed) |
 | :--- | :--- | :--- |
 | **Primary Goal** | Answer queries, explain concepts, summarize | Perform modifications, refactor, and generate content |
-| **Output Type** | Conversational prose and markdown snippets | Direct document edits / diffs |
-| **Context Scope** | Prompt + selected snippet | Full active document + selection + metadata |
-| **User Interaction** | Read and manually copy/paste snippets | Review changes and accept/revert with one click |
-| **Editor Integration** | Passive | Active (`executeEdits` with undo-stack preservation) |
+| **Output Type** | Conversational response plus optional structured edit proposal | Task result with reviewable document edits / diffs |
+| **Context Scope** | Prompt + active document + selection | Full active document + selection + metadata |
+| **User Interaction** | Review and optionally apply a proposal in the existing panel | Review changes and accept/revert with one click |
+| **Editor Integration** | Applies accepted actions through the existing editor adapter | Active (`editor.executeEdits` with undo-stack preservation) |
 
 ---
 
@@ -62,15 +62,22 @@ This study explores the architectural feasibility, user experience requirements,
 
 1. **Preserving Monaco Undo/Redo History:**
    - Replacing the entire document via `editor.setValue()` destroys Monaco's undo stack, causing frustration if the user wants to revert.
-   - **Recommended Approach:** Use `monaco.executeEdits("ai-work", [{ range: fullRange, text: newContent }])` and push an undo stop via `model.pushStackElement()`. This ensures that pressing `Ctrl+Z` / `Cmd+Z` restores the exact pre-AI state.
+   - **Recommended Approach:** Use `editor.executeEdits("ai-work", [{ range: fullRange, text: newContent }])` on the mounted editor instance and push an undo stop via `model.pushStackElement()`. This ensures that pressing `Ctrl+Z` / `Cmd+Z` restores the exact pre-AI state.
 
 2. **System Prompt Formulation:**
    - The LLM prompt must strictly prohibit conversational commentary (e.g., "Here is your updated markdown:").
    - Output must be clean, valid Markdown preserving existing frontmatter and structure unless explicitly instructed otherwise.
 
-3. **Diff & Review Experience:**
+3. **Stale-Document Guard & Concurrency Safety:**
+   - Undo history alone is insufficient if the user continues editing while an AI generation request is in flight. Overwriting the active document with `newContent` derived from an older snapshot would destroy intervening keystrokes.
+   - **Protocol Enforcement:**
+     - The dispatch payload attaches a document revision counter or content hash (`baseDocHash`).
+     - Upon receiving the result, the client verifies whether the editor's current hash matches `baseDocHash`.
+     - **Mismatch Handling:** If the document has diverged, **"Apply Directly"** is strictly disabled/rejected. The UI informs the user of concurrent changes and directs them to **"Review Diff"** (with 3-way merge/conflict highlighting) or prompts to re-run against the latest snapshot.
+
+4. **Diff & Review Experience:**
    - Provide an optional side-by-side or inline diff preview before applying destructive changes.
-   - Users can choose between **"Apply Directly"** (with instant undo) and **"Review Diff"**.
+   - Users can choose between **"Apply Directly"** (guarded by snapshot validity and instant undo) and **"Review Diff"**.
 
 ---
 
