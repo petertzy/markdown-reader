@@ -47,7 +47,8 @@ export type ShortcutDefinition = {
 export type ShortcutOverrideMap = Partial<Record<ActionId, ShortcutBinding[]>>;
 
 const isMac =
-  typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+  typeof navigator !== "undefined" &&
+  (/Mac|iPhone|iPad|iPod/i.test(navigator.platform) || /Mac/i.test(navigator.userAgent));
 
 function keyCodeFor(key: string) {
   if (/^[a-z]$/i.test(key)) return `Key${key.toUpperCase()}`;
