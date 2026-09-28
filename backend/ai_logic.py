@@ -1134,6 +1134,10 @@ def translate_markdown_with_ai(
 
 
 _SENTENCE_END_CHARS = ".!?。！？"
+# Closing punctuation that belongs to the sentence it terminates; a
+# quoted/bracketed sentence keeps its closing quote/bracket in the same
+# translation unit (`He said "Stop." Then` -> `He said "Stop."`).
+_SENTENCE_CLOSING_CHARS = frozenset("\"')]")
 
 # Abbreviations whose period should not terminate the sentence, e.g. ``Dr.``.
 _PERIOD_NOT_SENTENCE_END = frozenset(
@@ -1421,7 +1425,9 @@ def split_text_into_translation_units(content: str) -> list[str]:
             units.append(line)
             continue
 
-        for char_index, char in enumerate(line):
+        char_index = 0
+        while char_index < len(line):
+            char = line[char_index]
             buffer.append(char)
             next_char = line[char_index + 1] if char_index + 1 < len(line) else ""
             if char in _SENTENCE_END_CHARS and next_char in {
@@ -1445,7 +1451,19 @@ def split_text_into_translation_units(content: str) -> list[str]:
                         if following is not None and not following.isupper():
                             ends_sentence = False
                 if ends_sentence:
+                    # A quoted sentence may end with a closing quote or
+                    # bracket (`He said "Stop." Then ran.`). Absorb it into
+                    # the finished unit before flushing, otherwise the
+                    # closing `"` becomes the first character of the next
+                    # unit (`" Then ran.`).
+                    while (
+                        char_index + 1 < len(line)
+                        and line[char_index + 1] in _SENTENCE_CLOSING_CHARS
+                    ):
+                        char_index += 1
+                        buffer.append(line[char_index])
                     flush_buffer()
+            char_index += 1
         if line_index < len(lines) - 1 and buffer:
             buffer.append(" ")
 
