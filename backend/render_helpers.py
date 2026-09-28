@@ -84,7 +84,17 @@ def protect_math(markdown_text: str) -> tuple[str, dict[str, str]]:
     text = _mask_code_regions(markdown_text, code_replacements)
 
     text = re.sub(r"\$\$([\s\S]+?)\$\$", replace_block, text)
-    text = re.sub(r"(?<!\$)\$(?!\$)([^\$\n]+?)(?<!\$)\$(?!\$)", replace_inline, text)
+
+    # Inline math uses GitHub's CommonMark delimiting rules so currency
+    # amounts (``$5.00``, ``$10``) and escaped dollars (``\$``) stay put:
+    # an opening ``$`` must not be preceded by a backslash (or a ``$``) and
+    # must not be followed by whitespace or a digit, and a closing ``$`` must
+    # not be preceded by a backslash (or a ``$``) nor followed by a digit.
+    text = re.sub(
+        r"(?<![\$\\])\$(?![\s\d$])([^\$\n]+?)(?<![\$\\])\$(?![\d$])",
+        replace_inline,
+        text,
+    )
 
     # Restore the code spans so markdown2 still renders them as code.
     for key, value in code_replacements.items():
