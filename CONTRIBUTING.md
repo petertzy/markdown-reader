@@ -42,7 +42,7 @@ Markdown Reader converts various document formats into Markdown for reading, edi
 
 - **Python 3.11–3.13** (Python 3.14 is currently unsupported because some optional dependencies of MarkItDown do not yet provide compatible binary wheels)
 - **[uv](https://docs.astral.sh/uv/)** for fast Python dependency and virtual environment management
-- **Node.js 18+ and npm** for the Next.js frontend
+- **Node.js 20.9.0+ and npm** for the Next.js frontend
 - **Rust and Tauri CLI** prerequisites if you are working on the desktop shell or release packaging
 
 Docs-only and backend-only changes do not require building the full Tauri desktop application.

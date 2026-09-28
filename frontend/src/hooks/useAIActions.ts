@@ -6,7 +6,7 @@ import { AI } from "@/lib/api";
 
 type UseAIActionsOptions = {
   documentText: string;
-  editorRef: RefObject<MonacoEditor.IStandaloneCodeEditor>;
+  editorRef: RefObject<MonacoEditor.IStandaloneCodeEditor | null>;
   onDocumentChange: (content: string) => void;
 };
 
