@@ -672,7 +672,11 @@ export default function AIPanel({
           <button 
             className="w-full bg-blue-600 text-white py-1.5 px-3 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
             onClick={() => {
-              if (executeWork) void executeWork(input);
+              if (executeWork) {
+                const instruction = input.trim();
+                setInput("");
+                void executeWork(instruction);
+              }
             }}
             disabled={!input.trim() || isWorking}
           >
