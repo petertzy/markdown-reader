@@ -88,3 +88,61 @@ class TestDocxExporter(unittest.TestCase):
             self.assertNotIn('w:before="120"', document_xml)
             self.assertNotIn('w:after="120"', document_xml)
             self.assertIn('w:ascii="Courier New"', document_xml)
+
+    def test_export_preserves_escaped_html_entities(self):
+        # Escaped HTML like "&amp;" must be exported as the real character
+        # ("&") rather than being silently dropped or written as raw markup.
+        html = """<body>
+<p>R&amp;D budget &amp; plans</p>
+<p>AT&amp;T &amp; T-Mobile</p>
+<p>Tommy&#39;s &quot;quoted&quot; text</p>
+<p>less &lt;html&gt; more</p>
+</body>"""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = f"{tmp_dir}/entities.docx"
+
+            export_html_to_docx(html, output_path)
+
+            document = Document(output_path)
+            body_text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+            self.assertIn("R&D budget & plans", body_text)
+            self.assertIn("AT&T & T-Mobile", body_text)
+            self.assertIn('Tommy\'s "quoted" text', body_text)
+            self.assertIn("less <html> more", body_text)
+            # Raw markup must not leak into the export unescaped.
+            self.assertNotIn("&amp;", body_text)
+            self.assertNotIn("&lt;", body_text)
+            self.assertNotIn("&quot;", body_text)
+
+    def test_export_preserves_entities_inside_table_cells_and_code(self):
+        html = """<body>
+<table><tr><td>A &amp; B</td><td>1 &lt; 2</td></tr></table>
+<pre><code>if (a &lt; b &amp;&amp; c &gt; d) {}</code></pre>
+</body>"""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = f"{tmp_dir}/entities_rich.docx"
+
+            export_html_to_docx(html, output_path)
+
+            document = Document(output_path)
+            body_text = _document_text(document)
+            self.assertIn("A & B", body_text)
+            self.assertIn("1 < 2", body_text)
+            self.assertIn("if (a < b && c > d) {}", body_text)
+
+    def test_export_preserves_entities_from_rendered_markdown(self):
+        # Markdown with an entity-like literal ("&amp;") flows through the
+        # renderer, whose markdown2 output escapes it. The DOCX export must
+        # round-trip it back to the plain character.
+        html = render_markdown("Cost: 5 &amp; 6\n\n`R&D` and `a < b` inline")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = f"{tmp_dir}/roundtrip.docx"
+
+            export_html_to_docx(html, output_path)
+
+            document = Document(output_path)
+            body_text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+            body_text += "\n" + _document_text(document)
+            self.assertIn("Cost: 5 & 6", body_text)
+            self.assertIn("R&D", body_text)
+            self.assertIn("a < b", body_text)
