@@ -490,6 +490,12 @@ export const AI = {
       body: JSON.stringify(payload),
     }),
 
+  work: (instruction: string, document_content: string) =>
+    apiFetch<{ modified_content: string }>("/api/ai/work", {
+      method: "POST",
+      body: JSON.stringify({ instruction, document_content }),
+    }),
+
   getChatHistory: () =>
     apiFetch<{ histories: unknown[] }>("/api/ai/chat/history"),
 
