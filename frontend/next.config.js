@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Hide the Next.js development indicator in the desktop development window.
+  devIndicators: false,
   // Allow images from local filesystem served via the FastAPI backend
   images: {
     remotePatterns: [

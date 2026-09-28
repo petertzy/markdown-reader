@@ -4,13 +4,9 @@ import { useState, useRef, useCallback, type SetStateAction } from "react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import { useEditor } from "@/hooks/useEditor";
 import { useAIActions } from "@/hooks/useAIActions";
-import { useSlashCommands } from "@/hooks/useSlashCommands";
 import { useFileIO } from "@/hooks/useFileIO";
 import { useTauriBackend } from "@/hooks/useTauriBackend";
-import { useEditorFormatting } from "@/hooks/editor/useEditorFormatting";
-import { useActions } from "@/hooks/editor/useActions";
-import { useKeyboardShortcuts } from "@/hooks/editor/useKeyboardShortcuts";
-import { useSlashCommandWiring } from "@/hooks/editor/useSlashCommandWiring";
+import { useEditorCommands } from "@/hooks/editor/useEditorCommands";
 import TabBar from "@/components/TabBar";
 import Toolbar from "@/components/Toolbar";
 import MenuBar from "@/components/MenuBar";
@@ -36,7 +32,6 @@ export default function HomePage() {
   const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const { isDesktopRuntime, backendStatus, backendMessage, showPackagedBackendStatus } = useTauriBackend(editor);
   const fileIO = useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef });
-  const formatting = useEditorFormatting(monacoRef);
   const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt, executeWork, isWorking } = useAIActions({
     documentText: editor.activeTab.content, editorRef: monacoRef, onDocumentChange: editor.handleContentChange,
   });
@@ -64,14 +59,26 @@ export default function HomePage() {
     });
   };
 
-  const { actions, menuGroups, shortcuts, handleSaveFile, handleOpenBrowserPreview } = useActions({
-    editor, fileIO, formatting, backendStatus, monacoRef, setShowAIPanel, setSplit,
-  });
-  useKeyboardShortcuts(shortcuts, actions);
-  const slash = useSlashCommands();
-  const { executeSlashCommand, slashMenuPosition } = useSlashCommandWiring({
-    monacoRef, monacoReady, slash, insertTable: formatting.insertTable, executeAIPrompt,
-    documentText: editor.activeTab.content, syncSelectedText, setShowAIPanel, setAiPanelInitialTab,
+  const {
+    formatting,
+    menuGroups,
+    shortcuts,
+    handleSaveFile,
+    handleOpenBrowserPreview,
+    slash,
+    executeSlashCommand,
+    slashMenuPosition,
+  } = useEditorCommands({
+    editor,
+    fileIO,
+    backendStatus,
+    monacoRef,
+    monacoReady,
+    setShowAIPanel,
+    setAiPanelInitialTab,
+    setSplit,
+    executeAIPrompt,
+    syncSelectedText,
   });
   const handleTabSelect = useCallback((id: string) => {
     editor.setActiveTabId(id);
