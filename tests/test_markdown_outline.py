@@ -23,9 +23,58 @@ from backend.routers.markdown import _extract_outline, _slugify
 
 def test_toc_slug_matches_outline_slug():
     # Generated TOC anchors must resolve to the anchors used by the
-    # rendered document outline.
-    for heading in ["第一章", "Résumé", "Über Alles", "Data 分析", "Hello World"]:
-        assert _slugify_heading_text(heading) == _slugify(heading)
+    # rendered document outline. This set covers the edge cases that used
+    # to diverge: consecutive hyphens, leading/trailing hyphens, inline
+    # links, inline code, strikethrough and closing-hash ATX headings.
+    headings = [
+        "第一章",
+        "Résumé",
+        "Über Alles",
+        "Data 分析",
+        "Hello World",
+        "Intro -- Details",
+        "A --- B",
+        "-Leading Dash",
+        "Trailing Dash-",
+        "[Click here](https://example.com)",
+        "link [text](url) more",
+        "`code span` heading",
+        "~~strike~~ me",
+        "UPPER Case TITLE",
+    ]
+    for heading in headings:
+        # Delegate both to the canonical implementation, but confirm the
+        # two call sites still agree with each other.
+        assert _slugify_heading_text(heading) == _slugify(heading), heading
+
+
+def test_toc_anchor_matches_outline_anchor_for_divergent_headings():
+    # End-to-end: the AI TOC links and the rendered outline anchors must
+    # agree even for headings whose anchors used to be generated
+    # differently by the two code paths.
+    md = (
+        "# Intro -- Details\n\n"
+        "## [Click here](https://example.com)\n\n"
+        "### A --- B\n\n"
+        "#### Trailing Dash-\n\n"
+        "##### -Leading Dash\n\n"
+        "###### `code span` heading\n"
+    )
+    outline_anchors = [node["anchor"] for node in _extract_outline(md)]
+    toc = _generate_markdown_toc(md)
+
+    import re
+
+    toc_anchors = [m.group(1) for m in re.finditer(r"\]\(#([^)]+)\)", toc)]
+    assert toc_anchors == outline_anchors
+    assert toc_anchors == [
+        "intro----details",
+        "click-here",
+        "a-----b",
+        "trailing-dash-",
+        "-leading-dash",
+        "code-span-heading",
+    ]
 
 
 def test_toc_keeps_unicode_headings():

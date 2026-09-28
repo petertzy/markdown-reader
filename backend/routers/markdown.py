@@ -7,10 +7,8 @@ Markdown rendering and conversion endpoints.
 from __future__ import annotations
 
 import os
-import re
 import sys
 import tempfile
-import unicodedata
 import webbrowser
 from pathlib import Path
 
@@ -59,23 +57,22 @@ class OpenPreviewPayload(RenderPayload):
 
 # ── Heading helpers ───────────────────────────────────────────────────────────
 
-# Matches ATX headings: `# Heading` … `###### Heading`
-_ATX_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)(?:\s+#+\s*)?$", re.MULTILINE)
-
-# Characters that should be stripped when building a GitHub-style slug
-_NON_WORD_RE = re.compile(r"[^\w\s-]")
-_WHITESPACE_RE = re.compile(r"\s+")
+from backend.heading_anchor import (
+    _ATX_HEADING_RE,
+    extract_heading_text,
+    slugify_heading,
+)
 
 
 def _slugify(text: str) -> str:
-    """Produce a GitHub-compatible heading anchor from heading text."""
-    text = text.lower()
-    # Normalise Unicode so accented chars are preserved but combining marks
-    # that have no direct ASCII equivalent are stripped.
-    text = unicodedata.normalize("NFC", text)
-    text = _NON_WORD_RE.sub("", text)
-    text = _WHITESPACE_RE.sub("-", text.strip())
-    return text
+    """Produce a GitHub-compatible heading anchor from heading text.
+
+    Thin wrapper kept for backwards compatibility; the canonical logic
+    lives in ``backend.heading_anchor.slugify_heading`` (shared with the
+    AI table-of-contents generator so TOC anchors resolve against the
+    rendered outline).
+    """
+    return slugify_heading(text)
 
 
 def _extract_outline(markdown: str) -> list[dict]:
@@ -95,13 +92,9 @@ def _extract_outline(markdown: str) -> list[dict]:
     for match in _ATX_HEADING_RE.finditer(markdown):
         level = len(match.group(1))
         raw_text = match.group(2).strip()
-        # Strip common inline Markdown so the label is readable plain text.
-        plain = re.sub(
-            r"\*{1,2}|_{1,2}|`|~~|!\[.*?\]\(.*?\)|\[([^\]]*)\]\(.*?\)", r"\1", raw_text
-        )
-        plain = plain.strip()
+        plain = extract_heading_text(raw_text)
 
-        base_slug = _slugify(plain)
+        base_slug = slugify_heading(plain)
         count = slug_counts.get(base_slug, 0)
         slug = base_slug if count == 0 else f"{base_slug}-{count}"
         slug_counts[base_slug] = count + 1
