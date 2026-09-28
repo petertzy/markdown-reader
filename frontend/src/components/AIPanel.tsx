@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect, type ReactNode } from "react";
+import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
 import { useAIChat, type TranslationPair, type TranslationProgress } from "@/hooks/useAIChat";
-import { AI, getDefaultAISettings, type AISettings } from "@/lib/api";
+import { AI, getDefaultAISettings, type AISettings, Knowledge, type KnowledgeStatus } from "@/lib/api";
 
 export type AIPanelTab = "chat" | "translate" | "settings";
 type Tab = AIPanelTab;
@@ -200,6 +200,12 @@ export default function AIPanel({
   const [model, setModel] = useState("");
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [apiKey, setApiKey] = useState("");
+  const [knowledgeStatus, setKnowledgeStatus] = useState<KnowledgeStatus | null>(null);
+  const [knowledgeEnabled, setKnowledgeEnabled] = useState(true);
+  const [knowledgeIndexing, setKnowledgeIndexing] = useState(false);
+  const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
+  const [knowledgePathInput, setKnowledgePathInput] = useState("");
+  const [showKnowledgeManager, setShowKnowledgeManager] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const settingsRequestSeq = useRef(0);
   const modelRequestSeq = useRef(0);
@@ -477,6 +483,78 @@ export default function AIPanel({
     }
   };
 
+  const loadKnowledgeStatus = useCallback(async () => {
+    try {
+      const status = await Knowledge.getStatus();
+      setKnowledgeStatus(status);
+      setKnowledgeEnabled(status.enabled);
+      setKnowledgePathInput(status.path);
+    } catch {
+      // Ignore initial status load failure
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadKnowledgeStatus();
+  }, [loadKnowledgeStatus]);
+
+  const handleToggleKnowledge = async (enabled: boolean) => {
+    setKnowledgeEnabled(enabled);
+    try {
+      await Knowledge.toggle(enabled);
+      setKnowledgeStatus((prev) => (prev ? { ...prev, enabled } : prev));
+    } catch (err) {
+      setKnowledgeError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleIndexKnowledge = async (pathToUse?: string, force = false) => {
+    const targetPath = (pathToUse ?? knowledgePathInput).trim();
+    if (!targetPath) return;
+    setKnowledgeIndexing(true);
+    setKnowledgeError(null);
+    try {
+      await Knowledge.index(targetPath, force);
+      await loadKnowledgeStatus();
+      setShowKnowledgeManager(false);
+    } catch (err) {
+      setKnowledgeError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setKnowledgeIndexing(false);
+    }
+  };
+
+  const handleSelectKnowledgeDirectory = async () => {
+    setKnowledgeError(null);
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({
+        directory: true,
+        multiple: false,
+      });
+      const selectedPath = selected ? (Array.isArray(selected) ? selected[0] : selected) : null;
+      if (!selectedPath) return;
+      setKnowledgePathInput(selectedPath);
+      await handleIndexKnowledge(selectedPath);
+    } catch {
+      // If dialog is not available in browser mode, expand the path input
+      setShowKnowledgeManager(true);
+    }
+  };
+
+  const handleClearKnowledge = async () => {
+    setKnowledgeIndexing(true);
+    try {
+      await Knowledge.clear();
+      setKnowledgePathInput("");
+      await loadKnowledgeStatus();
+    } catch (err) {
+      setKnowledgeError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setKnowledgeIndexing(false);
+    }
+  };
+
   const handleSend = async () => {
     const msg = input.trim();
     if (!msg || loading) return;
@@ -490,12 +568,15 @@ export default function AIPanel({
       onApplyAction?.("replace_selection", INSERT_TABLE_MARKDOWN);
       return;
     }
+    const sendOptions = {
+      useKnowledgeBase: knowledgeEnabled && Boolean(knowledgeStatus?.exists),
+    };
     const slashPrompt = CHAT_SLASH_PROMPTS[slashCommand];
     if (slashPrompt) {
-      await sendMessage(slashPrompt, documentText, selectedText);
+      await sendMessage(slashPrompt, documentText, selectedText, sendOptions);
       return;
     }
-    await sendMessage(msg, documentText, selectedText);
+    await sendMessage(msg, documentText, selectedText, sendOptions);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -593,10 +674,101 @@ export default function AIPanel({
 
       {tab === "chat" ? (
         <>
+          {/* Notes Context / Local RAG Bar */}
+          <div className="px-3 py-2 bg-gray-50 dark:bg-[#252525] border-b border-gray-200 dark:border-gray-700 text-xs shrink-0">
+            <div className="flex items-center justify-between gap-1">
+              <div className="flex items-center gap-1.5 overflow-hidden">
+                <span className="font-medium truncate" title={knowledgeStatus?.path || "No notes directory selected"}>
+                  📁 {knowledgeStatus?.exists && knowledgeStatus.path
+                    ? `${knowledgeStatus.path.split(/[/\\]/).filter(Boolean).pop()} (${knowledgeStatus.file_count} note${knowledgeStatus.file_count === 1 ? "" : "s"})`
+                    : "Notes context: None"}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                {knowledgeStatus?.exists && (
+                  <>
+                    <button
+                      onClick={() => handleToggleKnowledge(!knowledgeEnabled)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase transition-colors ${
+                        knowledgeEnabled
+                          ? "bg-emerald-600 text-white"
+                          : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                      }`}
+                      title={knowledgeEnabled ? "Directory context active" : "Directory context disabled"}
+                    >
+                      {knowledgeEnabled ? "ON" : "OFF"}
+                    </button>
+                    <button
+                      onClick={() => handleIndexKnowledge()}
+                      disabled={knowledgeIndexing}
+                      className="p-1 text-gray-500 hover:text-blue-500 disabled:opacity-40"
+                      title="Re-index notes directory"
+                    >
+                      ↻
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => setShowKnowledgeManager((v) => !v)}
+                  className="px-1.5 py-0.5 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                  title="Configure notes directory"
+                >
+                  {knowledgeStatus?.exists ? "Change" : "Select"}
+                </button>
+              </div>
+            </div>
+
+            {/* Expandable Folder Configuration Form */}
+            {showKnowledgeManager && (
+              <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 space-y-1.5">
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={knowledgePathInput}
+                    onChange={(e) => setKnowledgePathInput(e.target.value)}
+                    placeholder="Enter folder path e.g. ~/Notes"
+                    className="flex-1 text-[11px] p-1 border border-gray-200 dark:border-gray-600 rounded bg-white dark:bg-[#1e1e1e]"
+                  />
+                  <button
+                    onClick={handleSelectKnowledgeDirectory}
+                    className="px-2 py-1 text-[11px] bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
+                    title="Browse local folders"
+                  >
+                    Browse
+                  </button>
+                  <button
+                    onClick={() => handleIndexKnowledge()}
+                    disabled={knowledgeIndexing || !knowledgePathInput.trim()}
+                    className="px-2 py-1 text-[11px] bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40"
+                  >
+                    {knowledgeIndexing ? "Indexing…" : "Index"}
+                  </button>
+                </div>
+                {knowledgeStatus?.exists && (
+                  <div className="flex justify-between items-center text-[10px] text-gray-500 dark:text-gray-400">
+                    <span>{knowledgeStatus.file_count} notes, {knowledgeStatus.chunk_count} chunks indexed</span>
+                    <button
+                      onClick={handleClearKnowledge}
+                      disabled={knowledgeIndexing}
+                      className="text-red-500 hover:underline"
+                    >
+                      Clear Index
+                    </button>
+                  </div>
+                )}
+                {knowledgeError && (
+                  <p className="text-[11px] text-red-500">{knowledgeError}</p>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="flex-1 overflow-y-auto p-3 space-y-3">
             {messages.length === 0 && (
               <p className="text-gray-400 dark:text-gray-500 text-xs">
-                Try /summarize, /translate, /format, /toc, /fix-code, or /insert-table.
+                {knowledgeStatus?.exists && knowledgeEnabled
+                  ? "Ask anything about your notes, or try /summarize, /format, /toc, /fix-code."
+                  : "Try /summarize, /translate, /format, /toc, /fix-code, or /insert-table."}
               </p>
             )}
             {messages.map((msg) => (
@@ -614,6 +786,20 @@ export default function AIPanel({
                     <span className="whitespace-pre-wrap">{msg.content}</span>
                   )}
                 </div>
+                {msg.sources && msg.sources.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1 text-[10px] text-gray-500 dark:text-gray-400 px-1">
+                    <span className="font-medium">Sources:</span>
+                    {msg.sources.map((src, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                        title={src.rel_path + (src.section ? ` > ${src.section}` : "")}
+                      >
+                        📄 {src.title || src.rel_path}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {msg.proposedAction && msg.proposedAction.type !== "none" && onApplyAction && (
                   <button
                     onClick={() => onApplyAction(msg.proposedAction!.type, msg.proposedAction!.content)}
@@ -1016,6 +1202,73 @@ export default function AIPanel({
                 >
                   {settingsSaving ? "Saving..." : "Save"}
                 </button>
+              </div>
+
+              {/* Personal Notes / Directory Context Section */}
+              <div className="pt-3 border-t border-gray-200 dark:border-gray-700 flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+                    Directory Context / Notes RAG
+                  </label>
+                  {knowledgeStatus?.exists && (
+                    <button
+                      onClick={() => handleToggleKnowledge(!knowledgeEnabled)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                        knowledgeEnabled
+                          ? "bg-emerald-600 text-white"
+                          : "bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                      }`}
+                    >
+                      {knowledgeEnabled ? "Enabled" : "Disabled"}
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                  Select a local folder of Markdown notes to allow AI to answer questions using your workspace notes. All data stays local.
+                </p>
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={knowledgePathInput}
+                    onChange={(e) => setKnowledgePathInput(e.target.value)}
+                    placeholder="Enter folder path e.g. ~/Notes"
+                    className="flex-1 text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
+                  />
+                  <button
+                    onClick={handleSelectKnowledgeDirectory}
+                    className="px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-[#2d2d2d]"
+                  >
+                    Browse
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleIndexKnowledge()}
+                    disabled={knowledgeIndexing || !knowledgePathInput.trim()}
+                    className="flex-1 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40"
+                  >
+                    {knowledgeIndexing ? "Indexing…" : "Index Notes"}
+                  </button>
+                  {knowledgeStatus?.exists && (
+                    <button
+                      onClick={handleClearKnowledge}
+                      disabled={knowledgeIndexing}
+                      className="px-2 py-1 text-xs border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 rounded hover:bg-red-50 dark:hover:bg-red-950/20"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {knowledgeStatus?.exists && (
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Indexed {knowledgeStatus.file_count} note{knowledgeStatus.file_count === 1 ? "" : "s"} ({knowledgeStatus.chunk_count} chunk{knowledgeStatus.chunk_count === 1 ? "" : "s"}).
+                  </div>
+                )}
+                {knowledgeError && (
+                  <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
+                    {knowledgeError}
+                  </div>
+                )}
               </div>
             </>
           )}

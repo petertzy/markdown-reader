@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sys
@@ -23,6 +24,7 @@ except Exception:
 
 
 AI_CREDENTIAL_SERVICE = "MarkdownReader.AI"
+logger = logging.getLogger(__name__)
 LOCAL_AI_DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1"
 LOCAL_AI_BASE_URL_OPTIONS = {
     "lm_studio": "http://127.0.0.1:1234/v1",
@@ -728,13 +730,22 @@ def _request_chat_from_provider(
     document_text: str = "",
     selected_text: str = "",
     chat_history: list[dict[str, Any]] | None = None,
+    knowledge_context: str = "",
 ) -> str:
     system_prompt = (
         "You are Markdown Reader's AI assistant. Help with writing, editing, "
         "Markdown, document understanding, and general questions. Be concise and "
         "useful. When document or selected text is provided, use it as context."
     )
+    if knowledge_context.strip():
+        system_prompt += (
+            " When directory knowledge base context is provided from personal notes, "
+            "ground your response in those notes, cite the relevant note files/sections, "
+            "and prioritize information from them."
+        )
     context_parts = []
+    if knowledge_context.strip():
+        context_parts.append(knowledge_context.strip())
     if selected_text.strip():
         context_parts.append("Selected text:\n" + selected_text.strip())
     if document_text.strip():
@@ -1076,6 +1087,8 @@ def request_ai_agent_response(
     document_text: str = "",
     selected_text: str = "",
     chat_history: list[dict[str, Any]] | None = None,
+    use_knowledge_base: bool = False,
+    knowledge_top_k: int = 5,
 ) -> dict[str, Any]:
     fallback = build_ai_automation_fallback(message, document_text, selected_text)
     if fallback:
@@ -1088,6 +1101,35 @@ def request_ai_agent_response(
             provider_name=provider,
             env_var=env_var,
         )
+
+    knowledge_context = ""
+    used_sources: list[dict[str, Any]] = []
+    if use_knowledge_base:
+        try:
+            from backend import knowledge_logic
+
+            # Search knowledge base using user query and any active selection
+            search_query = message.strip()
+            if selected_text.strip():
+                search_query += " " + selected_text.strip()
+            chunks = knowledge_logic.query_knowledge_base(search_query, top_k=knowledge_top_k)
+            if chunks:
+                knowledge_context = knowledge_logic.build_knowledge_context_for_prompt(chunks)
+                seen_paths = set()
+                for c in chunks:
+                    rel_p = c.get("rel_path") or c.get("file_path", "")
+                    if rel_p not in seen_paths:
+                        seen_paths.add(rel_p)
+                        used_sources.append(
+                            {
+                                "rel_path": rel_p,
+                                "title": c.get("title", rel_p),
+                                "section": c.get("section", ""),
+                            }
+                        )
+        except Exception as k_err:
+            logger.warning("Knowledge base retrieval failed: %s", k_err)
+
     assistant_message = _request_chat_from_provider(
         provider,
         api_key,
@@ -1096,6 +1138,7 @@ def request_ai_agent_response(
         document_text=document_text,
         selected_text=selected_text,
         chat_history=chat_history,
+        knowledge_context=knowledge_context,
     )
     return {
         "assistant_message": assistant_message,
@@ -1105,6 +1148,7 @@ def request_ai_agent_response(
             "reason": "chat_response",
         },
         "used_provider": provider,
+        "used_sources": used_sources,
     }
 
 

@@ -9,6 +9,7 @@ export type ChatMessage = {
   content: string;
   proposedAction?: AgentResponse["proposed_action"];
   provider?: string;
+  sources?: AgentResponse["used_sources"];
 };
 
 export type TranslationPair = {
@@ -105,7 +106,12 @@ export function useAIChat() {
   const translationAbortRef = useRef<AbortController | null>(null);
 
   const sendMessage = useCallback(
-    async (userMessage: string, documentText = "", selectedText = "") => {
+    async (
+      userMessage: string,
+      documentText = "",
+      selectedText = "",
+      options?: { useKnowledgeBase?: boolean; knowledgeTopK?: number }
+    ) => {
       if (!userMessage.trim()) return;
 
       const userMsg: ChatMessage = { id: msgId(), role: "user", content: userMessage };
@@ -119,6 +125,8 @@ export function useAIChat() {
         document_text: documentText,
         selected_text: selectedText,
         chat_history: history,
+        use_knowledge_base: options?.useKnowledgeBase,
+        knowledge_top_k: options?.knowledgeTopK,
       };
 
       try {
@@ -129,6 +137,7 @@ export function useAIChat() {
           content: result.assistant_message,
           proposedAction: result.proposed_action,
           provider: result.used_provider,
+          sources: result.used_sources,
         };
         setMessages((prev) => [...prev, assistantMsg]);
         return result;
