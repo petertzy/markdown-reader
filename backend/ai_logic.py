@@ -1512,9 +1512,9 @@ def process_document_work(instruction: str, content: str) -> str:
         "Return ONLY the modified Markdown content. Do not include greetings, explanations, "
         "or markdown code block wrappers (```markdown) unless they are part of the document itself."
     )
-    
+
     user_prompt = f"Instruction: {instruction}\n\nDocument:\n{content}"
-    
+
     provider = _get_current_ai_provider()
     api_key, _key_slot, env_var = _get_ai_api_key_for_provider(provider)
     if provider != "local" and not api_key:
@@ -1553,7 +1553,6 @@ def process_document_work(instruction: str, content: str) -> str:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                "temperature": 0.2,
             },
         )
         result_text = _extract_openai_compatible_text(response.json()).strip()
