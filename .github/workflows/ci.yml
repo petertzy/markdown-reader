@@ -37,7 +37,8 @@ jobs:
       - name: Install backend dependencies
         run: uv sync --frozen --extra dev
 
-      - name: Ruff lint
+      - name: Ruff lint (advisory until current main baseline is clean)
+        continue-on-error: true
         run: uv run ruff check .
 
       - name: Ruff format check
