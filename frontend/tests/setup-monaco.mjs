@@ -7,7 +7,10 @@ const navigatorMock = {
   language: "en-US",
 };
 
-globalThis.navigator = navigatorMock;
+Object.defineProperty(globalThis, "navigator", {
+  configurable: true,
+  value: navigatorMock,
+});
 globalThis.window = {
   navigator: navigatorMock,
   addEventListener: () => {},
