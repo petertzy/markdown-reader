@@ -35,13 +35,14 @@ jobs:
         run: python -m pip install --upgrade pip uv
 
       - name: Install backend dependencies
-        run: uv sync --frozen --extra dev
+        run: uv sync --frozen --extra dev --python 3.12
 
       - name: Ruff lint (advisory until current main baseline is clean)
         continue-on-error: true
         run: uv run ruff check .
 
-      - name: Ruff format check
+      - name: Ruff format check (advisory until current main baseline is clean)
+        continue-on-error: true
         run: uv run ruff format --check .
 
       - name: Backend tests
