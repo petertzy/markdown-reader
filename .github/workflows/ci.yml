@@ -39,14 +39,14 @@ jobs:
 
       - name: Ruff lint (advisory until current main baseline is clean)
         continue-on-error: true
-        run: uv run ruff check .
+        run: .venv/bin/ruff check .
 
       - name: Ruff format check (advisory until current main baseline is clean)
         continue-on-error: true
-        run: uv run ruff format --check .
+        run: .venv/bin/ruff format --check .
 
       - name: Backend tests
-        run: uv run pytest
+        run: .venv/bin/python -m pytest
 
   frontend:
     name: Frontend
