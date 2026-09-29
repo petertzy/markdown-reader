@@ -34,22 +34,63 @@ export const LONG_REQUEST_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
  * @returns {AbortSignal | undefined}
  */
 export function composeAbortSignals(...signals) {
+  return composeAbortSignalsWithCleanup(...signals).signal;
+}
+
+function composeAbortSignalsWithCleanup(...signals) {
   const present = signals.filter(Boolean);
-  if (present.length === 0) return undefined;
-  if (present.length === 1) return present[0];
+  if (present.length === 0) return { signal: undefined, cleanup: () => {} };
+  if (present.length === 1) return { signal: present[0], cleanup: () => {} };
   if (typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function") {
-    return AbortSignal.any(present);
+    return { signal: AbortSignal.any(present), cleanup: () => {} };
   }
   // Manual composition: abort our controller when any input aborts.
   const controller = new AbortController();
+  const listeners = [];
+  const cleanup = () => {
+    for (const [signal, listener] of listeners) {
+      signal.removeEventListener("abort", listener);
+    }
+  };
   for (const signal of present) {
     if (signal.aborted) {
-      controller.abort();
+      controller.abort(signal.reason);
       break;
     }
-    signal.addEventListener("abort", () => controller.abort(), { once: true });
+    const listener = () => {
+      controller.abort(signal.reason);
+      cleanup();
+    };
+    signal.addEventListener("abort", listener, { once: true });
+    listeners.push([signal, listener]);
   }
-  return controller.signal;
+  if (controller.signal.aborted) cleanup();
+  return { signal: controller.signal, cleanup };
+}
+
+/**
+ * Keep the deadline active for the entire operation, including response-body
+ * reads. The task must pass the supplied signal to fetch().
+ *
+ * @template T
+ * @param {(signal: AbortSignal) => Promise<T>} task
+ * @param {AbortSignal | undefined} callerSignal
+ * @param {number} timeoutMs
+ * @returns {Promise<T>}
+ */
+export async function runWithTimeout(task, callerSignal, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const { signal, cleanup } = composeAbortSignalsWithCleanup(callerSignal, controller.signal);
+  let timeoutId;
+  if (timeoutMs > 0) {
+    timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs);
+  }
+  try {
+    return await task(signal);
+  } finally {
+    if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
+    cleanup();
+  }
 }
 
 /**
@@ -63,18 +104,9 @@ export function composeAbortSignals(...signals) {
  * @returns {Promise<Response>}
  */
 export function fetchWithTimeout(input, init = {}, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
-  const controller = new AbortController();
-  // globalThis works in browsers, the Tauri webview, and non-browser runtimes
-  // (SSR / tests) alike, unlike window.setTimeout. A non-positive timeout
-  // disables the automatic abort (explicit "no deadline" opt-out).
-  let timeoutId;
-  if (timeoutMs > 0) {
-    timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs);
-  }
-  return fetch(input, {
-    ...init,
-    signal: composeAbortSignals(init.signal, controller.signal),
-  }).finally(() => {
-    if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId);
-  });
+  return runWithTimeout(
+    (signal) => fetch(input, { ...init, signal }),
+    init.signal,
+    timeoutMs
+  );
 }

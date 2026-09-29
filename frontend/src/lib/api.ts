@@ -17,6 +17,7 @@ import {
   DEFAULT_REQUEST_TIMEOUT_MS,
   LONG_REQUEST_TIMEOUT_MS,
   fetchWithTimeout,
+  runWithTimeout,
 } from "./http-timeout.mjs";
 
 export { DEFAULT_REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS, fetchWithTimeout };
@@ -84,22 +85,21 @@ async function apiFetch<T>(
   timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS
 ): Promise<T> {
   const base = await getBaseUrl();
-  const res = await fetchWithTimeout(
-    `${base}${path}`,
-    {
+  return runWithTimeout(async (signal) => {
+    const res = await fetch(`${base}${path}`, {
       ...init,
+      signal,
       headers: {
         "Content-Type": "application/json",
         ...(init?.headers ?? {}),
       },
-    },
-    timeoutMs
-  );
-  if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`API ${path} → ${res.status}: ${detail}`);
-  }
-  return res.json() as Promise<T>;
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`API ${path} → ${res.status}: ${detail}`);
+    }
+    return res.json() as Promise<T>;
+  }, init?.signal ?? undefined, timeoutMs);
 }
 
 async function apiFetchBlob(
@@ -108,22 +108,21 @@ async function apiFetchBlob(
   timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS
 ): Promise<Blob> {
   const base = await getBaseUrl();
-  const res = await fetchWithTimeout(
-    `${base}${path}`,
-    {
+  return runWithTimeout(async (signal) => {
+    const res = await fetch(`${base}${path}`, {
       ...init,
+      signal,
       headers: {
         "Content-Type": "application/json",
         ...(init?.headers ?? {}),
       },
-    },
-    timeoutMs
-  );
-  if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`API ${path} → ${res.status}: ${detail}`);
-  }
-  return res.blob();
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`API ${path} → ${res.status}: ${detail}`);
+    }
+    return res.blob();
+  }, init?.signal ?? undefined, timeoutMs);
 }
 
 // ── File API ──────────────────────────────────────────────────────────────────
