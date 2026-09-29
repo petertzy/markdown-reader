@@ -60,3 +60,32 @@ def test_exclamation_and_question_marks_still_split():
         "Yes!",
         "Bye.",
     ]
+
+
+def test_closing_quote_stays_with_its_sentence():
+    units = split_text_into_translation_units('He said "Stop." Then ran.')
+    assert units == ['He said "Stop."', "Then ran."]
+
+
+def test_closing_single_quote_stays_with_its_sentence():
+    units = split_text_into_translation_units("She asked 'Why?' He answered.")
+    assert units == ["She asked 'Why?'", "He answered."]
+
+
+def test_exclamation_before_closing_quote_stays_with_sentence():
+    units = split_text_into_translation_units('He yelled "Help!" She came.')
+    assert units == ['He yelled "Help!"', "She came."]
+
+
+def test_closing_bracket_absorbed_into_finished_sentence():
+    # "(Stop.)" is a complete quoted unit; the closing bracket must not
+    # be orphaned onto the next unit.
+    units = split_text_into_translation_units("The guard called (Stop.) Then left.")
+    assert units == ["The guard called (Stop.)", "Then left."]
+
+
+def test_quoted_fragment_with_lowercase_follow_does_not_split():
+    # "after" starts lowercase, so "quote." is not a real sentence end —
+    # the quote must stay inline with the rest of the line.
+    units = split_text_into_translation_units('Single "quote." after.')
+    assert units == ['Single "quote." after.']
