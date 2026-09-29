@@ -101,7 +101,9 @@ class TestKnowledgeLogic(unittest.TestCase):
         self.assertEqual(title, "Meeting Notes: May 2026")
 
     def test_extract_note_title_fallback_filename(self):
-        title = knowledge_logic.extract_note_title("Just some notes without headings", "simple-notes.txt")
+        title = knowledge_logic.extract_note_title(
+            "Just some notes without headings", "simple-notes.txt"
+        )
         self.assertEqual(title, "simple notes")
 
     def test_chunk_markdown_document_creates_sections(self):
@@ -110,8 +112,19 @@ class TestKnowledgeLogic(unittest.TestCase):
         )
         self.assertGreaterEqual(len(chunks), 2)
         sections = [c["section"] for c in chunks]
-        self.assertIn("Architecture", sections)
-        self.assertIn("Security Model", sections)
+        self.assertIn("Project Alpha > Architecture", sections)
+        self.assertIn("Project Alpha > Security Model", sections)
+
+    def test_chunk_markdown_document_preserves_nested_heading_path(self):
+        chunks = knowledge_logic.chunk_markdown_document(
+            "# Parent\n\nParent text.\n\n## Child\n\nChild text.\n\n### Grandchild\n\nDeep text.",
+            str(self.note1_path),
+            "project_alpha.md",
+        )
+        self.assertIn("Parent > Child", [chunk["section"] for chunk in chunks])
+        self.assertIn(
+            "Parent > Child > Grandchild", [chunk["section"] for chunk in chunks]
+        )
 
     def test_find_note_files_excludes_ignored_directories(self):
         found = knowledge_logic.find_note_files(self.notes_dir)
@@ -145,27 +158,50 @@ class TestKnowledgeLogic(unittest.TestCase):
         self.assertEqual(stats2["skipped_files"], 3)
 
         # Modify one file
-        self.note1_path.write_text(NOTE_1 + "\n\n## New Section\nNew content here.", encoding="utf-8")
+        self.note1_path.write_text(
+            NOTE_1 + "\n\n## New Section\nNew content here.", encoding="utf-8"
+        )
         stats3 = knowledge_logic.index_knowledge_base(str(self.notes_dir), force=False)
         self.assertEqual(stats3["indexed_files"], 1)
         self.assertEqual(stats3["skipped_files"], 2)
+
+    def test_index_expands_home_directory_and_removes_oversized_old_entry(self):
+        with mock.patch.dict("os.environ", {"HOME": str(self.root_path)}):
+            stats = knowledge_logic.index_knowledge_base("~/notes", force=True)
+        self.assertEqual(stats["path"], str(self.notes_dir.resolve()))
+        self.assertEqual(knowledge_logic.get_knowledge_base_status()["file_count"], 3)
+
+        self.note1_path.write_bytes(b"x" * (5 * 1024 * 1024 + 1))
+        with mock.patch.dict("os.environ", {"HOME": str(self.root_path)}):
+            stats = knowledge_logic.index_knowledge_base("~/notes")
+        self.assertEqual(stats["total_files"], 2)
+        self.assertEqual(
+            {note["rel_path"] for note in knowledge_logic.list_indexed_notes()},
+            {"meetings.md", "research/rag_survey.markdown"},
+        )
 
     def test_query_knowledge_base_finds_relevant_chunks(self):
         knowledge_logic.index_knowledge_base(str(self.notes_dir), force=True)
 
         # Search for Project Alpha architecture
-        results = knowledge_logic.query_knowledge_base("consistent hashing architecture", top_k=3)
+        results = knowledge_logic.query_knowledge_base(
+            "consistent hashing architecture", top_k=3
+        )
         self.assertGreater(len(results), 0)
         self.assertIn("project_alpha.md", results[0]["rel_path"])
         self.assertIn("virtual buckets", results[0]["content"])
 
         # Search for Meeting action items
-        results_meeting = knowledge_logic.query_knowledge_base("Alice consensus benchmarks", top_k=3)
+        results_meeting = knowledge_logic.query_knowledge_base(
+            "Alice consensus benchmarks", top_k=3
+        )
         self.assertGreater(len(results_meeting), 0)
         self.assertIn("meetings.md", results_meeting[0]["rel_path"])
 
         # Search for RAG survey
-        results_rag = knowledge_logic.query_knowledge_base("sparse retrieval BM25", top_k=3)
+        results_rag = knowledge_logic.query_knowledge_base(
+            "sparse retrieval BM25", top_k=3
+        )
         self.assertGreater(len(results_rag), 0)
         self.assertIn("rag_survey.markdown", results_rag[0]["rel_path"])
 
@@ -199,7 +235,9 @@ class TestKnowledgeApiEndpoints(unittest.TestCase):
 
         self.notes_dir = self.root_path / "notes"
         self.notes_dir.mkdir(parents=True, exist_ok=True)
-        (self.notes_dir / "note.md").write_text("# Test Note\n\nSome important facts about Alpha.", encoding="utf-8")
+        (self.notes_dir / "note.md").write_text(
+            "# Test Note\n\nSome important facts about Alpha.", encoding="utf-8"
+        )
 
         self.settings_path = self.root_path / "settings.json"
         self.db_path = self.root_path / "knowledge_base.db"
@@ -222,7 +260,9 @@ class TestKnowledgeApiEndpoints(unittest.TestCase):
 
     def test_api_index_and_status(self):
         # Index
-        res = self.client.post("/api/knowledge/index", json={"path": str(self.notes_dir), "force": True})
+        res = self.client.post(
+            "/api/knowledge/index", json={"path": str(self.notes_dir), "force": True}
+        )
         self.assertEqual(res.status_code, 200)
         data = res.json()
         self.assertEqual(data["total_files"], 1)
@@ -233,7 +273,9 @@ class TestKnowledgeApiEndpoints(unittest.TestCase):
         self.assertEqual(res_status.json()["file_count"], 1)
 
         # Query
-        res_query = self.client.post("/api/knowledge/query", json={"query": "Alpha", "top_k": 2})
+        res_query = self.client.post(
+            "/api/knowledge/query", json={"query": "Alpha", "top_k": 2}
+        )
         self.assertEqual(res_query.status_code, 200)
         qdata = res_query.json()
         self.assertEqual(qdata["count"], 1)
@@ -254,14 +296,38 @@ class TestKnowledgeApiEndpoints(unittest.TestCase):
         self.assertEqual(res_clear.status_code, 200)
         self.assertTrue(res_clear.json()["cleared"])
 
+    def test_query_endpoint_bounds_top_k(self):
+        self.assertEqual(
+            self.client.post(
+                "/api/knowledge/query", json={"query": "Alpha", "top_k": 0}
+            ).status_code,
+            422,
+        )
+        self.assertEqual(
+            self.client.post(
+                "/api/knowledge/query", json={"query": "Alpha", "top_k": 21}
+            ).status_code,
+            422,
+        )
+
     def test_ai_chat_with_knowledge_base_retrieval(self):
         # Index notes first
-        self.client.post("/api/knowledge/index", json={"path": str(self.notes_dir), "force": True})
+        self.client.post(
+            "/api/knowledge/index", json={"path": str(self.notes_dir), "force": True}
+        )
 
         # Mock _request_chat_from_provider and model getter to inspect knowledge_context
-        with mock.patch("backend.ai_logic._request_chat_from_provider", return_value="Here is info from your notes.") as mock_chat:
-            with mock.patch("backend.ai_logic._get_current_ai_provider", return_value="local"):
-                with mock.patch("backend.ai_logic._get_ai_model_for_request", return_value="mock-model"):
+        with mock.patch(
+            "backend.ai_logic._request_chat_from_provider",
+            return_value="Here is info from your notes.",
+        ) as mock_chat:
+            with mock.patch(
+                "backend.ai_logic._get_current_ai_provider", return_value="local"
+            ):
+                with mock.patch(
+                    "backend.ai_logic._get_ai_model_for_request",
+                    return_value="mock-model",
+                ):
                     res = self.client.post(
                         "/api/ai/chat",
                         json={
@@ -271,12 +337,31 @@ class TestKnowledgeApiEndpoints(unittest.TestCase):
                     )
                     self.assertEqual(res.status_code, 200)
                     data = res.json()
-                    self.assertEqual(data["assistant_message"], "Here is info from your notes.")
+                    self.assertEqual(
+                        data["assistant_message"], "Here is info from your notes."
+                    )
                     self.assertEqual(len(data.get("used_sources", [])), 1)
                     self.assertEqual(data["used_sources"][0]["rel_path"], "note.md")
 
                     # Verify knowledge_context was injected into provider call
                     self.assertTrue(mock_chat.called)
                     kwargs = mock_chat.call_args.kwargs
-                    self.assertIn("Directory Knowledge Base Context", kwargs.get("knowledge_context", ""))
+                    self.assertIn(
+                        "Directory Knowledge Base Context",
+                        kwargs.get("knowledge_context", ""),
+                    )
 
+                    # A persisted OFF setting wins over a request asking for context.
+                    knowledge_logic.set_knowledge_base_enabled(False)
+                    res_disabled = self.client.post(
+                        "/api/ai/chat",
+                        json={
+                            "message": "Tell me about Alpha",
+                            "use_knowledge_base": True,
+                        },
+                    )
+                    self.assertEqual(res_disabled.status_code, 200)
+                    self.assertEqual(res_disabled.json().get("used_sources"), [])
+                    self.assertEqual(
+                        mock_chat.call_args.kwargs.get("knowledge_context"), ""
+                    )

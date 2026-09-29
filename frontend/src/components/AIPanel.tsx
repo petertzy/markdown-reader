@@ -1253,7 +1253,7 @@ export default function AIPanel({
                   )}
                 </div>
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                  Select a local folder of Markdown notes to allow AI to answer questions using your workspace notes. All data stays local.
+                  Indexing and retrieval stay local. When notes context is enabled, matching excerpts are sent to the selected AI provider with your chat message.
                 </p>
                 <div className="flex gap-1">
                   <input

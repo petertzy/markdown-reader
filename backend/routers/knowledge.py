@@ -11,7 +11,7 @@ import sys
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _ROOT not in sys.path:
@@ -36,7 +36,7 @@ class IndexKnowledgePayload(BaseModel):
 
 class QueryKnowledgePayload(BaseModel):
     query: str
-    top_k: int = 5
+    top_k: int = Field(default=5, ge=1, le=20)
 
 
 class KnowledgeTogglePayload(BaseModel):

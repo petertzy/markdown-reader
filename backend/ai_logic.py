@@ -1108,25 +1108,32 @@ def request_ai_agent_response(
         try:
             from backend import knowledge_logic
 
-            # Search knowledge base using user query and any active selection
-            search_query = message.strip()
-            if selected_text.strip():
-                search_query += " " + selected_text.strip()
-            chunks = knowledge_logic.query_knowledge_base(search_query, top_k=knowledge_top_k)
-            if chunks:
-                knowledge_context = knowledge_logic.build_knowledge_context_for_prompt(chunks)
-                seen_paths = set()
-                for c in chunks:
-                    rel_p = c.get("rel_path") or c.get("file_path", "")
-                    if rel_p not in seen_paths:
-                        seen_paths.add(rel_p)
-                        used_sources.append(
-                            {
-                                "rel_path": rel_p,
-                                "title": c.get("title", rel_p),
-                                "section": c.get("section", ""),
-                            }
-                        )
+            # The persisted setting is authoritative as well as the per-request
+            # preference, so a caller cannot bypass the user's OFF toggle.
+            if knowledge_logic.get_knowledge_base_enabled():
+                # Search knowledge base using user query and any active selection
+                search_query = message.strip()
+                if selected_text.strip():
+                    search_query += " " + selected_text.strip()
+                chunks = knowledge_logic.query_knowledge_base(
+                    search_query, top_k=knowledge_top_k
+                )
+                if chunks:
+                    knowledge_context = (
+                        knowledge_logic.build_knowledge_context_for_prompt(chunks)
+                    )
+                    seen_paths = set()
+                    for c in chunks:
+                        rel_p = c.get("rel_path") or c.get("file_path", "")
+                        if rel_p not in seen_paths:
+                            seen_paths.add(rel_p)
+                            used_sources.append(
+                                {
+                                    "rel_path": rel_p,
+                                    "title": c.get("title", rel_p),
+                                    "section": c.get("section", ""),
+                                }
+                            )
         except Exception as k_err:
             logger.warning("Knowledge base retrieval failed: %s", k_err)
 

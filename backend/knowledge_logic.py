@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 # Supported note file extensions
 NOTE_EXTENSIONS = frozenset({".md", ".markdown", ".txt"})
+MAX_KNOWLEDGE_TOP_K = 20
 
 # Directories to skip when scanning note vaults
 IGNORED_DIRECTORIES = frozenset(
@@ -188,9 +189,7 @@ def _init_db_schema(con: sqlite3.Connection) -> None:
         )
         """
     )
-    cur.execute(
-        "CREATE INDEX IF NOT EXISTS idx_chunks_file_path ON chunks (file_path)"
-    )
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_chunks_file_path ON chunks (file_path)")
 
     if _supports_fts5(con):
         cur.execute(
@@ -245,7 +244,11 @@ def extract_note_title(content: str, fallback_filename: str) -> str:
         end_idx = content.find("---", 3)
         if end_idx != -1:
             frontmatter = content[3:end_idx]
-            match = re.search(r"^title:\s*[\"']?(.*?)[\"']?\s*$", frontmatter, re.MULTILINE | re.IGNORECASE)
+            match = re.search(
+                r"^title:\s*[\"']?(.*?)[\"']?\s*$",
+                frontmatter,
+                re.MULTILINE | re.IGNORECASE,
+            )
             if match and match.group(1).strip():
                 return match.group(1).strip()
 
@@ -290,6 +293,7 @@ def chunk_markdown_document(
     lines = body.splitlines()
     sections: list[tuple[str, list[str]]] = []
     current_section = "Overview"
+    heading_stack: list[tuple[int, str]] = []
     current_lines: list[str] = []
 
     for line in lines:
@@ -299,7 +303,13 @@ def chunk_markdown_document(
             if current_lines:
                 sections.append((current_section, current_lines))
                 current_lines = []
-            current_section = heading_match.group(2).strip()
+            level = len(heading_match.group(1))
+            heading = heading_match.group(2).strip()
+            heading_stack = [
+                (depth, name) for depth, name in heading_stack if depth < level
+            ]
+            heading_stack.append((level, heading))
+            current_section = " > ".join(name for _, name in heading_stack)
             continue
         current_lines.append(line)
 
@@ -392,7 +402,9 @@ def find_note_files(directory: str | Path) -> list[Path]:
     note_paths: list[Path] = []
     for root, dirs, files in os.walk(base):
         # Exclude ignored directories in-place so os.walk doesn't descend into them
-        dirs[:] = [d for d in dirs if d not in IGNORED_DIRECTORIES and not d.startswith(".")]
+        dirs[:] = [
+            d for d in dirs if d not in IGNORED_DIRECTORIES and not d.startswith(".")
+        ]
 
         for file in files:
             if file.startswith("."):
@@ -414,7 +426,7 @@ def index_knowledge_base(
 
     Returns statistics about the indexing run.
     """
-    base_path = Path(directory).resolve()
+    base_path = Path(directory).expanduser().resolve()
     if not base_path.is_dir():
         raise ValueError(f"Directory does not exist or is not a folder: {directory}")
 
@@ -452,6 +464,8 @@ def index_knowledge_base(
 
                 # Skip large files (> 5MB)
                 if size > 5 * 1024 * 1024:
+                    # Treat it as absent so cleanup removes any older indexed copy.
+                    current_paths.discard(full_path_str)
                     continue
 
                 # Check if file has changed
@@ -465,7 +479,9 @@ def index_knowledge_base(
                 try:
                     content = note_path.read_text(encoding="utf-8", errors="replace")
                 except Exception as read_err:
-                    logger.warning("Could not read note file %s: %s", full_path_str, read_err)
+                    logger.warning(
+                        "Could not read note file %s: %s", full_path_str, read_err
+                    )
                     continue
 
                 rel_path = str(note_path.relative_to(base_path))
@@ -576,9 +592,13 @@ def get_knowledge_base_status(db_path: Path | None = None) -> dict[str, Any]:
             file_count = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM chunks")
             chunk_count = cur.fetchone()[0]
-            cur.execute("SELECT value FROM knowledge_meta WHERE key = 'last_indexed_at'")
+            cur.execute(
+                "SELECT value FROM knowledge_meta WHERE key = 'last_indexed_at'"
+            )
             last_row = cur.fetchone()
-            last_indexed_at = float(last_row["value"]) if last_row and last_row["value"] else None
+            last_indexed_at = (
+                float(last_row["value"]) if last_row and last_row["value"] else None
+            )
         finally:
             con.close()
     except Exception:
@@ -707,6 +727,7 @@ def query_knowledge_base(
     q = (query or "").strip()
     if not q:
         return []
+    top_k = max(1, min(int(top_k), MAX_KNOWLEDGE_TOP_K))
 
     db_target = db_path or _get_db_file_path()
     if not db_target.exists():
@@ -736,7 +757,10 @@ def query_knowledge_base(
                     if results:
                         return results
                 except Exception as fts_err:
-                    logger.debug("FTS5 query failed (%s), falling back to keyword search", fts_err)
+                    logger.debug(
+                        "FTS5 query failed (%s), falling back to keyword search",
+                        fts_err,
+                    )
 
         # Fallback to python keyword search
         return _python_keyword_search(con, q, top_k)
@@ -759,7 +783,9 @@ def build_knowledge_context_for_prompt(
 
     total_len = sum(len(p) for p in parts)
     for i, ch in enumerate(chunks, 1):
-        rel_path = ch.get("rel_path") or os.path.basename(ch.get("file_path", "note.md"))
+        rel_path = ch.get("rel_path") or os.path.basename(
+            ch.get("file_path", "note.md")
+        )
         title = ch.get("title", rel_path)
         section = ch.get("section", "")
         sec_header = f" > {section}" if section and section != "Overview" else ""

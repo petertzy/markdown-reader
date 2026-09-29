@@ -11,7 +11,7 @@ import sys
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _ROOT not in sys.path:
@@ -65,7 +65,7 @@ class AgentChatPayload(BaseModel):
     selected_text: str = ""
     chat_history: list[dict[str, Any]] = []
     use_knowledge_base: bool = False
-    knowledge_top_k: int = 5
+    knowledge_top_k: int = Field(default=5, ge=1, le=20)
 
 
 class WorkPayload(BaseModel):
