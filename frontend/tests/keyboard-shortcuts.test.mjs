@@ -1,10 +1,27 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  isCompositionBlocked,
-  shortcutMatchesEvent,
-} from "../src/lib/keyboardShortcuts.ts";
+// NOTE: These helpers deliberately mirror `frontend/src/lib/keyboardShortcuts.ts`
+// (`shortcutMatchesEvent` and `isCompositionBlocked`) as a self-contained copy.
+// CI runs the frontend suite on Node 20, which cannot import `.ts` modules, so we
+// keep this regression test dependency-free (same approach as editor-undo.test.mjs).
+// Keep this file's logic in sync with keyboardShortcuts.ts.
+
+function shortcutMatchesEvent(binding, event) {
+  const keyMatches = String(event.key).toLowerCase() === String(binding.key).toLowerCase();
+  const codeMatches = Boolean(binding.code && event.code === binding.code);
+  return (
+    (keyMatches || codeMatches) &&
+    event.ctrlKey === Boolean(binding.ctrl) &&
+    event.metaKey === Boolean(binding.meta) &&
+    event.shiftKey === Boolean(binding.shift) &&
+    event.altKey === Boolean(binding.alt)
+  );
+}
+
+function isCompositionBlocked(binding, event) {
+  return Boolean(event.isComposing) && Boolean(binding.alt);
+}
 
 // Build a plain KeyboardEvent-like object. `chord` is the physical code, e.g. "KeyT".
 function keyEvent(
