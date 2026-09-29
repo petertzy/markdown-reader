@@ -1,35 +1,39 @@
 "use client";
 
-import { useState, useRef, useCallback, type SetStateAction } from "react";
-import type { editor as MonacoEditor } from "monaco-editor";
+import { useState, useCallback, type SetStateAction } from "react";
 import { useEditor } from "@/hooks/useEditor";
 import { useAIActions } from "@/hooks/useAIActions";
 import { useFileIO } from "@/hooks/useFileIO";
 import { useTauriBackend } from "@/hooks/useTauriBackend";
 import { useEditorCommands } from "@/hooks/editor/useEditorCommands";
+import { useEditorWorkspace } from "@/hooks/editor/useEditorWorkspace";
 import TabBar from "@/components/TabBar";
 import Toolbar from "@/components/Toolbar";
 import MenuBar from "@/components/MenuBar";
-import EditorPane from "@/components/EditorPane";
+import EditorWorkspace from "@/components/EditorWorkspace";
 import PreviewPane from "@/components/PreviewPane";
 import SplitPane from "@/components/SplitPane";
 import FocusModePane from "@/components/FocusModePane";
 import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
-import SlashCommandMenu from "@/components/SlashCommandMenu";
 import StatusBar from "@/components/StatusBar";
 import { PANELS, type PanelId } from "@/types/panels";
 
 export default function HomePage() {
   const editor = useEditor();
+  const editorWorkspace = useEditorWorkspace();
+  const {
+    monacoRef,
+    monacoReady,
+    revision,
+    markReady,
+    reset: resetEditor,
+  } = editorWorkspace;
   const [focusMode, setFocusMode] = useState(false);
-  const [focusRevision, setFocusRevision] = useState(0);
   const [showPreview] = useState(true);
   const [activePanel, setActivePanel] = useState<PanelId>(null);
   const [aiPanelInitialTab, setAiPanelInitialTab] = useState<AIPanelTab | undefined>();
   const [split, setSplit] = useState(50);
-  const [monacoReady, setMonacoReady] = useState(false);
-  const monacoRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null);
   const { isDesktopRuntime, backendStatus, backendMessage, showPackagedBackendStatus } = useTauriBackend(editor);
   const fileIO = useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef });
   const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt, executeWork, isWorking } = useAIActions({
@@ -96,22 +100,22 @@ export default function HomePage() {
       <Toolbar onOpenFile={() => { void fileIO.handleOpenFile(); }} onSaveFile={() => { void handleSaveFile(); }}
         onExport={fileIO.handleExport} onOpenBrowserPreview={() => { void handleOpenBrowserPreview(); }}
         onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={handleToggle}
-        onToggleFocusMode={() => { setFocusMode((enabled) => !enabled); setMonacoReady(false); monacoRef.current = null; setFocusRevision((revision) => revision + 1); }}
+        onToggleFocusMode={() => { setFocusMode((enabled) => !enabled); resetEditor(); }}
         darkMode={editor.darkMode} fontSize={editor.fontSize} onFontSizeChange={editor.setFontSize}
         showFocusPanel={focusMode}
         backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null} />
       <TabBar tabs={editor.tabs} activeTabId={editor.activeTabId} onSelect={handleTabSelect} onClose={editor.closeTab} onNew={editor.newTab} />
       <div className="flex flex-1 overflow-hidden">
-        {focusMode ? <FocusModePane key={`${editor.activeTabId}-${focusRevision}`} value={editor.activeTab.content}
+        {focusMode ? <FocusModePane key={`${editor.activeTabId}-${revision}`} value={editor.activeTab.content}
           onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
           slashCommands={slash.filteredCommands} onSelect={(command) => { void executeSlashCommand(command); }} /> :
           <SplitPane split={split} onSplitChange={setSplit}
-            left={<div className="relative h-full"><EditorPane path={editor.activeTab.id} value={editor.activeTab.content}
+            left={<EditorWorkspace tabId={editor.activeTab.id} value={editor.activeTab.content}
               onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
-              onMount={(instance) => { monacoRef.current = instance; setMonacoReady(true); }} />
-              {slash.isOpen && slashMenuPosition && <SlashCommandMenu commands={slash.filteredCommands} selectedIndex={slash.selectedIndex}
-                top={slashMenuPosition.top + slashMenuPosition.height} left={slashMenuPosition.left}
-                onSelect={(command) => { void executeSlashCommand(command); }} onClose={slash.close} />}</div>}
+              revision={revision} monacoRef={monacoRef} onReady={markReady}
+              slash={{ isOpen: slash.isOpen, filteredCommands: slash.filteredCommands, selectedIndex: slash.selectedIndex,
+                position: slashMenuPosition,
+                onSelect: (command) => { void executeSlashCommand(command); }, onClose: slash.close }} />}
             right={showPreview ? <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
               error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : null} />}
         {activePanel === PANELS.AI && <AIPanel documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} />}
