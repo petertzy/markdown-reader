@@ -13,6 +13,14 @@
  * This means NO hard-coded port leaks into the packaged desktop app.
  */
 
+import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  LONG_REQUEST_TIMEOUT_MS,
+  fetchWithTimeout,
+} from "./http-timeout.mjs";
+
+export { DEFAULT_REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS, fetchWithTimeout };
+
 // Detect Tauri without relying only on globals. Tauri v2 may not expose
 // window.__TAURI__ unless withGlobalTauri is enabled, while packaged pages are
 // served from tauri.localhost and usually include "Tauri" in the user agent.
@@ -28,26 +36,6 @@ function isTauriRuntime() {
 }
 
 let _resolvedBaseUrl: string | null = null;
-
-// Timeout for regular API calls. Kept generous: local conversions and AI
-// requests (chat, translation, provider model checks) can legitimately take a
-// while, but a hung request should still surface as an error instead of
-// leaving the UI awaiting forever.
-const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
-
-export function fetchWithTimeout(
-  input: RequestInfo | URL,
-  init: RequestInit = {},
-  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
-) {
-  const controller = new AbortController();
-  // globalThis works in browsers, the Tauri webview, and non-browser runtimes
-  // (SSR / tests) alike, unlike window.setTimeout.
-  const timeoutId = globalThis.setTimeout(() => controller.abort(), timeoutMs);
-  return fetch(input, { ...init, signal: init.signal ?? controller.signal }).finally(
-    () => globalThis.clearTimeout(timeoutId)
-  );
-}
 
 /**
  * Returns the backend base URL, resolving it once and caching the result.
@@ -177,10 +165,14 @@ export const Files = {
     }),
 
   convertToMarkdown: (payload: ConvertToMarkdownPayload) =>
-    apiFetch<{ markdown: string }>("/api/files/convert-to-markdown", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    apiFetch<{ markdown: string }>(
+      "/api/files/convert-to-markdown",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   getSupportedFormats: () =>
     apiFetch<SupportedFormatsResponse>("/api/files/supported-formats"),
@@ -235,16 +227,24 @@ export const Markdown = {
     }),
 
   htmlToMarkdown: (html: string) =>
-    apiFetch<{ markdown: string }>("/api/markdown/convert/html", {
-      method: "POST",
-      body: JSON.stringify({ html }),
-    }),
+    apiFetch<{ markdown: string }>(
+      "/api/markdown/convert/html",
+      {
+        method: "POST",
+        body: JSON.stringify({ html }),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   pdfToMarkdown: (path: string, use_docling = false) =>
-    apiFetch<{ markdown: string }>("/api/markdown/convert/pdf", {
-      method: "POST",
-      body: JSON.stringify({ path, use_docling }),
-    }),
+    apiFetch<{ markdown: string }>(
+      "/api/markdown/convert/pdf",
+      {
+        method: "POST",
+        body: JSON.stringify({ path, use_docling }),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   wordCount: (content: string) =>
     apiFetch<WordCountResult>("/api/markdown/wordcount", {
@@ -456,14 +456,20 @@ export const AI = {
 
   getModels: (provider: string, base_url_override = "") =>
     apiFetch<{ provider: string; models: string[]; message?: string }>(
-      `/api/ai/models/${provider}${base_url_override ? `?base_url_override=${encodeURIComponent(base_url_override)}` : ""}`
+      `/api/ai/models/${provider}${base_url_override ? `?base_url_override=${encodeURIComponent(base_url_override)}` : ""}`,
+      {},
+      LONG_REQUEST_TIMEOUT_MS
     ),
 
   fetchModelsWithKey: (provider: string, api_key: string, base_url_override = "") =>
-    apiFetch<{ provider: string; models: string[]; message?: string }>("/api/ai/models", {
-      method: "POST",
-      body: JSON.stringify({ provider, api_key, base_url_override }),
-    }),
+    apiFetch<{ provider: string; models: string[]; message?: string }>(
+      "/api/ai/models",
+      {
+        method: "POST",
+        body: JSON.stringify({ provider, api_key, base_url_override }),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   setOpenAICompatibleBaseUrlChoice: async (choice_key: string) => {
     try {
@@ -495,16 +501,24 @@ export const AI = {
     ),
 
   chat: (payload: AgentChatPayload) =>
-    apiFetch<AgentResponse>("/api/ai/chat", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    apiFetch<AgentResponse>(
+      "/api/ai/chat",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   work: (instruction: string, document_content: string) =>
-    apiFetch<{ modified_content: string }>("/api/ai/work", {
-      method: "POST",
-      body: JSON.stringify({ instruction, document_content }),
-    }),
+    apiFetch<{ modified_content: string }>(
+      "/api/ai/work",
+      {
+        method: "POST",
+        body: JSON.stringify({ instruction, document_content }),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   getChatHistory: () =>
     apiFetch<{ histories: unknown[] }>("/api/ai/chat/history"),
@@ -522,10 +536,14 @@ export const AI = {
     apiFetch<{ logs: unknown[] }>(`/api/ai/automation/logs?limit=${limit}`),
 
   translate: (content: string, source_language: string, target_language: string) =>
-    apiFetch<{ translated: string }>("/api/ai/translate", {
-      method: "POST",
-      body: JSON.stringify({ content, source_language, target_language }),
-    }),
+    apiFetch<{ translated: string }>(
+      "/api/ai/translate",
+      {
+        method: "POST",
+        body: JSON.stringify({ content, source_language, target_language }),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   translateSentences: (content: string, source_language: string, target_language: string) =>
     apiFetch<{ translated: string; pairs: { source: string; translated: string }[] }>(
@@ -533,7 +551,8 @@ export const AI = {
       {
         method: "POST",
         body: JSON.stringify({ content, source_language, target_language }),
-      }
+      },
+      LONG_REQUEST_TIMEOUT_MS
     ),
 
   translateSentenceBatch: (
@@ -548,7 +567,8 @@ export const AI = {
         method: "POST",
         body: JSON.stringify({ items, source_language, target_language }),
         signal,
-      }
+      },
+      LONG_REQUEST_TIMEOUT_MS
     ),
 };
 
@@ -565,28 +585,44 @@ export type ExportPayload = {
 
 export const Export = {
   toHtml: (payload: ExportPayload) =>
-    apiFetch<{ path: string }>("/api/export/html", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    apiFetch<{ path: string }>(
+      "/api/export/html",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   downloadHtml: (payload: ExportPayload) =>
-    apiFetchBlob("/api/export/html/download", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    apiFetchBlob(
+      "/api/export/html/download",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   toPdf: (payload: ExportPayload) =>
-    apiFetch<{ path: string }>("/api/export/pdf", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    apiFetch<{ path: string }>(
+      "/api/export/pdf",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   toDocx: (payload: ExportPayload) =>
-    apiFetch<{ path: string }>("/api/export/docx", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    apiFetch<{ path: string }>(
+      "/api/export/docx",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 };
 
 // ── Citations API ────────────────────────────────────────────────────────────
