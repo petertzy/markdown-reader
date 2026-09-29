@@ -52,7 +52,7 @@ export default function EditorWorkspace({
   return (
     <div className="relative h-full">
       <EditorPane
-        key={`${tabId}-${revision}`}
+        key={revision}
         path={tabId}
         value={value}
         darkMode={darkMode}
