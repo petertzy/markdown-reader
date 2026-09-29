@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useCallback, type SetStateAction } from "react";
+import { useState, useCallback } from "react";
 import { useEditor } from "@/hooks/useEditor";
 import { useAIActions } from "@/hooks/useAIActions";
 import { useFileIO } from "@/hooks/useFileIO";
+import { usePanels } from "@/hooks/usePanels";
 import { useTauriBackend } from "@/hooks/useTauriBackend";
 import { useEditorCommands } from "@/hooks/editor/useEditorCommands";
 import { useEditorWorkspace } from "@/hooks/editor/useEditorWorkspace";
@@ -17,7 +18,7 @@ import FocusModePane from "@/components/FocusModePane";
 import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
 import StatusBar from "@/components/StatusBar";
-import { PANELS, type PanelId } from "@/types/panels";
+import { PANELS } from "@/types/panels";
 
 export default function HomePage() {
   const editor = useEditor();
@@ -31,7 +32,7 @@ export default function HomePage() {
   } = editorWorkspace;
   const [focusMode, setFocusMode] = useState(false);
   const [showPreview] = useState(true);
-  const [activePanel, setActivePanel] = useState<PanelId>(null);
+  const { activePanel, togglePanel, setShowAIPanel } = usePanels();
   const [aiPanelInitialTab, setAiPanelInitialTab] = useState<AIPanelTab | undefined>();
   const [split, setSplit] = useState(50);
   const { isDesktopRuntime, backendStatus, backendMessage, showPackagedBackendStatus } = useTauriBackend(editor);
@@ -39,29 +40,6 @@ export default function HomePage() {
   const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt, executeWork, isWorking } = useAIActions({
     documentText: editor.activeTab.content, editorRef: monacoRef, onDocumentChange: editor.handleContentChange,
   });
-  const handleToggle = (panelId: PanelId) => {
-    if (activePanel === panelId) {
-      setActivePanel(null);
-    } else {
-      setActivePanel(panelId);
-    }
-  };
-
-  /**
-   * Adapter function to maintain compatibility with `useActions` and `useSlashCommandWiring`.
-   * Those hooks still expect a standard boolean state setter (`setShowAIPanel`), so this
-   * wrapper intercepts those boolean calls and translates them into the unified `activePanel` string state.
-   */
-  const setShowAIPanel = (action: SetStateAction<boolean>) => {
-    setActivePanel((prevPanel) => {
-      const isCurrentlyAI = prevPanel === PANELS.AI;
-      const shouldShowAI = typeof action === "function" ? action(isCurrentlyAI) : action;
-
-      if (shouldShowAI) return PANELS.AI;
-      if (!shouldShowAI && isCurrentlyAI) return null;
-      return prevPanel;
-    });
-  };
 
   const {
     formatting,
@@ -99,7 +77,7 @@ export default function HomePage() {
       <MenuBar groups={menuGroups} shortcuts={shortcuts} />
       <Toolbar onOpenFile={() => { void fileIO.handleOpenFile(); }} onSaveFile={() => { void handleSaveFile(); }}
         onExport={fileIO.handleExport} onOpenBrowserPreview={() => { void handleOpenBrowserPreview(); }}
-        onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={handleToggle}
+        onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={togglePanel}
         onToggleFocusMode={() => { setFocusMode((enabled) => !enabled); resetEditor(); }}
         darkMode={editor.darkMode} fontSize={editor.fontSize} onFontSizeChange={editor.setFontSize}
         showFocusPanel={focusMode}
