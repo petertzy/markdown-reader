@@ -45,7 +45,7 @@ Most modern writing apps force you to choose between **privacy** and **power**. 
 Get the app running locally for development in under a minute:
 
 ```bash
-# Prerequisites: Python 3.11-3.13, Node.js 18+, and uv
+# Prerequisites: Python 3.11-3.13, Node.js 20.9.0+, and uv
 git clone https://github.com/petertzy/markdown-reader.git
 cd markdown-reader
 
