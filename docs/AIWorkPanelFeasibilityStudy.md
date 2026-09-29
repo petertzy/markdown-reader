@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-As AI-assisted tooling transitions from passive conversational chat into **active, task-oriented execution**, Markdown Reader has the opportunity to introduce a dedicated **AI Work Panel**. Unlike the existing AI chat assistant, the Work Panel focuses on **direct document modification**, allowing users to specify editing, formatting, restructuring, and translation goals in natural language that are directly applied to the document with complete safety and undoability.
+As AI-assisted tooling transitions from conversational chat into **active, task-oriented execution**, Markdown Reader could introduce a dedicated **AI Work Panel**. The existing AI chat assistant already supports reviewable edit proposals; the proposed panel would focus on task-oriented document modification, allowing users to describe editing, formatting, restructuring, or translation goals and review the resulting changes before applying them. Safe application and undo behavior are design requirements that need validation during implementation.
 
 This study explores the architectural feasibility, user experience requirements, backend protocols, and phased implementation strategy for the feature.
 
@@ -62,17 +62,17 @@ This study explores the architectural feasibility, user experience requirements,
 
 1. **Preserving Monaco Undo/Redo History:**
    - Replacing the entire document via `editor.setValue()` destroys Monaco's undo stack, causing frustration if the user wants to revert.
-   - **Recommended Approach:** Use `editor.executeEdits("ai-work", [{ range: fullRange, text: newContent }])` on the mounted editor instance and push an undo stop via `model.pushStackElement()`. This ensures that pressing `Ctrl+Z` / `Cmd+Z` restores the exact pre-AI state.
+   - **Recommended Approach:** On the mounted editor instance, use `editor.executeEdits("ai-work", [{ range: fullRange, text: newContent }])` and use `model.pushStackElement()` to delimit the operation in the undo history. Verify undo and redo behavior against the supported Monaco version and editor lifecycle before relying on it; the API calls alone do not guarantee exact restoration in every integration.
 
 2. **System Prompt Formulation:**
    - The LLM prompt must strictly prohibit conversational commentary (e.g., "Here is your updated markdown:").
-   - Output must be clean, valid Markdown preserving existing frontmatter and structure unless explicitly instructed otherwise.
+   - Output should be clean Markdown that preserves existing frontmatter and structure unless explicitly instructed otherwise. Validate or review generated output before applying it.
 
 3. **Stale-Document Guard & Concurrency Safety:**
    - Undo history alone is insufficient if the user continues editing while an AI generation request is in flight. Overwriting the active document with `newContent` derived from an older snapshot would destroy intervening keystrokes.
    - **Protocol Enforcement:**
      - The dispatch payload attaches a document revision counter or content hash (`baseDocHash`).
-     - Upon receiving the result, the client verifies whether the editor's current hash matches `baseDocHash`.
+     - Upon receiving the result and again immediately before applying it, the client verifies whether the editor's current hash matches `baseDocHash`.
      - **Mismatch Handling:** If the document has diverged, **"Apply Directly"** is strictly disabled/rejected. The UI informs the user of concurrent changes and directs them to **"Review Diff"** (with 3-way merge/conflict highlighting) or prompts to re-run against the latest snapshot.
 
 4. **Diff & Review Experience:**
@@ -98,6 +98,6 @@ Once single-document editing is stable, the same pattern can be extended to mult
 
 ## 5. Feasibility Verdict
 
-- **Technical Feasibility:** **10/10**. The application already possesses Monaco integration, a Python sidecar with multi-provider AI support, and an extensible panel system (`PANELS.AI`).
-- **Implementation Effort:** **Low to Moderate**. Requires a new `/work` endpoint in the Python backend and an active edit handler in the frontend.
-- **Recommended Action:** Adopt Phase 1 with `executeEdits` undo preservation and reviewable changes, keeping #274 open as the umbrella roadmap issue.
+- **Technical Feasibility:** The proposal appears technically feasible based on the existing Monaco integration, Python sidecar with multi-provider AI support, and extensible panel system (`PANELS.AI`). Undo grouping, stale-result handling, and review behavior still need implementation and validation.
+- **Implementation Effort:** Requires a task-oriented backend endpoint or equivalent flow and frontend integration for generating, reviewing, and applying edits. Effort depends on the chosen diff and conflict-resolution experience.
+- **Recommended Action:** Prototype Phase 1 for the current editor tab, including guarded application, reviewable changes, and verified undo/redo behavior. Keep #274 open as the umbrella roadmap issue while feasibility is validated.
