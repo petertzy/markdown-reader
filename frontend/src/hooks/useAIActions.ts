@@ -16,6 +16,7 @@ export function useAIActions({
   onDocumentChange,
 }: UseAIActionsOptions) {
   const [selectedText, setSelectedText] = useState("");
+  const [isWorking, setIsWorking] = useState(false);
 
   const getSelectedText = useCallback(() => {
     const editor = editorRef.current;
@@ -96,10 +97,25 @@ export function useAIActions({
     [applyAction, documentText, getSelectedText]
   );
 
+  const executeWork = useCallback(async (instruction: string) => {
+    setIsWorking(true);
+    try {
+      const data = await AI.work(instruction, documentText);
+      onDocumentChange(data.modified_content);
+    } catch (error) {
+      console.error("AI Work Error:", error);
+      alert("Failed to apply AI modifications.");
+    } finally {
+      setIsWorking(false);
+    }
+  }, [documentText, onDocumentChange]);
+
   return {
     selectedText,
     syncSelectedText,
     applyAction,
     executePrompt,
+    executeWork,
+    isWorking,
   };
 }

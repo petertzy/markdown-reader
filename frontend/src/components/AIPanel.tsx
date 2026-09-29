@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback, type ReactNode } from "react"
 import { useAIChat, type TranslationPair, type TranslationProgress } from "@/hooks/useAIChat";
 import { AI, getDefaultAISettings, type AISettings, Knowledge, type KnowledgeStatus } from "@/lib/api";
 
-export type AIPanelTab = "chat" | "translate" | "settings";
+export type AIPanelTab = "chat" | "translate" | "settings" | "work";
 type Tab = AIPanelTab;
 
 type Props = {
@@ -13,6 +13,8 @@ type Props = {
   onApplyAction?: (type: string, content: string) => void;
   /** Force the panel to switch to this tab (e.g. deep-linking from a slash command) */
   initialTab?: Tab;
+  executeWork?: (instruction: string) => Promise<void>;
+  isWorking?: boolean;
 };
 
 const LANGUAGES = [
@@ -172,6 +174,8 @@ export default function AIPanel({
   selectedText = "",
   onApplyAction,
   initialTab,
+  executeWork,
+  isWorking,
 }: Props) {
   const { messages, loading, error, sendMessage, translate, translateSentences, cancelTranslation, clearHistory } = useAIChat();
   const [tab, setTab] = useState<Tab>(initialTab ?? "chat");
@@ -196,7 +200,7 @@ export default function AIPanel({
   const [provider, setProvider] = useState("openai_compatible");
   const [baseUrlChoice, setBaseUrlChoice] = useState("navidia");
   const [localBaseUrlChoice, setLocalBaseUrlChoice] = useState("lm_studio");
-  const [localBaseUrl, setLocalBaseUrl] = useState("http://127.0.0.1:1234/v1");
+  const [localBaseUrl, setLocalBaseUrl] = useState("[http://127.0.0.1:1234/v1](http://127.0.0.1:1234/v1)");
   const [model, setModel] = useState("");
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [apiKey, setApiKey] = useState("");
@@ -253,7 +257,7 @@ export default function AIPanel({
     const nextLocalBaseUrl =
       nextSettings.local_ai_custom_base_url ||
       nextSettings.local_ai_base_url ||
-      "http://127.0.0.1:1234/v1";
+      "[http://127.0.0.1:1234/v1](http://127.0.0.1:1234/v1)";
     setSettings(nextSettings);
     setProvider(nextProvider);
     setBaseUrlChoice(nextSettings.openai_compatible_base_url_choice || "navidia");
@@ -285,7 +289,7 @@ export default function AIPanel({
           const nextLocalBaseUrl =
             nextSettings.local_ai_custom_base_url ||
             nextSettings.local_ai_base_url ||
-            "http://127.0.0.1:1234/v1";
+            "[http://127.0.0.1:1234/v1](http://127.0.0.1:1234/v1)";
           if (nextLocalChoice !== "custom" || nextLocalBaseUrl.trim()) {
             void refreshModelOptions(
               "local",
@@ -369,9 +373,9 @@ export default function AIPanel({
     setApiKey("");
     if (nextProvider === "local") {
       setLocalBaseUrlChoice("lm_studio");
-      setLocalBaseUrl("http://127.0.0.1:1234/v1");
+      setLocalBaseUrl("[http://127.0.0.1:1234/v1](http://127.0.0.1:1234/v1)");
       localBaseUrlChoiceRef.current = "lm_studio";
-      localBaseUrlRef.current = "http://127.0.0.1:1234/v1";
+      localBaseUrlRef.current = "[http://127.0.0.1:1234/v1](http://127.0.0.1:1234/v1)";
       setSettingsMessage(null);
       void AI.setLocalAIBaseUrlChoice("lm_studio").catch((err) => {
         setSettingsMessage(err instanceof Error ? err.message : String(err));
@@ -648,7 +652,7 @@ export default function AIPanel({
     <div className="flex flex-col w-80 min-w-[280px] max-w-[380px] border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] text-sm">
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700 shrink-0">
         <div className="flex gap-1">
-          {(["chat", "translate", "settings"] as Tab[]).map((t) => (
+          {(["chat", "work", "translate", "settings"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -781,7 +785,7 @@ export default function AIPanel({
                   }`}
                 >
                   {msg.role === "assistant" ? (
-                    <ChatMessageContent content={msg.content} />
+                    <ChatMessageContent content={msg.content}/>
                   ) : (
                     <span className="whitespace-pre-wrap">{msg.content}</span>
                   )}
@@ -840,6 +844,31 @@ export default function AIPanel({
             </div>
           </div>
         </>
+      ) : tab === "work" ? (
+        <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            Describe a task, and the AI will directly modify the active document.
+          </div>
+          <textarea 
+            className="w-full h-32 p-2 text-sm border rounded resize-none dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+            placeholder="e.g., 'Rewrite this document to be more professional' or 'Fix all typos'"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+          />
+          <button 
+            className="w-full bg-blue-600 text-white py-1.5 px-3 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+            onClick={() => {
+              if (executeWork) {
+                const instruction = input.trim();
+                setInput("");
+                void executeWork(instruction);
+              }
+            }}
+            disabled={!input.trim() || isWorking}
+          >
+            {isWorking ? "Working..." : "Apply Changes"}
+          </button>
+        </div>
       ) : tab === "translate" ? (
         <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
           <div className="flex flex-col gap-1">
@@ -1122,7 +1151,7 @@ export default function AIPanel({
                             : "Enter a custom Base URL before fetching models."
                         );
                       }}
-                      placeholder="http://127.0.0.1:1234/v1"
+                      placeholder="[http://127.0.0.1:1234/v1](http://127.0.0.1:1234/v1)"
                       className="text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
                     />
                   ) : (

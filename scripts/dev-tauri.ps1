@@ -1,5 +1,5 @@
 param(
-    [ValueFromRemainingArguments()]$RemainingArgs
+    [Parameter(ValueFromRemainingArguments=$true)]$RemainingArgs
 )
 
 $bashPath = "C:\Program Files\Git\bin\bash.exe"
