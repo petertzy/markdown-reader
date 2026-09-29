@@ -161,6 +161,29 @@ export function shortcutMatchesEvent(binding: ShortcutBinding, event: KeyboardEv
   );
 }
 
+/**
+ * Whether an IME-composing keydown should be ignored for a given binding.
+ *
+ * Genuine IME composition must never fire an app shortcut. On some layouts
+ * (e.g. Windows AltGr) a composing chord is reported with both `ctrlKey` and
+ * `altKey` set, and because our `Ctrl+Alt+…` bindings match on the physical
+ * `code` ({@link shortcutMatchesEvent}), those chords could otherwise hit e.g.
+ * `Ctrl+Alt+T` (insert table). We therefore keep Alt-involving bindings blocked
+ * while a composition is in progress.
+ *
+ * WebKit/Tauri in the packaged app can spuriously report `isComposing === true`
+ * for plain Ctrl/Meta chords (the false-positive the packaged-app fix exists to
+ * work around). Those never involve Alt, so we only trust `isComposing` to
+ * block bindings that require Alt — non-Alt shortcuts still match and continue
+ * to work even when `isComposing` is wrongly set.
+ */
+export function isCompositionBlocked(
+  binding: ShortcutBinding,
+  event: Pick<KeyboardEvent, "isComposing">
+): boolean {
+  return event.isComposing && Boolean(binding.alt);
+}
+
 export function formatShortcut(binding?: ShortcutBinding) {
   if (!binding) return "";
   const parts: string[] = [];
