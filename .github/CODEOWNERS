@@ -1,18 +1,3 @@
-# Default owner for all files
-* @petertzy @lwu1822
-
-# Files in markdown_reader folder should be reviewed by petertzy and Xavi
-markdown_reader/ @petertzy @lwu1822
-
-# Documentation files should be reviewed by petertzy and lwu1822
-docs/ @petertzy @lwu1822
-mkdocs.yml @petertzy @lwu1822
-.github/workflows/deploy-docs.yml @petertzy @lwu1822
-
-# Markdown and workflow files should be reviewed by petertzy
-*.md @petertzy @lwu1822
-*.MD @petertzy @lwu1822
-*.yml @petertzy @lwu1822
-
-# app.py should be reviewed by petertzy
-app.py @petertzy  @lwu1822
+# Intentionally no default code owners are configured.
+# Maintainers choose reviewers manually for each pull request.
+# Add path-specific owners only if automatic review requests are desired again.
