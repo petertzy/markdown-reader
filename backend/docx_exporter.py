@@ -216,6 +216,16 @@ class _DocxHtmlParser(HTMLParser):
     def handle_data(self, data: str):
         self.data_buffer += data
 
+    def handle_entityref(self, name: str) -> None:
+        # The parser runs with convert_charrefs=False so escaped text such as
+        # "&amp;" or "&lt;" arrives through entity/character ref callbacks
+        # instead of being pre-decoded. Buffer the literal reference so the
+        # existing unescape() pass in _flush_text restores the real character.
+        self.data_buffer += f"&{name};"
+
+    def handle_charref(self, name: str) -> None:
+        self.data_buffer += f"&#{name};"
+
     def _flush_text(self):
         if not self.data_buffer:
             return

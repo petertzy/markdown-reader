@@ -243,11 +243,19 @@ export const Markdown = {
 
 // ── AI API ────────────────────────────────────────────────────────────────────
 
+export type KnowledgeSource = {
+  rel_path: string;
+  title: string;
+  section: string;
+};
+
 export type AgentChatPayload = {
   message: string;
   document_text?: string;
   selected_text?: string;
   chat_history?: { role: string; content: string }[];
+  use_knowledge_base?: boolean;
+  knowledge_top_k?: number;
 };
 
 export type AgentResponse = {
@@ -264,6 +272,7 @@ export type AgentResponse = {
     reason: string;
   };
   used_provider: string;
+  used_sources?: KnowledgeSource[];
 };
 
 export type AIAutomationTemplate = {
@@ -610,4 +619,76 @@ export const Citations = {
     apiFetch<{ entries: CitationEntry[] }>(
       `/api/citations/search?q=${encodeURIComponent(query)}`
     ),
+};
+
+// ── Knowledge Base / Directory Context API ────────────────────────────────────
+
+export type KnowledgeStatus = {
+  path: string;
+  exists: boolean;
+  enabled: boolean;
+  file_count: number;
+  chunk_count: number;
+  last_indexed_at: number | null;
+};
+
+export type KnowledgeNote = {
+  path: string;
+  rel_path: string;
+  title: string;
+  mtime: number;
+  size: number;
+  chunk_count: number;
+};
+
+export type KnowledgeChunk = {
+  id: number;
+  file_path: string;
+  rel_path: string;
+  title: string;
+  section: string;
+  content: string;
+  score?: number;
+};
+
+export const Knowledge = {
+  getStatus: () => apiFetch<KnowledgeStatus>("/api/knowledge/status"),
+
+  index: (path: string, force = false) =>
+    apiFetch<{
+      path: string;
+      total_files: number;
+      indexed_files: number;
+      skipped_files: number;
+      total_chunks: number;
+      duration_ms: number;
+    }>("/api/knowledge/index", {
+      method: "POST",
+      body: JSON.stringify({ path, force }),
+    }),
+
+  query: (query: string, top_k = 5) =>
+    apiFetch<{ query: string; count: number; results: KnowledgeChunk[] }>(
+      "/api/knowledge/query",
+      {
+        method: "POST",
+        body: JSON.stringify({ query, top_k }),
+      }
+    ),
+
+  listNotes: (limit = 100) =>
+    apiFetch<{ count: number; notes: KnowledgeNote[] }>(
+      `/api/knowledge/notes?limit=${limit}`
+    ),
+
+  toggle: (enabled: boolean) =>
+    apiFetch<{ enabled: boolean }>("/api/knowledge/toggle", {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    }),
+
+  clear: () =>
+    apiFetch<{ cleared: boolean }>("/api/knowledge/index", {
+      method: "DELETE",
+    }),
 };
