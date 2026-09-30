@@ -30,6 +30,11 @@ from backend.render_helpers import (
 
 _BARE_URL_RE = re.compile(r"https?://[^\s<]+")
 _AUTOLINK_SKIP_TAGS = {"a", "code", "pre", "script", "style"}
+# `script` and `style` are CDATA elements: html.parser hands us their body
+# verbatim in handle_data, with no entity splitting. markdown2 has already
+# escaped `code`/`pre`, which therefore arrive as entity refs and pass through
+# _flush untouched.
+_CDATA_SKIP_TAGS = frozenset({"script", "style"})
 _TRAILING_URL_PUNCTUATION = ".,;:!?)]}\"'"
 _URL_CLOSER_TO_OPENER = {")": "(", "]": "[", "}": "{"}
 
@@ -88,11 +93,16 @@ class _BareUrlLinkifier(HTMLParser):
         if not self._buf:
             return
         if self.skip_stack:
-            self.parts.append(
-                "".join(
-                    s if is_entity else html_escape(s) for is_entity, s in self._buf
+            if self.skip_stack[-1] in _CDATA_SKIP_TAGS:
+                # Emit verbatim: escaping here would corrupt the source, e.g.
+                # ".x > .y" would stop being a child selector.
+                self.parts.append("".join(s for _, s in self._buf))
+            else:
+                self.parts.append(
+                    "".join(
+                        s if is_entity else html_escape(s) for is_entity, s in self._buf
+                    )
                 )
-            )
         else:
             self.parts.append(_linkify_text_with_entities(self._buf))
         self._buf = []

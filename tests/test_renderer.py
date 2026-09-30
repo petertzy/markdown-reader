@@ -40,6 +40,39 @@ class TestRenderMarkdown(unittest.TestCase):
 
         self.assertIn("<code>if a &lt; b and c &gt; d and x &amp; y:\n</code>", html)
 
+    def test_style_block_body_is_not_escaped(self):
+        # html.parser hands a <style> body over verbatim, so escaping it turned
+        # the child selector `.x > .y` into `.x &gt; .y` and broke the rule.
+        html = render_markdown("<style>\n.x > .y { color: red }\n</style>")
+
+        self.assertIn(".x > .y { color: red }", html)
+        self.assertNotIn("&gt;", html)
+
+    def test_script_block_body_is_not_escaped(self):
+        html = render_markdown('<script>const s = "a & b"; if (1<2) {}</' + "script>")
+
+        self.assertIn('const s = "a & b"; if (1<2) {}', html)
+        self.assertNotIn("&lt;", html)
+        self.assertNotIn("&amp;", html)
+        self.assertNotIn("&quot;", html)
+
+    def test_code_and_pre_bodies_are_still_escaped_exactly_once(self):
+        # script/style are CDATA and must pass through raw, but code/pre are
+        # escaped by markdown2 before the linkifier sees them and must not be
+        # escaped a second time.
+        html = render_markdown('```\n<div> & "x"\n```')
+
+        self.assertIn("<code>&lt;div&gt; &amp; &quot;x&quot;\n</code>", html)
+        self.assertNotIn("&amp;lt;", html)
+
+    def test_urls_are_not_linkified_inside_script_or_style(self):
+        html = render_markdown(
+            "<style>a{background:url(https://example.com/x.png)}</style>"
+        )
+
+        self.assertNotIn("<a href=", html)
+        self.assertIn("https://example.com/x.png", html)
+
     def test_dollar_signs_inside_code_are_not_treated_as_math(self):
         html = render_markdown(
             "```\nawk '{print $1, $2}'\n```\n\nUse `$1 and $2` here."
