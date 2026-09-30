@@ -252,9 +252,16 @@ def extract_note_title(content: str, fallback_filename: str) -> str:
             if match and match.group(1).strip():
                 return match.group(1).strip()
 
-    # 2. Check first Markdown heading
+    # 2. Check first Markdown heading, ignoring anything inside a fenced code
+    #    block (a shell/YAML comment such as "# Install deps" is not a heading).
+    in_code_block = False
     for line in content.splitlines():
         line = line.strip()
+        if line.startswith("```") or line.startswith("~~~"):
+            in_code_block = not in_code_block
+            continue
+        if in_code_block:
+            continue
         if line.startswith("# "):
             title = line[2:].strip()
             if title:
@@ -296,8 +303,18 @@ def chunk_markdown_document(
     heading_stack: list[tuple[int, str]] = []
     current_lines: list[str] = []
 
+    in_code_block = False
     for line in lines:
         stripped = line.strip()
+        if stripped.startswith("```") or stripped.startswith("~~~"):
+            # A fence marker is content, never a section boundary, and the lines
+            # it wraps must not be scanned for headings.
+            in_code_block = not in_code_block
+            current_lines.append(line)
+            continue
+        if in_code_block:
+            current_lines.append(line)
+            continue
         heading_match = re.match(r"^(#{1,6})\s+(.+)$", stripped)
         if heading_match:
             if current_lines:
