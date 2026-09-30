@@ -11,6 +11,7 @@
 import { useState, useCallback, useRef } from "react";
 import { Files, Markdown, Export, type ExportPayload, type WordCountResult } from "@/lib/api";
 import { needsConversion } from "@/lib/supportedFormats";
+import { resolveTabClose } from "@/lib/tabLifecycle.mjs";
 
 export type Tab = {
   id: string;
@@ -223,20 +224,24 @@ export function useEditor() {
 
   const closeTab = useCallback(
     (id: string) => {
-      setTabs((prev) => {
-        const next = prev.filter((t) => t.id !== id);
-        if (next.length === 0) {
-          const fresh = makeTab(nextTabId());
-          setActiveTabId(fresh.id);
-          return [fresh];
-        }
-        if (id === activeTabId) {
-          setActiveTabId(next[next.length - 1].id);
-        }
-        return next;
-      });
+      const { remaining, nextActiveTabId, previewTab } = resolveTabClose(tabs, activeTabId, id);
+      if (remaining.length === 0) {
+        // Closing the last tab leaves a fresh empty tab behind, so the preview
+        // and word count of the document that was just closed must not linger.
+        const fresh = makeTab(nextTabId());
+        setTabs([fresh]);
+        setActiveTabId(fresh.id);
+        setPreviewHtml("");
+        setWordCount(null);
+        return;
+      }
+      setTabs(remaining);
+      if (nextActiveTabId) setActiveTabId(nextActiveTabId);
+      // The preview pane and the status-bar word count still show the closed
+      // document unless they are refreshed for the tab that became active.
+      if (previewTab) refreshPreview(previewTab.content, previewTab.filePath ?? undefined);
     },
-    [activeTabId]
+    [tabs, activeTabId, refreshPreview]
   );
 
   const closeAllTabs = useCallback(() => {
