@@ -118,6 +118,33 @@ class TestRenderMarkdown(unittest.TestCase):
         self.assertIn("Total $50 with", body)
         self.assertNotIn("$50 with \\(", body)
 
+    def test_digit_leading_math_and_currency_remain_separate(self):
+        for expression in ("2x + 1", "5", "2x", "x^2 + y^2 = z^2"):
+            with self.subTest(expression=expression):
+                html = render_markdown(f"Total $50 with ${expression}$ geometry.")
+                body = html.split("<body>")[1].split("</body>")[0]
+                self.assertIn("Total $50 with", body)
+                self.assertEqual(body.count('class="math-inline"'), 1)
+                self.assertIn(
+                    '<span class="math-inline">\\(' + expression + r"\)</span>",
+                    body,
+                )
+
+    def test_math_requires_non_whitespace_at_inner_boundaries(self):
+        for source in ("$ b $", "$a $", "$ a$", "$a $b$"):
+            with self.subTest(source=source):
+                html = render_markdown(source)
+                if source == "$a $b$":
+                    self.assertIn('<span class="math-inline">' + r"\(b\)</span>", html)
+                else:
+                    self.assertNotIn('class="math-inline"', html)
+
+    def test_paired_escaped_dollars_are_literal(self):
+        for source in (r"\$x\$", r"$x\$", r"\$5 and \$10"):
+            with self.subTest(source=source):
+                html = render_markdown(source)
+                self.assertNotIn('class="math-inline"', html)
+
     def test_bare_urls_keep_query_strings_with_ampersands(self):
         html = render_markdown("Go to https://example.com/?a=1&b=2 now")
 

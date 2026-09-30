@@ -85,13 +85,12 @@ def protect_math(markdown_text: str) -> tuple[str, dict[str, str]]:
 
     text = re.sub(r"\$\$([\s\S]+?)\$\$", replace_block, text)
 
-    # Inline math uses GitHub's CommonMark delimiting rules so currency
-    # amounts (``$5.00``, ``$10``) and escaped dollars (``\$``) stay put:
-    # an opening ``$`` must not be preceded by a backslash (or a ``$``) and
-    # must not be followed by whitespace or a digit, and a closing ``$`` must
-    # not be preceded by a backslash (or a ``$``) nor followed by a digit.
+    # Dollar math requires non-whitespace next to both inner boundaries.
+    # A closing dollar cannot introduce another numeric amount. Together
+    # these rules preserve currency prose without rejecting $2x$ or $5$.
+    # Escaped dollars and double-dollar delimiters are not inline boundaries.
     text = re.sub(
-        r"(?<![\$\\])\$(?![\s\d$])([^\$\n]+?)(?<![\$\\])\$(?![\d$])",
+        r"(?<![\$\\])\$(?![\s$])([^\$\n]+?)(?<![\s$\\])\$(?![\d$])",
         replace_inline,
         text,
     )
