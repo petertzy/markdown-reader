@@ -41,6 +41,9 @@ def test_toc_slug_matches_outline_slug():
         "`code span` heading",
         "~~strike~~ me",
         "UPPER Case TITLE",
+        "Tom &amp; Jerry",
+        "A &#x27;quote&#x27; B",
+        "5 &lt; 10",
     ]
     for heading in headings:
         # Delegate both to the canonical implementation, but confirm the

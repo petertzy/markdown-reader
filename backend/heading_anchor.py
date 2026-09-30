@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from html import unescape as html_unescape
 
 # Matches ATX headings: `# Heading` … `###### Heading` (trailing closing
 # hashes such as `# Heading #` are allowed, as in CommonMark).
@@ -38,9 +39,10 @@ def extract_heading_text(raw_text: str) -> str:
     Handles bold/italic (``**``/``*``/``__``/``_``), inline code (``...``),
     strikethrough (``~~...~~``) and links/images (``[text](url)`` keep
     their visible text; auto-links such as ``<https://example.com>`` are
-    left intact).
+    left intact). HTML entities are decoded so the visible label — and the
+    slug derived from it — matches what the rendered preview shows.
     """
-    plain = _INLINE_MARKUP_RE.sub(r"\1", raw_text or "")
+    plain = html_unescape(_INLINE_MARKUP_RE.sub(r"\1", raw_text or ""))
     return plain.strip()
 
 

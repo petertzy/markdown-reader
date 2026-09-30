@@ -1,7 +1,9 @@
 """Tests for Markdown-to-HTML rendering."""
 
+import re
 import unittest
 
+from backend.ai_logic import _generate_markdown_toc
 from backend.renderer import render_markdown
 
 
@@ -191,3 +193,98 @@ class TestRenderMarkdown(unittest.TestCase):
         )
         self.assertNotIn('href="https://example.com/foo&quot;"', html)
         self.assertIn("</a>&quot; for details.", html)
+
+
+class TestHeadingAnchors(unittest.TestCase):
+    """Rendered headings carry canonical anchors matching the outline and TOC."""
+
+    def test_headings_receive_canonical_ids(self):
+        html = render_markdown(
+            "# Intro -- Details\n\n"
+            "## [Click here](https://example.com)\n\n"
+            "### A --- B\n\n"
+            "#### Trailing Dash-\n\n"
+            "##### -Leading Dash\n\n"
+            "###### `code span` heading\n"
+        )
+        self.assertIn('<h1 id="intro----details">Intro -- Details</h1>', html)
+        self.assertIn('<h2 id="click-here">', html)
+        self.assertIn('<h3 id="a-----b">', html)
+        self.assertIn('<h4 id="trailing-dash-">', html)
+        self.assertIn('<h5 id="-leading-dash">', html)
+        self.assertIn('<h6 id="code-span-heading">', html)
+
+    def test_duplicate_headings_get_suffixed_ids(self):
+        html = render_markdown("# Answers\n\n# Answers\n\n# Answers")
+        self.assertIn('<h1 id="answers">Answers</h1>', html)
+        self.assertIn('<h1 id="answers-1">Answers</h1>', html)
+        self.assertIn('<h1 id="answers-2">Answers</h1>', html)
+
+    def test_unicode_and_accented_headings_get_ids(self):
+        html = render_markdown("# 第一章\n\n## Résumé")
+        self.assertIn('<h1 id="第一章">第一章</h1>', html)
+        self.assertIn('<h2 id="résumé">Résumé</h2>', html)
+
+    def test_code_fence_heading_noise_gets_no_id(self):
+        md = "```text\n# not a heading\n```"
+        html = render_markdown(md)
+        self.assertNotIn('<h1 id="not-a-heading">', html)
+        self.assertNotIn('id="not-a-heading"', html)
+
+    def test_markdown2_stock_header_ids_are_not_used(self):
+        # The renderer must NOT rely on markdown2's `header-ids` extra: that
+        # collapapses `[-\s]+`, so `Intro -- Details` would become the wrong
+        # anchor. Canonical slugging stays in backend.heading_anchor.
+        html = render_markdown("# Intro -- Details")
+        self.assertIn('<h1 id="intro----details">', html)
+        self.assertNotIn("<!--", html)
+
+    def test_toc_every_href_matches_rendered_heading_id(self):
+        md = (
+            "# Intro -- Details\n\n"
+            "## [Click here](https://example.com)\n\n"
+            "### A --- B\n\n"
+            "#### Trailing Dash-\n\n"
+            "##### -Leading Dash\n\n"
+            "###### `code span` heading\n\n"
+            "### Answers\n\n"
+            "### Answers\n\n"
+            "# 第一章\n"
+        )
+        toc = _generate_markdown_toc(md)
+        href_anchors = [match.group(1) for match in re.finditer(r"\]\(#([^)]+)\)", toc)]
+        self.assertTrue(href_anchors, "TOC should have produced links")
+
+        html = render_markdown(md)
+        rendered_ids = {
+            match.group(1) for match in re.finditer(r'<h[1-6][^>]*id="([^"]+)"', html)
+        }
+        for anchor in href_anchors:
+            self.assertIn(anchor, rendered_ids, f"TOC #{anchor} missing from preview")
+
+    def test_preview_outline_anchors_and_args_stay_intact(self):
+        # Sanity: other markdown2 output is unchanged by the ID pass.
+        html = render_markdown(
+            "# Title\n\nSome text before https://example.com/x?y=1&z=2"
+        )
+        self.assertIn('<h1 id="title">Title</h1>', html)
+        self.assertIn("Some text before", html)
+        self.assertIn('href="https://example.com/x?y=1&amp;z=2"', html)
+
+    def test_entity_headings_slug_from_visible_text(self):
+        # GitHub anchors are computed from the *visible* text, so entities
+        # must be decoded before slugging in both the renderer and the
+        # shared heading_anchor helpers.
+        md = "# Tom &amp; Jerry\n\n## A &#x27;quote&#x27; B\n\n### 5 &lt; 10"
+        html = render_markdown(md)
+        self.assertIn('<h1 id="tom-jerry">Tom &amp; Jerry</h1>', html)
+        self.assertIn('<h2 id="a-quote-b">', html)
+        self.assertIn('<h3 id="5-10">', html)
+
+        toc = _generate_markdown_toc(md)
+        hrefs = [m.group(1) for m in re.finditer(r"\]\(#([^)]+)\)", toc)]
+        rendered_ids = {
+            m.group(1) for m in re.finditer(r'<h[1-6][^>]*id="([^"]+)"', html)
+        }
+        for anchor in hrefs:
+            self.assertIn(anchor, rendered_ids)
