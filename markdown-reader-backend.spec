@@ -1,13 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 
 a = Analysis(
     ['backend/main.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=collect_data_files('ziamath') + collect_data_files('latex2mathml'),
     hiddenimports=[
         'backend.ai_logic',
         'backend.citation_logic',

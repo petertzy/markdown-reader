@@ -80,6 +80,71 @@ class TestRenderMarkdown(unittest.TestCase):
         token = re.compile(r"[A-Z]+PLACEHOLDER[0-9a-f]{12}[0-9]X")
         self.assertIsNone(token.search(html))
 
+    def test_currency_amounts_are_not_treated_as_math(self):
+        html = render_markdown(
+            "The upgrade costs $5.00 and the plan is $10 per month.\n\n"
+            "Save $20 today — regular price is $25.\n\n"
+            "$100 total, or $3.50 each."
+        )
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertNotIn('class="math-inline"', body)
+        self.assertIn("costs $5.00 and the plan is $10 per month.", body)
+        self.assertIn("Save $20 today — regular price is $25.", body)
+        self.assertIn("$100 total, or $3.50 each.", body)
+
+    def test_dollar_followed_by_digit_does_not_open_math(self):
+        html = render_markdown("Balance: $5 and $10 are different.")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertNotIn('class="math-inline"', body)
+        self.assertIn("Balance: $5 and $10 are different.", body)
+
+    def test_escaped_dollars_are_not_math_delimiters(self):
+        html = render_markdown(r"The symbol \$ is a literal dollar, not math.")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertNotIn('class="math-inline"', body)
+        # markdown2 keeps the backslash escape as-is; the important part is
+        # that the escaped dollar is not converted into a math span.
+        self.assertNotIn(r"\(", body)
+        self.assertIn("literal dollar", body)
+
+    def test_inline_math_still_renders_next_to_currency(self):
+        html = render_markdown("Total $50 with $x^2 + y^2 = z^2$ geometry and more.")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertIn('class="math-inline"', body)
+        self.assertIn("Total $50 with", body)
+        self.assertNotIn("$50 with \\(", body)
+
+    def test_digit_leading_math_and_currency_remain_separate(self):
+        for expression in ("2x + 1", "5", "2x", "x^2 + y^2 = z^2"):
+            with self.subTest(expression=expression):
+                html = render_markdown(f"Total $50 with ${expression}$ geometry.")
+                body = html.split("<body>")[1].split("</body>")[0]
+                self.assertIn("Total $50 with", body)
+                self.assertEqual(body.count('class="math-inline"'), 1)
+                self.assertIn(
+                    '<span class="math-inline">\\(' + expression + r"\)</span>",
+                    body,
+                )
+
+    def test_math_requires_non_whitespace_at_inner_boundaries(self):
+        for source in ("$ b $", "$a $", "$ a$", "$a $b$"):
+            with self.subTest(source=source):
+                html = render_markdown(source)
+                if source == "$a $b$":
+                    self.assertIn('<span class="math-inline">' + r"\(b\)</span>", html)
+                else:
+                    self.assertNotIn('class="math-inline"', html)
+
+    def test_paired_escaped_dollars_are_literal(self):
+        for source in (r"\$x\$", r"$x\$", r"\$5 and \$10"):
+            with self.subTest(source=source):
+                html = render_markdown(source)
+                self.assertNotIn('class="math-inline"', html)
+
     def test_bare_urls_keep_query_strings_with_ampersands(self):
         html = render_markdown("Go to https://example.com/?a=1&b=2 now")
 

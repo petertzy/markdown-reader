@@ -84,7 +84,16 @@ def protect_math(markdown_text: str) -> tuple[str, dict[str, str]]:
     text = _mask_code_regions(markdown_text, code_replacements)
 
     text = re.sub(r"\$\$([\s\S]+?)\$\$", replace_block, text)
-    text = re.sub(r"(?<!\$)\$(?!\$)([^\$\n]+?)(?<!\$)\$(?!\$)", replace_inline, text)
+
+    # Dollar math requires non-whitespace next to both inner boundaries.
+    # A closing dollar cannot introduce another numeric amount. Together
+    # these rules preserve currency prose without rejecting $2x$ or $5$.
+    # Escaped dollars and double-dollar delimiters are not inline boundaries.
+    text = re.sub(
+        r"(?<![\$\\])\$(?![\s$])([^\$\n]+?)(?<![\s$\\])\$(?![\d$])",
+        replace_inline,
+        text,
+    )
 
     # Restore the code spans so markdown2 still renders them as code.
     for key, value in code_replacements.items():
