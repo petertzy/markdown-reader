@@ -25,6 +25,9 @@ dependencies = [
     "fastapi>=0.111.0",
     "uvicorn[standard]>=0.29.0",
     "pydantic>=2.7.0",
+    "ziamath>=0.12,<0.14",
+    "latex2mathml>=3.77,<4",
+    "beautifulsoup4>=4.12,<5",
 ]
 
 [project.optional-dependencies]

@@ -7,6 +7,8 @@ import mimetypes
 import os
 import re
 
+from backend.pdf_math import render_pdf_math
+
 
 def _inline_local_images(html_content: str, base_dir: str | None = None) -> str:
     def _try_inline(src: str) -> str | None:
@@ -53,6 +55,7 @@ def export_markdown_to_pdf(
     normalized_html = _inline_local_images(
         _normalize_image_tags(html_content), base_dir
     )
+    normalized_html = render_pdf_math(normalized_html)
     full_html = f"""<!DOCTYPE html>
 <html>
 <head>
