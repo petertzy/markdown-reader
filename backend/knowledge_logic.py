@@ -30,6 +30,12 @@ logger = logging.getLogger(__name__)
 
 # Supported note file extensions
 NOTE_EXTENSIONS = frozenset({".md", ".markdown", ".txt"})
+
+# Notes are commonly authored or re-saved on Windows, which leaves a UTF-8 BOM.
+# "utf-8-sig" strips it when present and behaves identically to "utf-8" when it
+# is not. Without this the BOM sits in front of line 1 and breaks both the
+# frontmatter "---" check and the first-heading match.
+NOTE_READ_ENCODING = "utf-8-sig"
 MAX_KNOWLEDGE_TOP_K = 20
 
 # Directories to skip when scanning note vaults
@@ -475,9 +481,16 @@ def index_knowledge_base(
                         files_skipped += 1
                         continue
 
-                # Read and process note
+                # Read and process note.
+                # "utf-8-sig" rather than "utf-8": a BOM (U+FEFF) is category Cf,
+                # not whitespace, so str.strip() does not remove it. It would
+                # sit in front of the first line and break both the frontmatter
+                # "---" check and the heading match, silently falling back to the
+                # filename and injecting raw frontmatter into the chunk text.
                 try:
-                    content = note_path.read_text(encoding="utf-8", errors="replace")
+                    content = note_path.read_text(
+                        encoding=NOTE_READ_ENCODING, errors="replace"
+                    )
                 except Exception as read_err:
                     logger.warning(
                         "Could not read note file %s: %s", full_path_str, read_err

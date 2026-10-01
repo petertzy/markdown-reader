@@ -48,6 +48,72 @@ Dense embeddings provide semantic generalization but require higher compute reso
 """
 
 
+class TestUtf8BomNotes(unittest.TestCase):
+    """A UTF-8 BOM is category Cf, not whitespace, so str.strip() misses it."""
+
+    BOM = "﻿"
+
+    def setUp(self):
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp_dir.name)
+
+    def tearDown(self):
+        self.tmp_dir.cleanup()
+
+    def _write(self, body: str, name: str = "note.md") -> Path:
+        path = self.root / name
+        path.write_bytes((self.BOM + body).encode("utf-8"))
+        return path
+
+    def _read_indexed(self, path: Path) -> str:
+        """Read exactly the way index_knowledge_base does.
+
+        This deliberately calls the encoding used in the indexing loop rather
+        than hardcoding one, so reverting the fix actually fails these tests.
+        """
+        return path.read_text(
+            encoding=knowledge_logic.NOTE_READ_ENCODING, errors="replace"
+        )
+
+    def test_bom_does_not_hide_the_first_heading(self):
+        path = self._write("# My Note\n\nBody text.")
+        title = knowledge_logic.extract_note_title(self._read_indexed(path), path.name)
+        self.assertEqual(title, "My Note")
+
+    def test_bom_does_not_hide_frontmatter(self):
+        body = "---\ntitle: Real Title\ntags: [a]\n---\n\n# Heading\n\nBody."
+        path = self._write(body)
+        title = knowledge_logic.extract_note_title(self._read_indexed(path), path.name)
+        self.assertEqual(title, "Real Title")
+
+    def test_bom_frontmatter_is_not_chunked_as_body_text(self):
+        body = "---\ntitle: Real Title\ntags: [a]\n---\n\n# Heading\n\nBody."
+        path = self._write(body)
+        chunks = knowledge_logic.chunk_markdown_document(
+            self._read_indexed(path), str(path), path.name
+        )
+        for chunk in chunks:
+            self.assertNotIn("title: Real Title", chunk["content"])
+            self.assertNotIn("tags: [a]", chunk["content"])
+
+    def test_notes_without_a_bom_are_unchanged(self):
+        path = self.root / "plain.md"
+        path.write_text("# Plain Note\n\nBody.", encoding="utf-8")
+        self.assertEqual(
+            knowledge_logic.extract_note_title(
+                path.read_text(encoding="utf-8-sig", errors="replace"), path.name
+            ),
+            "Plain Note",
+        )
+
+    def test_bom_only_file_does_not_crash(self):
+        path = self.root / "bom.md"
+        path.write_bytes(b"\xef\xbb\xbf")
+        content = path.read_text(encoding="utf-8-sig", errors="replace")
+        self.assertEqual(content, "")
+        knowledge_logic.chunk_markdown_document(content, str(path), path.name)
+
+
 class TestKnowledgeLogic(unittest.TestCase):
     def setUp(self):
         self.tmp_dir = tempfile.TemporaryDirectory()
