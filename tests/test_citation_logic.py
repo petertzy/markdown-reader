@@ -56,6 +56,46 @@ class TestCitationLogic(unittest.TestCase):
         self.assertIn("Jane Doe", doe["author"])
         self.assertIn("Richard Roe", doe["author"])
 
+    def _parse_title(self, title_literal: str) -> str:
+        """Parse a one-entry .bib through the real upload path and return title."""
+        bib = f"@article{{x, title = {title_literal}, author = {{Doe, Jane}}}}"
+        path = Path(self.tmp_dir.name) / "one.bib"
+        path.write_text(bib, encoding="utf-8")
+        entries = citation_logic.parse_bib_file(str(path))
+        return entries[0]["title"]
+
+    def test_title_keeps_inner_case_protection_braces(self):
+        # BibTeX braces force capitalisation, so {Deep} {Learning} is meaningful
+        # and must survive. str.strip("{}") ate from both ends independently and
+        # turned this into "Deep} {Learning".
+        self.assertEqual(
+            self._parse_title("{{Deep} {Learning} and {Tensors}}"),
+            "{Deep} {Learning} and {Tensors}",
+        )
+
+    def test_title_keeps_trailing_brace(self):
+        self.assertEqual(self._parse_title("{Title {Wrapped}}"), "Title {Wrapped}")
+
+    def test_title_unwraps_only_a_balanced_outer_layer(self):
+        self.assertEqual(self._parse_title("{{Fully Wrapped}}"), "Fully Wrapped")
+        self.assertEqual(self._parse_title("{Simple}"), "Simple")
+
+    def test_title_without_braces_is_unchanged(self):
+        self.assertEqual(
+            self._parse_title("{Perfectly Normal Title}"), "Perfectly Normal Title"
+        )
+
+    def test_title_keeps_math_braces(self):
+        self.assertIn(
+            "mathcal{F}",
+            self._parse_title(r"{On $\mathcal{F}$ and {DNA}}"),
+        )
+
+    def test_clean_bibtex_value_handles_unbalanced_braces(self):
+        self.assertEqual(citation_logic._clean_bibtex_value("  {Odd "), "{Odd")
+        self.assertEqual(citation_logic._clean_bibtex_value(""), "")
+        self.assertEqual(citation_logic._clean_bibtex_value("{"), "{")
+
     def test_parse_missing_file_raises(self):
         with self.assertRaises(citation_logic.CitationLibraryError):
             citation_logic.parse_bib_file("/does/not/exist.bib")

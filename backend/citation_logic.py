@@ -118,11 +118,47 @@ def _format_authors(raw_author: str) -> str:
     return ", ".join(formatted)
 
 
+def _clean_bibtex_value(value: str) -> str:
+    """Remove BibTeX brace-protection, keeping the author's own braces.
+
+    BibTeX lets an author brace-protect a fragment to force capitalisation, as in
+    ``{{Deep} {Learning}}``. Only that one wrapping layer is markup, and it may
+    only be dropped when the whole value is wrapped. ``str.strip("{}")`` cannot
+    express that: it eats characters from both ends independently, so
+    ``{Deep} {Learning}`` came out as ``Deep} {Learning`` and a title that
+    genuinely ends in a brace lost it.
+
+    Unwrap the outer layer only while it is balanced, so inner braces survive.
+    """
+    value = value.strip()
+    while (
+        len(value) >= 2
+        and value.startswith("{")
+        and value.endswith("}")
+        and _braces_are_balanced(value[1:-1])
+    ):
+        value = value[1:-1].strip()
+    return value
+
+
+def _braces_are_balanced(text: str) -> bool:
+    """True when every brace in ``text`` has a matching partner."""
+    depth = 0
+    for char in text:
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth < 0:
+                return False
+    return depth == 0
+
+
 def _entry_to_dict(entry: dict[str, str]) -> dict[str, str]:
     return {
         "key": entry.get("ID", ""),
         "entry_type": entry.get("ENTRYTYPE", ""),
-        "title": entry.get("title", "").strip("{}"),
+        "title": _clean_bibtex_value(entry.get("title", "")),
         "author": _format_authors(entry.get("author", "")),
         "year": entry.get("year", ""),
         "container": entry.get("journal")
