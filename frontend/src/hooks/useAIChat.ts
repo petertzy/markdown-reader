@@ -26,6 +26,10 @@ let _msgCounter = 0;
 const msgId = () => `msg-${++_msgCounter}`;
 const SENTENCE_BATCH_CHAR_LIMIT = 3000;
 const SENTENCE_END_CHARS = ".!?。！？";
+// A full-width terminator ends a sentence whatever follows it — CJK text has no
+// space after 。！？. Mirrors the backend splitter in ai_logic.py.
+const CJK_SENTENCE_END_CHARS = "。！？";
+const SENTENCE_CLOSING_CHARS = new Set(["\"", "'", ")", "]", "」", "』", "）", "】", "》", "〉", "］", "｝", "〗", "〙", "〛"]);
 
 function splitTextIntoTranslationUnits(content: string) {
   const text = content.trim();
@@ -72,7 +76,16 @@ function splitTextIntoTranslationUnits(content: string) {
       const char = line[index];
       const nextChar = line[index + 1] ?? "";
       buffer += char;
-      if (SENTENCE_END_CHARS.includes(char) && ["", " ", "\t", "\"", "'", ")", "]"].includes(nextChar)) {
+      const endsSentence =
+        CJK_SENTENCE_END_CHARS.includes(char) ||
+        (SENTENCE_END_CHARS.includes(char) && ["", " ", "\t", "\"", "'", ")", "]"].includes(nextChar));
+      if (endsSentence) {
+        // Absorb a closing quote/bracket into the finished unit, otherwise it
+        // becomes the first character of the next one.
+        while (index + 1 < line.length && SENTENCE_CLOSING_CHARS.has(line[index + 1])) {
+          index += 1;
+          buffer += line[index];
+        }
         flush();
       }
     }
