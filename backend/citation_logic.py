@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 import sys
@@ -130,14 +131,8 @@ def _entry_to_dict(entry: dict[str, str]) -> dict[str, str]:
     }
 
 
-def parse_bib_file(path: str) -> list[dict[str, str]]:
-    """Parse a .bib file into a list of lightweight citation dicts.
-
-    Raises CitationLibraryError if the file is missing or cannot be parsed.
-    """
-    if not os.path.isfile(path):
-        raise CitationLibraryError(f"BibTeX file not found: {path}")
-
+def _parse_bib_stream(stream) -> list[dict[str, str]]:
+    """Parse an open BibTeX text stream into lightweight citation dicts."""
     try:
         import bibtexparser
     except ImportError as exc:
@@ -147,14 +142,37 @@ def parse_bib_file(path: str) -> list[dict[str, str]]:
         ) from exc
 
     try:
-        with open(path, encoding="utf-8", errors="replace") as file_obj:
-            database = bibtexparser.load(file_obj)
+        database = bibtexparser.load(stream)
     except Exception as exc:
         raise CitationLibraryError(f"Could not parse BibTeX file: {exc}") from exc
 
     entries = [_entry_to_dict(entry) for entry in database.entries]
     entries.sort(key=lambda item: (item["author"], item["year"]))
     return entries
+
+
+def parse_bib_content(content: str) -> list[dict[str, str]]:
+    """Parse BibTeX *text* into citation dicts without touching the filesystem.
+
+    Used to validate an upload before it is allowed to replace the library that
+    is currently loaded.
+    """
+    return _parse_bib_stream(io.StringIO(content))
+
+
+def parse_bib_file(path: str) -> list[dict[str, str]]:
+    """Parse a .bib file into a list of lightweight citation dicts.
+
+    Raises CitationLibraryError if the file is missing or cannot be parsed.
+    """
+    if not os.path.isfile(path):
+        raise CitationLibraryError(f"BibTeX file not found: {path}")
+
+    try:
+        with open(path, encoding="utf-8", errors="replace") as file_obj:
+            return _parse_bib_stream(file_obj)
+    except OSError as exc:
+        raise CitationLibraryError(f"Could not read BibTeX file: {exc}") from exc
 
 
 def load_citation_library(path: str) -> list[dict[str, str]]:
@@ -176,12 +194,23 @@ def load_citation_library_content(
         raise CitationLibraryError(f"Could not decode BibTeX content: {exc}") from exc
 
     path = _imported_library_path(filename)
+    # Parse before writing. The file on disk is the active library, so a
+    # malformed upload must not be able to destroy the one already loaded.
+    # bibtexparser reports many malformed files by simply yielding no entries
+    # rather than raising, so an upload that produces nothing is rejected too.
+    entries = parse_bib_content(content)
+    if not entries:
+        raise CitationLibraryError(
+            "No BibTeX entries found in the uploaded file. The existing library "
+            "was left unchanged."
+        )
+
     try:
         path.write_text(content, encoding="utf-8")
     except OSError as exc:
         raise CitationLibraryError(f"Could not save BibTeX library: {exc}") from exc
 
-    entries = load_citation_library(str(path))
+    _set_persisted_library_path(os.path.abspath(str(path)))
     return str(path), entries
 
 
