@@ -58,9 +58,10 @@ class OpenPreviewPayload(RenderPayload):
 # ── Heading helpers ───────────────────────────────────────────────────────────
 
 from backend.heading_anchor import (
-    _ATX_HEADING_RE,
     extract_heading_text,
+    iter_heading_matches,
     slugify_heading,
+    unique_heading_slug,
 )
 
 
@@ -89,15 +90,13 @@ def _extract_outline(markdown: str) -> list[dict]:
     # Track slugs so duplicates get the ``-1``, ``-2`` … suffix (GitHub rule).
     slug_counts: dict[str, int] = {}
 
-    for match in _ATX_HEADING_RE.finditer(markdown):
+    for match in iter_heading_matches(markdown):
         level = len(match.group(1))
         raw_text = match.group(2).strip()
         plain = extract_heading_text(raw_text)
 
-        base_slug = slugify_heading(plain)
-        count = slug_counts.get(base_slug, 0)
-        slug = base_slug if count == 0 else f"{base_slug}-{count}"
-        slug_counts[base_slug] = count + 1
+        base_slug = slugify_heading(raw_text)
+        slug = unique_heading_slug(base_slug, slug_counts)
 
         line_number = markdown[: match.start()].count("\n") + 1
 

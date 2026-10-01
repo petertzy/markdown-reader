@@ -11,7 +11,6 @@ import os
 import re
 import sys
 from html import escape as html_escape
-from html import unescape as html_unescape
 from html.parser import HTMLParser
 
 # Ensure the project root is on sys.path for standalone backend execution.
@@ -21,7 +20,7 @@ if _ROOT not in sys.path:
 
 import markdown2
 
-from backend.heading_anchor import slugify_heading
+from backend.heading_anchor import slugify_heading, unique_heading_slug
 from backend.render_helpers import (
     fix_image_paths,
     get_math_styles,
@@ -203,11 +202,9 @@ class _HeadingIdAssigner(HTMLParser):
     # -- heading lifecycle ------------------------------------------------------
 
     def _close_heading(self, tag: str) -> None:
-        slug = slugify_heading(html_unescape("".join(self._heading_text)))
+        slug = slugify_heading("".join(self._heading_text))
         if slug:
-            count = self._slug_counts.get(slug, 0)
-            unique = slug if count == 0 else f"{slug}-{count}"
-            self._slug_counts[slug] = count + 1
+            unique = unique_heading_slug(slug, self._slug_counts)
             opening = self._heading_open or f"<{tag}>"
             if opening.endswith(">"):
                 opening = opening[:-1] + f' id="{unique}">'

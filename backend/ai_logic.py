@@ -12,7 +12,11 @@ from typing import Any
 
 import requests
 
-from backend.heading_anchor import _ATX_HEADING_RE, slugify_heading
+from backend.heading_anchor import (
+    iter_heading_matches,
+    slugify_heading,
+    unique_heading_slug,
+)
 
 try:
     import keyring
@@ -895,15 +899,13 @@ def _generate_markdown_toc(markdown_text: str) -> str:
     # Track slugs so duplicate headings get the ``-1``, ``-2`` … suffix that
     # GitHub applies when rendering anchors (same rule as ``_extract_outline``).
     slug_counts: dict[str, int] = {}
-    for match in _ATX_HEADING_RE.finditer(markdown_text or ""):
+    for match in iter_heading_matches(markdown_text or ""):
         level = len(match.group(1))
         title = match.group(2).strip()
         anchor = _slugify_heading_text(title)
         if not anchor:
             continue
-        count = slug_counts.get(anchor, 0)
-        unique_anchor = anchor if count == 0 else f"{anchor}-{count}"
-        slug_counts[anchor] = count + 1
+        unique_anchor = unique_heading_slug(anchor, slug_counts)
         toc_lines.append(f"{'  ' * max(0, level - 1)}- [{title}](#{unique_anchor})")
     return "## Table of Contents\n\n" + "\n".join(toc_lines) + "\n" if toc_lines else ""
 

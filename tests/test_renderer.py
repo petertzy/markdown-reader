@@ -288,3 +288,30 @@ class TestHeadingAnchors(unittest.TestCase):
         }
         for anchor in hrefs:
             self.assertIn(anchor, rendered_ids)
+
+    def test_nested_entities_and_suffix_collisions_match_all_paths(self):
+        from backend.routers.markdown import _extract_outline
+
+        md = "# Tom &amp;amp; Jerry\n\n# A\n\n# A-1\n\n# A\n\n# A\n"
+        expected = ["tom-amp-jerry", "a", "a-1", "a-2", "a-3"]
+        ids = re.findall(r'<h[1-6][^>]*id="([^"]+)"', render_markdown(md))
+        self.assertEqual(ids, expected)
+        self.assertEqual([node["anchor"] for node in _extract_outline(md)], expected)
+        self.assertEqual(
+            re.findall(r"\]\(#([^)]+)\)", _generate_markdown_toc(md)), expected
+        )
+
+    def test_fenced_examples_do_not_consume_heading_suffixes(self):
+        from backend.routers.markdown import _extract_outline
+
+        md = "```text\n# Same\n```\n\n# Same\n\n# Same\n"
+        expected = ["same", "same-1"]
+        self.assertEqual(
+            re.findall(r'<h[1-6][^>]*id="([^"]+)"', render_markdown(md)), expected
+        )
+        outline = _extract_outline(md)
+        self.assertEqual([node["anchor"] for node in outline], expected)
+        self.assertEqual([node["line"] for node in outline], [5, 7])
+        self.assertEqual(
+            re.findall(r"\]\(#([^)]+)\)", _generate_markdown_toc(md)), expected
+        )

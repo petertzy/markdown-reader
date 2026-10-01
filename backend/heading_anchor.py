@@ -61,3 +61,30 @@ def slugify_heading(text: str) -> str:
     text = _NON_WORD_RE.sub("", text)
     text = _WHITESPACE_RE.sub("-", text.strip())
     return text
+
+
+def unique_heading_slug(base: str, counts: dict[str, int]) -> str:
+    """Allocate an unused ID, including collisions with literal suffixed titles."""
+    count = counts.get(base, 0)
+    candidate = base if count == 0 else f"{base}-{count}"
+    while candidate in counts:
+        count += 1
+        candidate = f"{base}-{count}"
+    counts[base] = count + 1
+    counts.setdefault(candidate, 1)
+    return candidate
+
+
+# Match the backtick fences supported by the renderer's fenced-code-blocks extra.
+_FENCED_CODE_RE = re.compile(
+    r"(^[ \t]*`{3,})[ \t]*[\w+-]*[ \t]*\n.*?^\1[ \t]*(?:\n|$)",
+    re.MULTILINE | re.DOTALL,
+)
+
+
+def iter_heading_matches(markdown: str):
+    """Ignore fenced examples while retaining source offsets for outline lines."""
+    masked = _FENCED_CODE_RE.sub(
+        lambda match: re.sub(r"[^\r\n]", " ", match.group()), markdown or ""
+    )
+    return _ATX_HEADING_RE.finditer(masked)
