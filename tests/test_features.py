@@ -178,7 +178,7 @@ class TestBrowserPreview(unittest.TestCase):
             self.assertTrue(preview_path.is_file())
             self.assertEqual(result["url"], preview_path.as_uri())
             html = preview_path.read_text(encoding="utf-8")
-            self.assertIn("<h1>Browser Preview</h1>", html)
+            self.assertIn('<h1 id="browser-preview">Browser Preview</h1>', html)
             self.assertIn("A rendered page.", html)
             open_mock.assert_called_once_with(result["url"], new=2)
         finally:

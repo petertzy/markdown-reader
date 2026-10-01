@@ -1,22 +1,30 @@
 "use client";
 
-import { useCallback, useState, type RefObject } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import { AI } from "@/lib/api";
+import { applyWorkResultIfFresh } from "@/lib/work-result-guard.mjs";
 
 type UseAIActionsOptions = {
+  documentId: string;
   documentText: string;
   editorRef: RefObject<MonacoEditor.IStandaloneCodeEditor | null>;
   onDocumentChange: (content: string) => void;
 };
 
 export function useAIActions({
+  documentId,
   documentText,
   editorRef,
   onDocumentChange,
 }: UseAIActionsOptions) {
   const [selectedText, setSelectedText] = useState("");
   const [isWorking, setIsWorking] = useState(false);
+  const currentDocumentRef = useRef({ documentId, content: documentText });
+
+  useLayoutEffect(() => {
+    currentDocumentRef.current = { documentId, content: documentText };
+  }, [documentId, documentText]);
 
   const getSelectedText = useCallback(() => {
     const editor = editorRef.current;
@@ -98,17 +106,28 @@ export function useAIActions({
   );
 
   const executeWork = useCallback(async (instruction: string) => {
+    const requestSnapshot = { documentId, content: documentText };
     setIsWorking(true);
     try {
-      const data = await AI.work(instruction, documentText);
-      onDocumentChange(data.modified_content);
+      const data = await AI.work(instruction, requestSnapshot.content);
+      const applied = applyWorkResultIfFresh(
+        requestSnapshot,
+        currentDocumentRef.current,
+        data.modified_content,
+        onDocumentChange
+      );
+      if (!applied) {
+        alert(
+          "The document changed while AI Work was running. No AI changes were applied. Run the task again on the current document."
+        );
+      }
     } catch (error) {
       console.error("AI Work Error:", error);
       alert("Failed to apply AI modifications.");
     } finally {
       setIsWorking(false);
     }
-  }, [documentText, onDocumentChange]);
+  }, [documentId, documentText, onDocumentChange]);
 
   return {
     selectedText,

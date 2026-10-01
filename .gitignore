@@ -38,6 +38,7 @@ LICENCE.pdf
 
 site/
 release-artifacts/
+release-local/
 
 # Keep unrelated local workflow drafts out of status while tracking the Pages workflow.
 .github/workflows/*
