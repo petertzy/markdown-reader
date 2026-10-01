@@ -20,6 +20,7 @@ if _ROOT not in sys.path:
 
 import markdown2
 
+from backend.heading_anchor import slugify_heading, unique_heading_slug
 from backend.render_helpers import (
     fix_image_paths,
     get_math_styles,
@@ -32,6 +33,9 @@ _BARE_URL_RE = re.compile(r"https?://[^\s<]+")
 _AUTOLINK_SKIP_TAGS = {"a", "code", "pre", "script", "style"}
 _TRAILING_URL_PUNCTUATION = ".,;:!?)]}\"'"
 _URL_CLOSER_TO_OPENER = {")": "(", "]": "[", "}": "{"}
+
+_HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
+_NO_HEADING_IDS_TAGS = {"pre", "script", "style"}
 
 
 def _trim_trailing_url_punctuation(url: str) -> tuple[str, str]:
@@ -174,6 +178,143 @@ def linkify_bare_urls(html: str) -> str:
     return "".join(parser.parts)
 
 
+class _HeadingIdAssigner(HTMLParser):
+    """Inject canonical GitHub-style anchor IDs into rendered headings.
+
+    Rerenders every ``<h1>``–``<h6>`` opening tag with an ``id`` whose slug
+    exactly matches the anchors produced by ``backend.heading_anchor``
+    (and therefore the document outline and the AI table of contents).
+    Duplicate headings get the same ``base``, ``base-1``, ``base-2`` …
+    suffixes in document order, and headings inside ``pre``/``script``/
+    ``style`` blocks are left untouched.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.parts: list[str] = []
+        self._skip_stack: list[str] = []
+        self._heading_tag: str | None = None
+        self._heading_open: str | None = None
+        self._heading_inner: list[str] = []
+        self._heading_text: list[str] = []
+        self._slug_counts: dict[str, int] = {}
+
+    # -- heading lifecycle ------------------------------------------------------
+
+    def _close_heading(self, tag: str) -> None:
+        slug = slugify_heading("".join(self._heading_text))
+        if slug:
+            unique = unique_heading_slug(slug, self._slug_counts)
+            opening = self._heading_open or f"<{tag}>"
+            if opening.endswith(">"):
+                opening = opening[:-1] + f' id="{unique}">'
+            self.parts.append(opening)
+        elif self._heading_open:
+            self.parts.append(self._heading_open)
+        else:
+            self.parts.append(f"<{tag}>")
+        self.parts.extend(self._heading_inner)
+        self.parts.append(f"</{tag}>")
+        self._heading_tag = None
+        self._heading_open = None
+        self._heading_inner = []
+        self._heading_text = []
+
+    # -- HTMLParser callbacks ---------------------------------------------------
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        tag = tag.lower()
+        tag_text = self.get_starttag_text() or f"<{tag}>"
+        if self._heading_tag is not None:
+            # Inline markup inside a heading (e.g. ``<code>``, ``<a>``) —
+            # keep it verbatim; only text contributes to the slug.
+            self._heading_inner.append(tag_text)
+            return
+        if self._skip_stack:
+            self.parts.append(tag_text)
+            if tag in _NO_HEADING_IDS_TAGS and tag == self._skip_stack[-1]:
+                self._skip_stack.append(tag)
+            return
+        if tag in _NO_HEADING_IDS_TAGS:
+            self._skip_stack.append(tag)
+            self.parts.append(tag_text)
+            return
+        if tag in _HEADING_TAGS:
+            self._heading_tag = tag
+            self._heading_open = tag_text
+            self._heading_inner = []
+            self._heading_text = []
+            return
+        self.parts.append(tag_text)
+
+    def handle_startendtag(self, tag: str, attrs) -> None:
+        tag_text = self.get_starttag_text() or ""
+        if self._heading_tag is not None:
+            self._heading_inner.append(tag_text)
+        else:
+            self.parts.append(tag_text)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if self._heading_tag is not None:
+            if tag == self._heading_tag:
+                self._close_heading(tag)
+            else:
+                self._heading_inner.append(f"</{tag}>")
+            return
+        if self._skip_stack:
+            if tag == self._skip_stack[-1]:
+                self._skip_stack.pop()
+            self.parts.append(f"</{tag}>")
+            return
+        self.parts.append(f"</{tag}>")
+
+    def handle_data(self, data: str) -> None:
+        if self._heading_tag is not None:
+            self._heading_inner.append(data)
+            self._heading_text.append(data)
+        else:
+            self.parts.append(data)
+
+    def handle_entityref(self, name: str) -> None:
+        raw = f"&{name};"
+        if self._heading_tag is not None:
+            self._heading_inner.append(raw)
+            self._heading_text.append(raw)
+        else:
+            self.parts.append(raw)
+
+    def handle_charref(self, name: str) -> None:
+        raw = f"&#{name};"
+        if self._heading_tag is not None:
+            self._heading_inner.append(raw)
+            self._heading_text.append(raw)
+        else:
+            self.parts.append(raw)
+
+    def handle_comment(self, data: str) -> None:
+        if self._heading_tag is not None:
+            self._heading_inner.append(f"<!--{data}-->")
+        else:
+            self.parts.append(f"<!--{data}-->")
+
+    def handle_decl(self, decl: str) -> None:
+        self.parts.append(f"<!{decl}>")
+
+
+def assign_heading_ids(html: str) -> str:
+    """Add ``id`` attributes to rendered headings using canonical anchors.
+
+    The slugs (and duplicate ``-1``/``-2``… suffixes) match
+    ``backend.heading_anchor.slugify_heading`` so that TOC links such as
+    ``[Intro -- Details](#intro----details)`` resolve against the preview.
+    """
+    parser = _HeadingIdAssigner()
+    parser.feed(html)
+    parser.close()
+    return "".join(parser.parts)
+
+
 def render_markdown(
     markdown_text: str,
     *,
@@ -226,6 +367,7 @@ def render_markdown(
         )
         html_content = restore_math(html_content, math_replacements)
         html_content = linkify_bare_urls(html_content)
+        html_content = assign_heading_ids(html_content)
     except Exception:
         import traceback
 
