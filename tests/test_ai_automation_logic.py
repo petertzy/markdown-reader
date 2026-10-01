@@ -1,9 +1,60 @@
 import unittest
 
 from backend.ai_logic import (
+    _apply_markdown_formatting_rules,
     build_ai_automation_fallback,
     get_ai_automation_task_templates,
 )
+
+
+class TestFormattingRulesSkipFencedCode(unittest.TestCase):
+    """/format must never rewrite lines inside a fenced code block."""
+
+    def test_shebang_is_not_turned_into_a_heading(self):
+        src = "```bash\n#!/usr/bin/env bash\nset -euo pipefail\n```"
+        self.assertEqual(_apply_markdown_formatting_rules(src), src)
+
+    def test_numeric_literal_is_not_split(self):
+        # The ordered-list rule turned the float 1.5 into "1. 5".
+        self.assertEqual(
+            _apply_markdown_formatting_rules("```\n1.5\n```"), "```\n1.5\n```"
+        )
+
+    def test_comments_and_tilde_fences_are_untouched(self):
+        for src in (
+            "```python\n#comment\nx=1\n```",
+            "```yaml\n#cfg: true\n```",
+            "~~~bash\n#!/bin/sh\necho -n hi\n~~~",
+            "```\n    # indented comment\n    2.75\n```",
+        ):
+            self.assertEqual(_apply_markdown_formatting_rules(src), src, src)
+
+    def test_prose_normalisation_is_unchanged(self):
+        # The rules still apply outside fences, byte-for-byte as before.
+        for src, want in (
+            ("#heading", "# heading"),
+            ("####deep", "#### deep"),
+            ("-item", "- item"),
+            ("*star", "* star"),
+            ("1.item", "1. item"),
+            ("   ###x", "   ###x"),
+        ):
+            self.assertEqual(_apply_markdown_formatting_rules(src), want, src)
+
+    def test_prose_around_a_fence_is_still_normalised(self):
+        src = "#heading\n\n```\n#!not a heading\n```\n\n-tail\n"
+        self.assertEqual(
+            _apply_markdown_formatting_rules(src),
+            "# heading\n\n```\n#!not a heading\n```\n\n- tail\n",
+        )
+
+    def test_unclosed_fence_protects_the_rest(self):
+        src = "```\n#!/bin/sh\n#still code\n"
+        self.assertEqual(_apply_markdown_formatting_rules(src), src)
+
+    def test_tilde_inside_backtick_fence_is_code(self):
+        src = "```\n~~~\n#!/bin/sh\n```"
+        self.assertEqual(_apply_markdown_formatting_rules(src), src)
 
 
 class TestAIAutomationLogic(unittest.TestCase):

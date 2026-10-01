@@ -849,10 +849,33 @@ def save_ai_chat_histories(histories: list[dict[str, Any]]) -> None:
         json.dump(histories, file_obj, indent=2)
 
 
+# An opening or closing code fence: three or more backticks/tildes, optionally
+# indented up to three spaces (CommonMark). Used to tell real Markdown lines from
+# verbatim code.
+_CODE_FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+
+
 def _apply_markdown_formatting_rules(markdown_text: str) -> str:
     normalized = (markdown_text or "").replace("\r\n", "\n")
     lines = []
+    fence: str | None = None
     for raw_line in normalized.split("\n"):
+        # Inside a fenced block the line is verbatim code, so none of the
+        # normalisation below may touch it. These rules are line-shaped and read
+        # a leading "#", "-" or "1." as list/heading syntax, but that is a
+        # comment or an operator inside the block: a shebang became
+        # "# !/usr/bin/env bash" and the float 1.5 became "1. 5".
+        if _CODE_FENCE_RE.match(raw_line):
+            marker = _CODE_FENCE_RE.match(raw_line).group(1)
+            if fence is None:
+                fence = marker[0] * 3
+            elif marker[0] == fence[0] and len(marker) >= len(fence):
+                fence = None
+            lines.append(raw_line.rstrip())
+            continue
+        if fence is not None:
+            lines.append(raw_line.rstrip())
+            continue
         line = raw_line.rstrip()
         line = re.sub(r"^(#{1,6})([^\s#])", r"\1 \2", line)
         line = re.sub(r"^(\s*)([-*+])(\S)", r"\1\2 \3", line)
