@@ -13,6 +13,7 @@ import { Files, Markdown, Export, type ExportPayload, type WordCountResult } fro
 import { needsConversion } from "@/lib/supportedFormats";
 import { resolveTabClose } from "@/lib/tabLifecycle.mjs";
 import { parentDirOf, resolvePreviewBaseDir } from "@/lib/preview-base-dir.mjs";
+import { settleSavedTab } from "@/lib/save-settle.mjs";
 
 export type Tab = {
   id: string;
@@ -71,11 +72,6 @@ export function useEditor() {
 
   // ── derived state ──────────────────────────────────────────────────────────
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
-
-  // ── helpers ────────────────────────────────────────────────────────────────
-  const updateTab = useCallback((id: string, patch: Partial<Tab>) => {
-    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-  }, []);
 
   // ── preview refresh ────────────────────────────────────────────────────────
   const refreshPreview = useCallback(
@@ -192,13 +188,25 @@ export function useEditor() {
       const path = filePath ?? activeTab.filePath;
 
       if (path) {
-        await Files.write(path, activeTab.content);
-        updateTab(activeTabId, {
-          dirty: false,
-          filePath: path,
-          previewBaseDir: parentDirOf(path),
-          label: path.split(/[/\\]/).pop() ?? path,
-        });
+        // Snapshot what is being written, then compare it against the buffer
+        // after the round trip: anything typed in between is not on disk and
+        // must stay marked dirty.
+        const writtenContent = activeTab.content;
+        await Files.write(path, writtenContent);
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.id === activeTabId
+              ? {
+                  ...t,
+                  ...settleSavedTab({
+                    writtenContent,
+                    currentContent: t.content,
+                    savedPath: path,
+                  }),
+                }
+              : t
+          )
+        );
         Files.addRecent(path)
           .then(({ entries }) => setRecentFiles(entries))
           .catch(console.error);
@@ -218,14 +226,23 @@ export function useEditor() {
         if (!selected) return;
 
         const resolvedPath = Array.isArray(selected) ? selected[0] : selected;
-        await Files.write(resolvedPath, activeTab.content);
-        updateTab(activeTabId, {
-          dirty: false,
-          filePath: resolvedPath,
-          previewBaseDir: parentDirOf(resolvedPath),
-          browserHandle: null,
-          label: resolvedPath.split(/[/\\]/).pop() ?? resolvedPath,
-        });
+        const writtenContent = activeTab.content;
+        await Files.write(resolvedPath, writtenContent);
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.id === activeTabId
+              ? {
+                  ...t,
+                  ...settleSavedTab({
+                    writtenContent,
+                    currentContent: t.content,
+                    savedPath: resolvedPath,
+                  }),
+                  browserHandle: null,
+                }
+              : t
+          )
+        );
         Files.addRecent(resolvedPath)
           .then(({ entries }) => setRecentFiles(entries))
           .catch(console.error);
@@ -237,7 +254,7 @@ export function useEditor() {
       // No explicit path available and no native save dialog capability.
       return;
     },
-    [activeTab, activeTabId, updateTab]
+    [activeTab, activeTabId]
   );
 
   const newTab = useCallback(() => {
