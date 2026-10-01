@@ -77,7 +77,7 @@ class TestExportHtmlWritesFile(unittest.TestCase):
         exported = res.json()["path"]
         self.addCleanup(_discard_file, exported)
         with open(exported, encoding="utf-8") as f:
-            self.assertIn("<h1>Hello</h1>", f.read())
+            self.assertIn('<h1 id="hello">Hello</h1>', f.read())
 
 
 class TestDownloadHtmlCleansUpTempFile(unittest.TestCase):
@@ -89,7 +89,7 @@ class TestDownloadHtmlCleansUpTempFile(unittest.TestCase):
 
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.headers["content-type"].split(";")[0], "text/html")
-        self.assertIn("<h1>Hello</h1>", res.text)
+        self.assertIn('<h1 id="hello">Hello</h1>', res.text)
         self.assertIn("<strong>bold</strong>", res.text)
 
     def test_temp_file_is_removed_after_stream(self):

@@ -7,11 +7,16 @@ import re
 import sys
 import threading
 import time
-import unicodedata
 from pathlib import Path
 from typing import Any
 
 import requests
+
+from backend.heading_anchor import (
+    iter_heading_matches,
+    slugify_heading,
+    unique_heading_slug,
+)
 
 try:
     import keyring
@@ -882,13 +887,11 @@ def _format_and_fix_code_blocks(markdown_text: str) -> str:
 
 
 def _slugify_heading_text(text: str) -> str:
-    # Match the GitHub-compatible anchors used by the rendered document
-    # outline (backend/routers/markdown.py._slugify) so TOC links actually
-    # resolve: unicode word characters are kept, not discarded.
-    text = unicodedata.normalize("NFC", text or "").lower()
-    text = re.sub(r"[`*_~\[\](){}]", "", text).strip()
-    text = re.sub(r"[^\w\s-]", "", text)
-    return re.sub(r"-+", "-", re.sub(r"\s+", "-", text)).strip("-")
+    # Delegate to the shared canonical slugger so TOC anchors always match
+    # the rendered document outline (backend/routers/markdown.py): unicode
+    # word characters are kept, consecutive spaces/hyphens behave exactly
+    # like GitHub's anchors, and inline markup is stripped the same way.
+    return slugify_heading(text)
 
 
 def _generate_markdown_toc(markdown_text: str) -> str:
@@ -896,18 +899,13 @@ def _generate_markdown_toc(markdown_text: str) -> str:
     # Track slugs so duplicate headings get the ``-1``, ``-2`` … suffix that
     # GitHub applies when rendering anchors (same rule as ``_extract_outline``).
     slug_counts: dict[str, int] = {}
-    for line in (markdown_text or "").replace("\r\n", "\n").split("\n"):
-        match = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
-        if not match:
-            continue
+    for match in iter_heading_matches(markdown_text or ""):
         level = len(match.group(1))
         title = match.group(2).strip()
         anchor = _slugify_heading_text(title)
         if not anchor:
             continue
-        count = slug_counts.get(anchor, 0)
-        unique_anchor = anchor if count == 0 else f"{anchor}-{count}"
-        slug_counts[anchor] = count + 1
+        unique_anchor = unique_heading_slug(anchor, slug_counts)
         toc_lines.append(f"{'  ' * max(0, level - 1)}- [{title}](#{unique_anchor})")
     return "## Table of Contents\n\n" + "\n".join(toc_lines) + "\n" if toc_lines else ""
 
