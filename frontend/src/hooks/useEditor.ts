@@ -13,6 +13,7 @@ import { Files, Markdown, Export, type ExportPayload, type WordCountResult } fro
 import { needsConversion } from "@/lib/supportedFormats";
 import { resolveTabClose } from "@/lib/tabLifecycle.mjs";
 import { parentDirOf, resolvePreviewBaseDir } from "@/lib/preview-base-dir.mjs";
+import { createLatestRequestGuard } from "@/lib/latest-request.mjs";
 
 export type Tab = {
   id: string;
@@ -68,6 +69,10 @@ export function useEditor() {
   const [darkMode, setDarkMode] = useState(false);
   const [fontSize, setFontSize] = useState(14);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Renders and word counts are HTTP requests that can finish out of order, so
+  // each channel only accepts the response belonging to its newest request.
+  const previewGuardRef = useRef(createLatestRequestGuard());
+  const wordCountGuardRef = useRef(createLatestRequestGuard());
 
   // ── derived state ──────────────────────────────────────────────────────────
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
@@ -85,14 +90,27 @@ export function useEditor() {
         activeTab.previewBaseDir,
         activeTab.filePath
       );
+      // Every keystroke issues a render, and a big document renders slower than
+      // a small one, so responses can land out of order. Only the newest
+      // request may write previewHtml, otherwise a slow earlier render can
+      // repaint text the user has since deleted.
+      const renderToken = previewGuardRef.current.issue();
       Markdown.render({ content, base_dir: baseDir, dark_mode: darkMode, font_size: fontSize })
-        .then(({ html }) => setPreviewHtml(html))
+        .then(({ html }) => {
+          if (previewGuardRef.current.isCurrent(renderToken)) setPreviewHtml(html);
+        })
         .catch(console.error);
 
-      // Debounced word-count update
+      // Debounced word-count update, guarded the same way: the debounce limits
+      // how often a request starts, not how long one takes.
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        Markdown.wordCount(content).then(setWordCount).catch(console.error);
+        const countToken = wordCountGuardRef.current.issue();
+        Markdown.wordCount(content)
+          .then((stats) => {
+            if (wordCountGuardRef.current.isCurrent(countToken)) setWordCount(stats);
+          })
+          .catch(console.error);
       }, 400);
     },
     [activeTab.previewBaseDir, activeTab.filePath, darkMode, fontSize]
@@ -245,11 +263,22 @@ export function useEditor() {
     setTabs((prev) => [...prev, makeTab(id)]);
     setActiveTabId(id);
     setPreviewHtml("");
+    // Retire anything still in flight, or a render of the document we just left
+    // would repaint itself into the empty tab.
+    previewGuardRef.current.supersede();
+    wordCountGuardRef.current.supersede();
   }, []);
 
   const closeTab = useCallback(
     (id: string) => {
       const { remaining, nextActiveTabId, previewTab } = resolveTabClose(tabs, activeTabId, id);
+      // Closing the active tab retires whatever it had in flight, so a response
+      // for the document being closed cannot repaint over the tab that takes its
+      // place.
+      if (id === activeTabId) {
+        previewGuardRef.current.supersede();
+        wordCountGuardRef.current.supersede();
+      }
       if (remaining.length === 0) {
         // Closing the last tab leaves a fresh empty tab behind, so the preview
         // and word count of the document that was just closed must not linger.
@@ -280,6 +309,8 @@ export function useEditor() {
     setActiveTabId(fresh.id);
     setPreviewHtml("");
     setWordCount(null);
+    previewGuardRef.current.supersede();
+    wordCountGuardRef.current.supersede();
   }, []);
 
   // ── recent files ───────────────────────────────────────────────────────────
