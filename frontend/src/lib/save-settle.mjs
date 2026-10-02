@@ -19,6 +19,18 @@ export function fileNameOf(filePath) {
 }
 
 /**
+ * Directory portion of a path, using either separator, or `undefined` when the
+ * path has no directory component.
+ *
+ * @param {string} filePath
+ * @returns {string | undefined}
+ */
+export function dirOf(filePath) {
+  const dir = String(filePath).replace(/[^/\\]+$/, "");
+  return dir || undefined;
+}
+
+/**
  * Compute the tab patch for a finished save.
  *
  * The write is a round trip, and the buffer can advance while it is in flight.
@@ -30,11 +42,16 @@ export function fileNameOf(filePath) {
  * `currentContent` must be read from the latest tab state *after* awaiting the
  * write, not from a value captured before it.
  *
+ * `previewBaseDir` is re-pointed at the folder the document was just written to,
+ * because saving under a new name moves it and its relative image paths then
+ * belong to that folder rather than the one they were authored in. Kept here
+ * instead of inlined at the call sites so the rule stays covered by this suite.
+ *
  * @param {object} params
  * @param {string} params.writtenContent Content sent to the write call.
  * @param {string} params.currentContent Buffer contents observed after it completed.
  * @param {string} params.savedPath Path the content was written to.
- * @returns {{ dirty: boolean, filePath: string, label: string }}
+ * @returns {{ dirty: boolean, filePath: string, label: string, previewBaseDir: string | undefined }}
  */
 export function settleSavedTab({ writtenContent, currentContent, savedPath }) {
   return {
@@ -43,5 +60,6 @@ export function settleSavedTab({ writtenContent, currentContent, savedPath }) {
     dirty: currentContent !== writtenContent,
     filePath: savedPath,
     label: fileNameOf(savedPath),
+    previewBaseDir: dirOf(savedPath),
   };
 }

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 // Exercises the real helper the app imports. `useEditor.ts` is TypeScript and CI
 // runs the frontend suite on Node 20, which cannot import `.ts`, so the rule
 // lives in `src/lib/save-settle.mjs` (same pattern as http-timeout.mjs).
-import { fileNameOf, settleSavedTab } from "../src/lib/save-settle.mjs";
+import { dirOf, fileNameOf, settleSavedTab } from "../src/lib/save-settle.mjs";
 
 const WRITTEN = "# Title\n\nBody as it was when the save started.\n";
 
@@ -82,4 +82,48 @@ test("saving to a new path still renames the tab", () => {
   assert.equal(patch.dirty, false);
   assert.equal(patch.label, "converted.md");
   assert.equal(patch.filePath, "/elsewhere/converted.md");
+});
+
+test("dirOf returns the containing folder, for both separators", () => {
+  assert.equal(dirOf("/work/notes/report.md"), "/work/notes/");
+  assert.equal(dirOf("C:\\notes\\report.md"), "C:\\notes\\");
+});
+
+test("dirOf returns undefined when there is no directory component", () => {
+  assert.equal(dirOf("report.md"), undefined);
+  assert.equal(dirOf(""), undefined);
+});
+
+test("a save re-points previewBaseDir at the folder it was written to", () => {
+  // Saving under a new name moves the document, so relative image paths now
+  // belong to the destination folder, not the one they were authored in. If
+  // this were left pointing at the old folder the preview would resolve every
+  // image against a directory that no longer contains them.
+  const patch = settleSavedTab({
+    writtenContent: WRITTEN,
+    currentContent: WRITTEN,
+    savedPath: "/moved/elsewhere/report.md",
+  });
+  assert.equal(patch.previewBaseDir, "/moved/elsewhere/");
+});
+
+test("previewBaseDir follows the save even when edits are still unsaved", () => {
+  // The document moved regardless of whether the buffer advanced, so the base
+  // directory must not be conditional on `dirty`.
+  const patch = settleSavedTab({
+    writtenContent: WRITTEN,
+    currentContent: WRITTEN + "typed during the save",
+    savedPath: "/work/notes/report.md",
+  });
+  assert.equal(patch.dirty, true);
+  assert.equal(patch.previewBaseDir, "/work/notes/");
+});
+
+test("a Windows save yields a Windows base directory", () => {
+  const patch = settleSavedTab({
+    writtenContent: WRITTEN,
+    currentContent: WRITTEN,
+    savedPath: "D:\\docs\\report.md",
+  });
+  assert.equal(patch.previewBaseDir, "D:\\docs\\");
 });

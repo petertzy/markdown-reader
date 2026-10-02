@@ -73,11 +73,6 @@ export function useEditor() {
   // ── derived state ──────────────────────────────────────────────────────────
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
 
-  // ── helpers ────────────────────────────────────────────────────────────────
-  const updateTab = useCallback((id: string, patch: Partial<Tab>) => {
-    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-  }, []);
-
   // ── preview refresh ────────────────────────────────────────────────────────
   const refreshPreview = useCallback(
     (content: string, baseDirOverride?: string) => {
@@ -261,7 +256,7 @@ export function useEditor() {
       // No explicit path available and no native save dialog capability.
       return;
     },
-    [activeTab, activeTabId, updateTab]
+    [activeTab, activeTabId]
   );
 
   const newTab = useCallback(() => {
