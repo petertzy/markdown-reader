@@ -1,9 +1,80 @@
 import unittest
 
 from backend.ai_logic import (
+    _generate_lightweight_summary,
+    _generate_markdown_toc,
     build_ai_automation_fallback,
     get_ai_automation_task_templates,
 )
+
+
+class TestFencedHeadingsInGeneratedTOC(unittest.TestCase):
+    """A ``#`` line inside a code fence is code, not a heading."""
+
+    def test_toc_skips_hash_inside_backtick_fence(self):
+        toc = _generate_markdown_toc("# Real\n\n```python\n# fake\n```\n\n## Second\n")
+        self.assertNotIn("fake", toc)
+        self.assertIn("- [Real](#real)", toc)
+        self.assertIn("- [Second](#second)", toc)
+
+    def test_toc_skips_hash_inside_tilde_fence(self):
+        toc = _generate_markdown_toc("# A\n\n~~~bash\n## fake\n~~~\n\n## B\n")
+        self.assertNotIn("fake", toc)
+        self.assertIn("- [B](#b)", toc)
+
+    def test_toc_ignores_longer_closing_fence_content(self):
+        # A closing fence may be longer than the opener; the line between them
+        # is still code.
+        toc = _generate_markdown_toc("# A\n\n```\n# fake\n`````\n\n## B\n")
+        self.assertNotIn("fake", toc)
+        self.assertIn("- [B](#b)", toc)
+
+    def test_toc_respects_fence_char_and_indent(self):
+        for doc in (
+            "# A\n\n   ```\n# fake\n   ```\n\n## B\n",  # up to 3 spaces = fence
+            "# A\n\n```\n~~~\n# fake\n```\n\n## B\n",  # ~~~ inside ``` is code
+            "# A\n\ntext `# not heading` more\n\n## B\n",  # inline span
+            "# A\n\n    # indented\n\n## B\n",  # 4 spaces = code block, prose
+        ):
+            toc = _generate_markdown_toc(doc)
+            self.assertNotIn("fake", toc, doc)
+            self.assertNotIn("not-heading", toc, doc)
+            self.assertIn("- [B](#b)", toc, doc)
+
+    def test_unclosed_fence_swallows_remaining_headings(self):
+        toc = _generate_markdown_toc("# A\n\n```\n# fake\n\n## also fake\n")
+        self.assertIn("- [A](#a)", toc)
+        self.assertNotIn("fake", toc)
+
+    def test_summary_sections_skip_fenced_headings(self):
+        summary = _generate_lightweight_summary(
+            "# Real Title\n\nLead.\n\n```python\n# fake\n```\n\n## Second\n"
+        )
+        self.assertNotIn("fake", summary)
+        self.assertIn("Real Title", summary)
+        self.assertIn("Second", summary)
+
+    def test_summary_lead_is_not_raw_code(self):
+        # A document opening with a code block used to quote the commands back
+        # as the opening sentence.
+        summary = _generate_lightweight_summary(
+            "```bash\nnpm install\n```\n\n# Setup\n\nRun the commands above.\n"
+        )
+        self.assertNotIn("npm install", summary)
+        self.assertIn("Run the commands above.", summary)
+
+    def test_summary_lead_skips_blank_line_inside_fenced_code(self):
+        summary = _generate_lightweight_summary(
+            "```text\nfirst command\n\nsecond command\n```\n\n# Setup\n\nReal introduction."
+        )
+        self.assertNotIn("first command", summary)
+        self.assertNotIn("second command", summary)
+        self.assertIn("Real introduction.", summary)
+
+    def test_summary_without_any_prose_has_no_lead(self):
+        summary = _generate_lightweight_summary("# Only\n\n```\ncode\n```\n")
+        self.assertNotIn("code", summary)
+        self.assertIn("Only", summary)
 
 
 class TestAIAutomationLogic(unittest.TestCase):

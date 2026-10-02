@@ -13,7 +13,6 @@ from typing import Any
 import requests
 
 from backend.heading_anchor import (
-    iter_heading_matches,
     slugify_heading,
     unique_heading_slug,
 )
@@ -894,12 +893,43 @@ def _slugify_heading_text(text: str) -> str:
     return slugify_heading(text)
 
 
+_FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+
+
+def _iter_heading_lines(markdown_text: str):
+    """Yield only the lines that are real ATX headings.
+
+    A ``#`` line inside a fenced code block is code, not a heading, so scanning
+    line-by-line is not enough: a shell comment or a Python comment would be
+    collected as a section title. Track the fence state so those are skipped.
+    """
+    fence: str | None = None
+    for line in (markdown_text or "").replace("\r\n", "\n").split("\n"):
+        if fence is None:
+            match = _FENCE_RE.match(line)
+            if match:
+                fence = match.group(1)[0] * 3
+                continue
+        else:
+            # A closing fence uses the same character and is at least as long
+            # as the opener; anything else is part of the code block.
+            closing = _FENCE_RE.match(line)
+            if closing and closing.group(1)[0] == fence[0]:
+                if len(closing.group(1)) >= len(fence):
+                    fence = None
+            continue
+        yield line
+
+
 def _generate_markdown_toc(markdown_text: str) -> str:
     toc_lines = []
     # Track slugs so duplicate headings get the ``-1``, ``-2`` … suffix that
     # GitHub applies when rendering anchors (same rule as ``_extract_outline``).
     slug_counts: dict[str, int] = {}
-    for match in iter_heading_matches(markdown_text or ""):
+    for line in _iter_heading_lines(markdown_text):
+        match = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
+        if not match:
+            continue
         level = len(match.group(1))
         title = match.group(2).strip()
         anchor = _slugify_heading_text(title)
@@ -926,18 +956,27 @@ def _generate_lightweight_summary(markdown_text: str) -> str:
         return ""
     normalized = markdown_text.replace("\r\n", "\n")
     headings = []
-    for line in normalized.split("\n"):
+    for line in _iter_heading_lines(normalized):
         match = re.match(r"^#{1,3}\s+(.+?)\s*$", line)
         if match:
             headings.append(match.group(1).strip())
         if len(headings) >= 5:
             break
     lead = ""
-    for paragraph in re.split(r"\n\s*\n", normalized):
+    # Remove complete fenced blocks before looking for a lead paragraph. A
+    # fenced block may contain blank lines, so splitting the original text
+    # into paragraphs first can otherwise expose a later code paragraph.
+    outside_fences = "\n".join(_iter_heading_lines(normalized))
+    for paragraph in re.split(r"\n\s*\n", outside_fences):
         paragraph = paragraph.strip()
-        if paragraph and not paragraph.startswith("#"):
-            lead = re.sub(r"\s+", " ", paragraph)
-            break
+        # Skip headings, and skip fenced code blocks: quoting ``npm install`` as
+        # the document's opening sentence is worse than having no lead at all.
+        if not paragraph or paragraph.startswith("#"):
+            continue
+        if paragraph.startswith("```") or paragraph.startswith("~~~"):
+            continue
+        lead = re.sub(r"\s+", " ", paragraph)
+        break
     lines = ["## Summary"]
     if lead:
         lines.extend(["", f"- {lead[:240]}{'...' if len(lead) > 240 else ''}"])
