@@ -4,6 +4,7 @@ import re
 import unittest
 
 from backend.ai_logic import _generate_markdown_toc
+from backend.render_helpers import fix_image_paths
 from backend.renderer import render_markdown
 
 
@@ -315,3 +316,61 @@ class TestHeadingAnchors(unittest.TestCase):
         self.assertEqual(
             re.findall(r"\]\(#([^)]+)\)", _generate_markdown_toc(md)), expected
         )
+
+
+class TestImagePathsSkipCodeRegions(unittest.TestCase):
+    """Relative image resolution must not rewrite image syntax shown as code.
+
+    ``fix_image_paths`` runs before any code masking, so a Markdown document
+    that *demonstrates* image syntax had its own examples rewritten to absolute
+    ``file://`` URLs in the rendered preview.
+    """
+
+    BASE = "/Users/me/docs"
+
+    def test_image_inside_a_fenced_block_is_left_alone(self):
+        html = render_markdown(
+            "```markdown\n![diagram](diagram.png)\n```",
+            base_dir=self.BASE,
+        )
+        self.assertIn("diagram.png", html)
+        self.assertNotIn(f"file://{self.BASE}/diagram.png", html)
+
+    def test_image_inside_an_inline_code_span_is_left_alone(self):
+        html = render_markdown("Use `![alt](shot.png)` to embed.", base_dir=self.BASE)
+        self.assertIn("shot.png", html)
+        self.assertNotIn(f"file://{self.BASE}/shot.png", html)
+
+    def test_real_image_beside_a_code_sample_is_still_resolved(self):
+        html = render_markdown(
+            "```markdown\n![diagram](diagram.png)\n```\n\n![chart](chart.png)\n",
+            base_dir=self.BASE,
+        )
+        self.assertIn(f'<img src="file://{self.BASE}/chart.png"', html)
+        self.assertNotIn(f"file://{self.BASE}/diagram.png", html)
+
+    def test_tilde_fence_is_treated_as_code(self):
+        text = "~~~markdown\n![diagram](diagram.png)\n~~~\n"
+        self.assertEqual(fix_image_paths(text, self.BASE), text)
+
+    def test_two_backtick_span_is_treated_as_code(self):
+        text = "a ``![d](d.png)`` b"
+        self.assertEqual(fix_image_paths(text, self.BASE), text)
+
+    def test_fenced_block_at_end_of_file_without_newline(self):
+        text = "intro\n\n```markdown\n![diagram](diagram.png)\n```"
+        self.assertEqual(fix_image_paths(text, self.BASE), text)
+
+    def test_ordinary_prose_images_are_unchanged(self):
+        text = "![chart](chart.png) and ![abs](/x.png) and ![web](https://e.com/i.png)"
+        self.assertEqual(
+            fix_image_paths(text, self.BASE),
+            f"![chart](file://{self.BASE}/chart.png) and ![abs](/x.png) "
+            "and ![web](https://e.com/i.png)",
+        )
+
+    def test_no_placeholder_token_leaks_from_the_masking(self):
+        html = render_markdown("`![a](b.png)` and ![c](c.png)", base_dir=self.BASE)
+        self.assertNotIn("PLACEHOLDER", html)
+        self.assertIn("b.png", html)
+        self.assertIn(f'<img src="file://{self.BASE}/c.png"', html)
