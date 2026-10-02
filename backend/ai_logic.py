@@ -1250,10 +1250,16 @@ def translate_markdown_with_ai(
 
 
 _SENTENCE_END_CHARS = ".!?。！？"
+# Full-width terminators. CJK text does not put a space after them, so they
+# cannot share the "next char must be a space/quote/bracket" rule used for the
+# ASCII set below — otherwise a whole paragraph became one translation unit.
+_CJK_SENTENCE_END_CHARS = frozenset("。！？")
 # Closing punctuation that belongs to the sentence it terminates; a
 # quoted/bracketed sentence keeps its closing quote/bracket in the same
 # translation unit (`He said "Stop." Then` -> `He said "Stop."`).
-_SENTENCE_CLOSING_CHARS = frozenset("\"')]")
+# The CJK forms are here for the same reason: `…」` is part of the sentence it
+# closes, and must not be orphaned onto the next unit.
+_SENTENCE_CLOSING_CHARS = frozenset("\"')]」』）】》〉〙〗〛｝］")
 
 # Abbreviations whose period should not terminate the sentence, e.g. ``Dr.``.
 _PERIOD_NOT_SENTENCE_END = frozenset(
@@ -1546,15 +1552,13 @@ def split_text_into_translation_units(content: str) -> list[str]:
             char = line[char_index]
             buffer.append(char)
             next_char = line[char_index + 1] if char_index + 1 < len(line) else ""
-            if char in _SENTENCE_END_CHARS and next_char in {
-                "",
-                " ",
-                "\t",
-                '"',
-                "'",
-                ")",
-                "]",
-            }:
+            if char in _SENTENCE_END_CHARS and (
+                # A full-width terminator ends the sentence whatever follows:
+                # CJK text has no space after 。！？, so requiring one made the
+                # whole paragraph a single unit.
+                char in _CJK_SENTENCE_END_CHARS
+                or next_char in {"", " ", "\t", '"', "'", ")", "]"}
+            ):
                 ends_sentence = True
                 if char == ".":
                     # "Dr." / "e.g." / "U.S." do not end a sentence.
