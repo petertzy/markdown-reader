@@ -96,6 +96,27 @@ class TestUtf8BomNotes(unittest.TestCase):
             self.assertNotIn("title: Real Title", chunk["content"])
             self.assertNotIn("tags: [a]", chunk["content"])
 
+    def test_indexing_bom_note_stores_clean_title_and_chunks(self):
+        body = "---\ntitle: Real Title\ntags: [a]\n---\n\n# Heading\n\nBody."
+        self._write(body)
+        db_path = self.root / "knowledge.db"
+
+        with mock.patch.object(
+            knowledge_logic,
+            "APP_SETTINGS_FILE_PATH",
+            self.root / "settings.json",
+        ):
+            stats = knowledge_logic.index_knowledge_base(
+                str(self.root), force=True, db_path=db_path
+            )
+
+        self.assertEqual(stats["total_files"], 1)
+        notes = knowledge_logic.list_indexed_notes(db_path=db_path)
+        self.assertEqual(notes[0]["title"], "Real Title")
+        chunks = knowledge_logic.query_knowledge_base("Body", db_path=db_path)
+        self.assertTrue(chunks)
+        self.assertTrue(all("title: Real Title" not in c["content"] for c in chunks))
+
     def test_notes_without_a_bom_are_unchanged(self):
         path = self.root / "plain.md"
         path.write_text("# Plain Note\n\nBody.", encoding="utf-8")
