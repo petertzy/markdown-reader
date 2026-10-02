@@ -116,6 +116,9 @@ class _DocxHtmlParser(HTMLParser):
         self.current_row = None
         self.current_cell = None
         self.current_list_style: list[str] = []
+        # Open ``<li>`` elements, innermost last. Each entry is
+        # ``[paragraph style, inner <p> already claimed the paragraph]``.
+        self.current_list_items: list[list[Any]] = []
         self.current_style: dict[str, Any] = {
             "bold": False,
             "italic": False,
@@ -137,7 +140,16 @@ class _DocxHtmlParser(HTMLParser):
             self.current_style["pre"] = True
             self.current_paragraph = cell.paragraphs[0]
         elif tag in ("p", "blockquote"):
-            self.current_paragraph = self.document.add_paragraph()
+            item = self.current_list_items[-1] if self.current_list_items else None
+            if item is not None and not item[1]:
+                # A loose list wraps each item in <p>. Reuse the paragraph the
+                # <li> already opened so the bullet is not orphaned; any later
+                # paragraph in the same item continues the list style.
+                item[1] = True
+            else:
+                self.current_paragraph = self.document.add_paragraph(
+                    style=item[0] if item is not None else None
+                )
         elif tag == "code":
             self.current_style["code"] = True
         elif tag in ("strong", "b"):
@@ -154,6 +166,7 @@ class _DocxHtmlParser(HTMLParser):
         elif tag == "li":
             style = self.current_list_style[-1] if self.current_list_style else None
             self.current_paragraph = self.document.add_paragraph(style=style)
+            self.current_list_items.append([style, False])
         elif tag == "br" and self.current_paragraph is not None:
             self.current_paragraph.add_run().add_break()
         elif tag == "img":
@@ -184,6 +197,8 @@ class _DocxHtmlParser(HTMLParser):
         if tag in ("h1", "h2", "h3", "h4", "h5", "h6", "p", "blockquote", "li", "pre"):
             if tag == "pre":
                 self.current_style["pre"] = False
+            if tag == "li" and self.current_list_items:
+                self.current_list_items.pop()
             self.current_paragraph = None
         elif tag == "code":
             self.current_style["code"] = False
