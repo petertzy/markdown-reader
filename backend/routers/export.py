@@ -51,6 +51,19 @@ def _remove_file(path: str) -> None:
         pass
 
 
+def _discard_failed_export(out_path: str, requested_path: str | None) -> None:
+    """Drop the file a failed export left behind.
+
+    ``_make_output_path`` creates the output file before the exporter runs, so an
+    exporter that raises leaves a zero-byte artifact in the temporary directory
+    that nothing ever removes. Only clean up paths we generated ourselves: a
+    caller who asked for a specific path may be holding a partial file worth
+    looking at.
+    """
+    if not requested_path:
+        _remove_file(out_path)
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
@@ -129,6 +142,7 @@ def export_docx(payload: ExportPayload):
     try:
         docx_exporter.export_html_to_docx(html, out_path, base_dir=payload.base_dir)
     except Exception as exc:
+        _discard_failed_export(out_path, payload.output_path)
         raise HTTPException(status_code=500, detail=str(exc))
     return {"path": out_path}
 
@@ -154,5 +168,6 @@ def export_pdf(payload: ExportPayload):
     try:
         pdf_exporter.export_markdown_to_pdf(html, out_path, base_url=payload.base_dir)
     except Exception as exc:
+        _discard_failed_export(out_path, payload.output_path)
         raise HTTPException(status_code=500, detail=str(exc))
     return {"path": out_path}
