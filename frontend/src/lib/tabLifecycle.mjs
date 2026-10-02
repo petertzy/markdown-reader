@@ -10,9 +10,11 @@
  */
 
 /**
- * The subset of `Tab` (`useEditor.ts`) this module reasons about. Declaring
- * the fields it touches keeps the helper structurally assignable to `Tab[]`
- * without importing the hook, which Node 20 CI cannot load.
+ * The subset of `Tab` (`useEditor.ts`) callers of this module consume. Declaring
+ * the fields it exposes keeps the helper structurally assignable to `Tab[]`
+ * without importing the hook, which Node 20 CI cannot load. Tabs are passed
+ * through whole, so every field a caller reads off the result must be declared
+ * here even when this module never looks at it.
  *
  * @typedef {object} PreviewTab
  * @property {string} id
@@ -21,6 +23,9 @@
  * @property {string | null} filePath
  * @property {string | undefined} [previewBaseDir]
  * @property {boolean} dirty
+ * @property {string} [previewBaseDir] Carried through untouched so the caller
+ *   can re-render the preview for the tab that becomes active. Omitted from
+ *   tabs opened as plain files.
  */
 
 /**
