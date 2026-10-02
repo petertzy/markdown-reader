@@ -19,6 +19,7 @@
  * @property {string} label
  * @property {string} content
  * @property {string | null} filePath
+ * @property {string | undefined} [previewBaseDir]
  * @property {boolean} dirty
  */
 
