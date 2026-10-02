@@ -126,6 +126,71 @@ class TestKnowledgeLogic(unittest.TestCase):
             "Parent > Child > Grandchild", [chunk["section"] for chunk in chunks]
         )
 
+    def test_extract_note_title_ignores_headings_inside_fenced_code(self):
+        # A shell comment inside a fence is not a heading, so it must not be
+        # mistaken for the note's title.
+        content = (
+            "Run this:\n\n```sh\n# Check disk\ndf -h\n```\n\n# Real Title\n\nBody.\n"
+        )
+        self.assertEqual(
+            knowledge_logic.extract_note_title(content, "notes.md"), "Real Title"
+        )
+
+    def test_chunking_keeps_fenced_code_intact_and_out_of_the_section_tree(self):
+        content = (
+            "# Setup\n\nRun this:\n\n```bash\n# Install deps\npip install foo\n```\n\n"
+            "## Config\n\nSet the key.\n"
+        )
+        chunks = knowledge_logic.chunk_markdown_document(
+            content, str(self.note1_path), "setup.md"
+        )
+
+        sections = [chunk["section"] for chunk in chunks]
+        # The shell comment must not become a heading, nor the parent of a
+        # later real section.
+        self.assertIn("Setup", sections)
+        self.assertIn("Setup > Config", sections)
+        self.assertNotIn("Install deps", sections)
+        self.assertNotIn("Install deps > Config", sections)
+
+        # The fenced block stays whole in exactly one chunk, comment included.
+        holding = [chunk for chunk in chunks if "pip install foo" in chunk["content"]]
+        self.assertEqual(len(holding), 1)
+        self.assertIn(
+            "```bash\n# Install deps\npip install foo\n```", holding[0]["content"]
+        )
+
+    def test_chunking_ignores_tilde_fenced_code(self):
+        content = "# Doc\n\n~~~\n# not a heading\n~~~\n\nSome text.\n"
+        chunks = knowledge_logic.chunk_markdown_document(
+            content, str(self.note1_path), "doc.md"
+        )
+        sections = [chunk["section"] for chunk in chunks]
+        self.assertEqual(set(sections), {"Doc"})
+        self.assertTrue(
+            any("not a heading" in chunk["content"] for chunk in chunks),
+            "the fenced body must still be indexed as content",
+        )
+
+    def test_chunking_treats_an_unclosed_fence_as_code_to_end_of_document(self):
+        # Matches CommonMark: an unterminated fence runs to the end of the file.
+        content = "# Real Heading\n\n```\n# inside\n"
+        chunks = knowledge_logic.chunk_markdown_document(
+            content, str(self.note1_path), "open.md"
+        )
+        self.assertEqual([chunk["section"] for chunk in chunks], ["Real Heading"])
+        self.assertIn("# inside", chunks[0]["content"])
+
+    def test_chunking_requires_matching_fence_length_and_character(self):
+        content = (
+            "# Doc\n\n````bash\n# inside\n```\n# still inside\n````\n\n## Next\nBody.\n"
+        )
+        chunks = knowledge_logic.chunk_markdown_document(
+            content, str(self.note1_path), "fences.md"
+        )
+        self.assertEqual([chunk["section"] for chunk in chunks], ["Doc", "Doc > Next"])
+        self.assertIn("# still inside", chunks[0]["content"])
+
     def test_find_note_files_excludes_ignored_directories(self):
         found = knowledge_logic.find_note_files(self.notes_dir)
         paths = [p.name for p in found]
