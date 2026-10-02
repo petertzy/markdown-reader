@@ -63,6 +63,14 @@ class TestFencedHeadingsInGeneratedTOC(unittest.TestCase):
         self.assertNotIn("npm install", summary)
         self.assertIn("Run the commands above.", summary)
 
+    def test_summary_lead_skips_blank_line_inside_fenced_code(self):
+        summary = _generate_lightweight_summary(
+            "```text\nfirst command\n\nsecond command\n```\n\n# Setup\n\nReal introduction."
+        )
+        self.assertNotIn("first command", summary)
+        self.assertNotIn("second command", summary)
+        self.assertIn("Real introduction.", summary)
+
     def test_summary_without_any_prose_has_no_lead(self):
         summary = _generate_lightweight_summary("# Only\n\n```\ncode\n```\n")
         self.assertNotIn("code", summary)

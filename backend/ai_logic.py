@@ -963,7 +963,11 @@ def _generate_lightweight_summary(markdown_text: str) -> str:
         if len(headings) >= 5:
             break
     lead = ""
-    for paragraph in re.split(r"\n\s*\n", normalized):
+    # Remove complete fenced blocks before looking for a lead paragraph. A
+    # fenced block may contain blank lines, so splitting the original text
+    # into paragraphs first can otherwise expose a later code paragraph.
+    outside_fences = "\n".join(_iter_heading_lines(normalized))
+    for paragraph in re.split(r"\n\s*\n", outside_fences):
         paragraph = paragraph.strip()
         # Skip headings, and skip fenced code blocks: quoting ``npm install`` as
         # the document's opening sentence is worse than having no lead at all.
