@@ -181,6 +181,16 @@ class TestKnowledgeLogic(unittest.TestCase):
         self.assertEqual([chunk["section"] for chunk in chunks], ["Real Heading"])
         self.assertIn("# inside", chunks[0]["content"])
 
+    def test_chunking_requires_matching_fence_length_and_character(self):
+        content = (
+            "# Doc\n\n````bash\n# inside\n```\n# still inside\n````\n\n## Next\nBody.\n"
+        )
+        chunks = knowledge_logic.chunk_markdown_document(
+            content, str(self.note1_path), "fences.md"
+        )
+        self.assertEqual([chunk["section"] for chunk in chunks], ["Doc", "Doc > Next"])
+        self.assertIn("# still inside", chunks[0]["content"])
+
     def test_find_note_files_excludes_ignored_directories(self):
         found = knowledge_logic.find_note_files(self.notes_dir)
         paths = [p.name for p in found]
