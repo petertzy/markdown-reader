@@ -12,11 +12,18 @@ import { useState, useCallback, useRef } from "react";
 import { Files, Markdown, Export, type ExportPayload, type WordCountResult } from "@/lib/api";
 import { needsConversion } from "@/lib/supportedFormats";
 import { resolveTabClose } from "@/lib/tabLifecycle.mjs";
+import { parentDirOf, resolvePreviewBaseDir } from "@/lib/preview-base-dir.mjs";
 
 export type Tab = {
   id: string;
   label: string;       // Display name (filename)
   filePath: string | null;
+  /**
+   * Folder relative image paths resolve against. Normally the parent of
+   * `filePath`, but a document converted on open (html/pdf/docx) has no
+   * `filePath` yet still needs the folder it came from.
+   */
+  previewBaseDir?: string;
   browserHandle?: FileSystemFileHandle | null;
   content: string;
   dirty: boolean;
@@ -33,9 +40,18 @@ function makeTab(
   label = "Untitled",
   content = "",
   filePath: string | null = null,
-  browserHandle: FileSystemFileHandle | null = null
+  browserHandle: FileSystemFileHandle | null = null,
+  previewBaseDir?: string
 ): Tab {
-  return { id, label, content, filePath, browserHandle, dirty: false };
+  return {
+    id,
+    label,
+    content,
+    filePath,
+    previewBaseDir: previewBaseDir ?? parentDirOf(filePath),
+    browserHandle,
+    dirty: false,
+  };
 }
 
 let _tabCounter = 0;
@@ -64,7 +80,11 @@ export function useEditor() {
   // ── preview refresh ────────────────────────────────────────────────────────
   const refreshPreview = useCallback(
     (content: string, baseDirOverride?: string) => {
-      const baseDir = baseDirOverride ?? (activeTab.filePath ? activeTab.filePath.replace(/[^/\\]+$/, "") : undefined);
+      const baseDir = resolvePreviewBaseDir(
+        baseDirOverride,
+        activeTab.previewBaseDir,
+        activeTab.filePath
+      );
       Markdown.render({ content, base_dir: baseDir, dark_mode: darkMode, font_size: fontSize })
         .then(({ html }) => setPreviewHtml(html))
         .catch(console.error);
@@ -75,7 +95,7 @@ export function useEditor() {
         Markdown.wordCount(content).then(setWordCount).catch(console.error);
       }, 400);
     },
-    [activeTab.filePath, darkMode, fontSize]
+    [activeTab.previewBaseDir, activeTab.filePath, darkMode, fontSize]
   );
 
   // ── content change ─────────────────────────────────────────────────────────
@@ -105,10 +125,13 @@ export function useEditor() {
           const { markdown } = await Files.convertToMarkdown({ path: filePath });
           const label = convertedMarkdownLabel(filePath);
           const id = nextTabId();
-          const newTab = { ...makeTab(id, label, markdown, null, null), dirty: true };
+          const newTab = {
+            ...makeTab(id, label, markdown, null, null, parentDirOf(filePath)),
+            dirty: true,
+          };
           setTabs((prev) => [...prev, newTab]);
           setActiveTabId(id);
-          refreshPreview(markdown);
+          refreshPreview(markdown, newTab.previewBaseDir);
           Files.addRecent(filePath)
             .then(({ entries }) => setRecentFiles(entries))
             .catch(console.error);
@@ -173,6 +196,7 @@ export function useEditor() {
         updateTab(activeTabId, {
           dirty: false,
           filePath: path,
+          previewBaseDir: parentDirOf(path),
           label: path.split(/[/\\]/).pop() ?? path,
         });
         Files.addRecent(path)
@@ -198,6 +222,7 @@ export function useEditor() {
         updateTab(activeTabId, {
           dirty: false,
           filePath: resolvedPath,
+          previewBaseDir: parentDirOf(resolvedPath),
           browserHandle: null,
           label: resolvedPath.split(/[/\\]/).pop() ?? resolvedPath,
         });
@@ -239,7 +264,12 @@ export function useEditor() {
       if (nextActiveTabId) setActiveTabId(nextActiveTabId);
       // The preview pane and the status-bar word count still show the closed
       // document unless they are refreshed for the tab that became active.
-      if (previewTab) refreshPreview(previewTab.content, previewTab.filePath ?? undefined);
+      if (previewTab) {
+        refreshPreview(
+          previewTab.content,
+          previewTab.previewBaseDir ?? previewTab.filePath ?? undefined
+        );
+      }
     },
     [tabs, activeTabId, refreshPreview]
   );
