@@ -102,6 +102,41 @@ class TestStripMarkdown(unittest.TestCase):
         self.assertNotIn("|", result)
         self.assertIn("col1", result)
 
+    def test_table_delimiter_row_adds_no_words(self):
+        # A GFM delimiter row is made only of pipes, dashes and colons, so it
+        # must not contribute phantom words. It cannot be matched before the
+        # pipes are stripped, because the leading pipe hides it from the
+        # horizontal-rule rule.
+        md = "| Name | Age | City |\n| --- | --- | --- |\n| Bob | 30 | Rome |"
+        self.assertEqual(_count_words(_strip_markdown(md)), 6)
+
+    def test_table_delimiter_row_with_alignment_colons_adds_no_words(self):
+        md = "| Metric | Q1 |\n| :--- | ---: |\n| Revenue | 10 |"
+        self.assertEqual(_count_words(_strip_markdown(md)), 4)
+
+    def test_task_list_checkboxes_add_no_words(self):
+        # `- [x]` / `- [ ]` used to leave the brackets behind, and an unchecked
+        # box cost one word more than a checked one.
+        self.assertEqual(_count_words(_strip_markdown("- [x] Ship it")), 2)
+        self.assertEqual(_count_words(_strip_markdown("- [ ] Ship it")), 2)
+        self.assertEqual(_count_words(_strip_markdown("- [X] Ship it")), 2)
+
+    def test_mixed_task_list_counts_only_the_items(self):
+        md = "- [x] Wire up the exporter\n- [ ] Ship the release"
+        self.assertEqual(_count_words(_strip_markdown(md)), 7)
+
+    def test_checkbox_marker_outside_a_list_is_preserved(self):
+        # The checkbox is only stripped directly after a bullet, so prose is
+        # untouched.
+        self.assertIn("[x]", _strip_markdown("[x] is a plain token"))
+        self.assertIn("mid line", _strip_markdown("see - [ ] mid line"))
+
+    def test_horizontal_rules_and_bullets_are_unaffected(self):
+        for rule in ("---", "***", "___"):
+            self.assertEqual(_strip_markdown(rule).strip(), "")
+        self.assertEqual(_count_words(_strip_markdown("- alpha\n- beta")), 2)
+        self.assertEqual(_count_words(_strip_markdown("1. one\n2. two")), 2)
+
 
 class TestCountWords(unittest.TestCase):
     """_count_words should handle common edge cases correctly."""
@@ -178,7 +213,7 @@ class TestBrowserPreview(unittest.TestCase):
             self.assertTrue(preview_path.is_file())
             self.assertEqual(result["url"], preview_path.as_uri())
             html = preview_path.read_text(encoding="utf-8")
-            self.assertIn("<h1>Browser Preview</h1>", html)
+            self.assertIn('<h1 id="browser-preview">Browser Preview</h1>', html)
             self.assertIn("A rendered page.", html)
             open_mock.assert_called_once_with(result["url"], new=2)
         finally:

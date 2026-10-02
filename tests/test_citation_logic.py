@@ -56,6 +56,46 @@ class TestCitationLogic(unittest.TestCase):
         self.assertIn("Jane Doe", doe["author"])
         self.assertIn("Richard Roe", doe["author"])
 
+    def _parse_title(self, title_literal: str) -> str:
+        """Parse a one-entry .bib through the real upload path and return title."""
+        bib = f"@article{{x, title = {title_literal}, author = {{Doe, Jane}}}}"
+        path = Path(self.tmp_dir.name) / "one.bib"
+        path.write_text(bib, encoding="utf-8")
+        entries = citation_logic.parse_bib_file(str(path))
+        return entries[0]["title"]
+
+    def test_title_keeps_inner_case_protection_braces(self):
+        # BibTeX braces force capitalisation, so {Deep} {Learning} is meaningful
+        # and must survive. str.strip("{}") ate from both ends independently and
+        # turned this into "Deep} {Learning".
+        self.assertEqual(
+            self._parse_title("{{Deep} {Learning} and {Tensors}}"),
+            "{Deep} {Learning} and {Tensors}",
+        )
+
+    def test_title_keeps_trailing_brace(self):
+        self.assertEqual(self._parse_title("{Title {Wrapped}}"), "Title {Wrapped}")
+
+    def test_title_unwraps_only_a_balanced_outer_layer(self):
+        self.assertEqual(self._parse_title("{{Fully Wrapped}}"), "Fully Wrapped")
+        self.assertEqual(self._parse_title("{Simple}"), "Simple")
+
+    def test_title_without_braces_is_unchanged(self):
+        self.assertEqual(
+            self._parse_title("{Perfectly Normal Title}"), "Perfectly Normal Title"
+        )
+
+    def test_title_keeps_math_braces(self):
+        self.assertIn(
+            "mathcal{F}",
+            self._parse_title(r"{On $\mathcal{F}$ and {DNA}}"),
+        )
+
+    def test_clean_bibtex_value_handles_unbalanced_braces(self):
+        self.assertEqual(citation_logic._clean_bibtex_value("  {Odd "), "{Odd")
+        self.assertEqual(citation_logic._clean_bibtex_value(""), "")
+        self.assertEqual(citation_logic._clean_bibtex_value("{"), "{")
+
     def test_parse_missing_file_raises(self):
         with self.assertRaises(citation_logic.CitationLibraryError):
             citation_logic.parse_bib_file("/does/not/exist.bib")
@@ -96,6 +136,83 @@ class TestCitationLogic(unittest.TestCase):
         )
         self.assertEqual({entry["key"] for entry in entries}, {"doe2024", "smith2020"})
         self.assertEqual(len(citation_logic.search_citations("doe2024")), 1)
+
+    def test_malformed_upload_leaves_the_active_library_untouched(self):
+        content_base64 = b64encode(SAMPLE_BIB.encode("utf-8")).decode("ascii")
+        path, _ = citation_logic.load_citation_library_content(
+            "refs.bib", content_base64
+        )
+        original = Path(path).read_text(encoding="utf-8")
+
+        # bibtexparser reports most malformed input by yielding no entries
+        # rather than by raising, so each of these used to overwrite the
+        # library file and then fail to repopulate it.
+        for garbage in (
+            "@article{broken, title = {Unclosed",
+            "@article{doe 2024,",
+            "this is not bibtex at all",
+            "\n\n   \n",
+        ):
+            with self.subTest(garbage=garbage):
+                with self.assertRaises(citation_logic.CitationLibraryError):
+                    citation_logic.load_citation_library_content(
+                        "refs.bib", b64encode(garbage.encode("utf-8")).decode("ascii")
+                    )
+
+                self.assertEqual(Path(path).read_text(encoding="utf-8"), original)
+                self.assertEqual(
+                    {
+                        entry["key"]
+                        for entry in citation_logic.get_active_library_entries()
+                    },
+                    {"doe2024", "smith2020"},
+                )
+
+    def test_comment_only_upload_is_rejected_without_destroying_the_library(self):
+        content_base64 = b64encode(SAMPLE_BIB.encode("utf-8")).decode("ascii")
+        path, _ = citation_logic.load_citation_library_content(
+            "refs.bib", content_base64
+        )
+        original = Path(path).read_text(encoding="utf-8")
+
+        with self.assertRaises(citation_logic.CitationLibraryError):
+            citation_logic.load_citation_library_content(
+                "refs.bib", b64encode(b"% just a comment\n").decode("ascii")
+            )
+
+        self.assertEqual(Path(path).read_text(encoding="utf-8"), original)
+        self.assertEqual(len(citation_logic.get_active_library_entries()), 2)
+
+    def test_valid_upload_still_replaces_the_library(self):
+        replacement = (
+            "@misc{gamma2021, author = {Gamma, G}, title = {G}, year = {2021}}\n"
+        )
+        _, entries = citation_logic.load_citation_library_content(
+            "refs.bib", b64encode(replacement.encode("utf-8")).decode("ascii")
+        )
+
+        self.assertEqual({entry["key"] for entry in entries}, {"gamma2021"})
+        self.assertEqual(
+            {entry["key"] for entry in citation_logic.get_active_library_entries()},
+            {"gamma2021"},
+        )
+
+    def test_parse_bib_content_matches_parse_bib_file(self):
+        from_file = citation_logic.parse_bib_file(str(self.bib_path))
+        from_text = citation_logic.parse_bib_content(SAMPLE_BIB)
+
+        self.assertEqual(from_file, from_text)
+
+    def test_parse_bib_content_does_not_touch_the_filesystem(self):
+        # Validation happens in memory so a rejected upload never creates or
+        # replaces a file.
+        entries = citation_logic.parse_bib_content(SAMPLE_BIB)
+
+        self.assertEqual({entry["key"] for entry in entries}, {"doe2024", "smith2020"})
+        self.assertFalse(
+            (Path(self.tmp_dir.name) / "citation-libraries").exists(),
+            "parse_bib_content must not create the import directory",
+        )
 
 
 class TestCitationSyntaxSurvivesExport(unittest.TestCase):

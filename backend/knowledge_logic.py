@@ -30,6 +30,12 @@ logger = logging.getLogger(__name__)
 
 # Supported note file extensions
 NOTE_EXTENSIONS = frozenset({".md", ".markdown", ".txt"})
+
+# Notes are commonly authored or re-saved on Windows, which leaves a UTF-8 BOM.
+# "utf-8-sig" strips it when present and behaves identically to "utf-8" when it
+# is not. Without this the BOM sits in front of line 1 and breaks both the
+# frontmatter "---" check and the first-heading match.
+NOTE_READ_ENCODING = "utf-8-sig"
 MAX_KNOWLEDGE_TOP_K = 20
 
 # Directories to skip when scanning note vaults
@@ -237,6 +243,23 @@ def _init_db_schema(con: sqlite3.Connection) -> None:
 # ── Document Parsing & Chunking ───────────────────────────────────────────────
 
 
+def _markdown_fence(
+    line: str, active: tuple[str, int] | None = None
+) -> tuple[str, int] | None:
+    stripped = line.strip()
+    if not stripped or stripped[0] not in "`~":
+        return None
+    marker = stripped[0]
+    length = len(stripped) - len(stripped.lstrip(marker))
+    if length < 3:
+        return None
+    if active is None:
+        return marker, length
+    if marker != active[0] or length < active[1] or stripped[length:].strip():
+        return None
+    return marker, length
+
+
 def extract_note_title(content: str, fallback_filename: str) -> str:
     """Extract a descriptive note title from frontmatter, first # heading, or filename."""
     # 1. Check YAML frontmatter: title: "..."
@@ -252,11 +275,19 @@ def extract_note_title(content: str, fallback_filename: str) -> str:
             if match and match.group(1).strip():
                 return match.group(1).strip()
 
-    # 2. Check first Markdown heading
+    # 2. Check first Markdown heading, ignoring anything inside a fenced code
+    #    block (a shell/YAML comment such as "# Install deps" is not a heading).
+    active_fence: tuple[str, int] | None = None
     for line in content.splitlines():
-        line = line.strip()
-        if line.startswith("# "):
-            title = line[2:].strip()
+        fence = _markdown_fence(line, active_fence)
+        if fence:
+            active_fence = None if active_fence else fence
+            continue
+        if active_fence:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            title = stripped[2:].strip()
             if title:
                 return title
 
@@ -296,8 +327,19 @@ def chunk_markdown_document(
     heading_stack: list[tuple[int, str]] = []
     current_lines: list[str] = []
 
+    active_fence: tuple[str, int] | None = None
     for line in lines:
         stripped = line.strip()
+        fence = _markdown_fence(line, active_fence)
+        if fence:
+            # A fence marker is content, never a section boundary, and the lines
+            # it wraps must not be scanned for headings.
+            active_fence = None if active_fence else fence
+            current_lines.append(line)
+            continue
+        if active_fence:
+            current_lines.append(line)
+            continue
         heading_match = re.match(r"^(#{1,6})\s+(.+)$", stripped)
         if heading_match:
             if current_lines:
@@ -475,9 +517,16 @@ def index_knowledge_base(
                         files_skipped += 1
                         continue
 
-                # Read and process note
+                # Read and process note.
+                # "utf-8-sig" rather than "utf-8": a BOM (U+FEFF) is category Cf,
+                # not whitespace, so str.strip() does not remove it. It would
+                # sit in front of the first line and break both the frontmatter
+                # "---" check and the heading match, silently falling back to the
+                # filename and injecting raw frontmatter into the chunk text.
                 try:
-                    content = note_path.read_text(encoding="utf-8", errors="replace")
+                    content = note_path.read_text(
+                        encoding=NOTE_READ_ENCODING, errors="replace"
+                    )
                 except Exception as read_err:
                     logger.warning(
                         "Could not read note file %s: %s", full_path_str, read_err

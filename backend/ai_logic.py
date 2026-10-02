@@ -7,11 +7,15 @@ import re
 import sys
 import threading
 import time
-import unicodedata
 from pathlib import Path
 from typing import Any
 
 import requests
+
+from backend.heading_anchor import (
+    slugify_heading,
+    unique_heading_slug,
+)
 
 try:
     import keyring
@@ -852,7 +856,7 @@ def save_ai_chat_histories(histories: list[dict[str, Any]]) -> None:
 # An opening or closing code fence: three or more backticks/tildes, optionally
 # indented up to three spaces (CommonMark). Used to tell real Markdown lines from
 # verbatim code.
-_CODE_FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+_CODE_FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
 
 
 def _apply_markdown_formatting_rules(markdown_text: str) -> str:
@@ -865,11 +869,16 @@ def _apply_markdown_formatting_rules(markdown_text: str) -> str:
         # a leading "#", "-" or "1." as list/heading syntax, but that is a
         # comment or an operator inside the block: a shebang became
         # "# !/usr/bin/env bash" and the float 1.5 became "1. 5".
-        if _CODE_FENCE_RE.match(raw_line):
-            marker = _CODE_FENCE_RE.match(raw_line).group(1)
+        fence_match = _CODE_FENCE_RE.match(raw_line)
+        if fence_match:
+            marker = fence_match.group(1)
             if fence is None:
                 fence = marker[0] * 3
-            elif marker[0] == fence[0] and len(marker) >= len(fence):
+            elif (
+                marker[0] == fence[0]
+                and len(marker) >= len(fence)
+                and not fence_match.group(2).strip()
+            ):
                 fence = None
             lines.append(raw_line.rstrip())
             continue
@@ -905,13 +914,39 @@ def _format_and_fix_code_blocks(markdown_text: str) -> str:
 
 
 def _slugify_heading_text(text: str) -> str:
-    # Match the GitHub-compatible anchors used by the rendered document
-    # outline (backend/routers/markdown.py._slugify) so TOC links actually
-    # resolve: unicode word characters are kept, not discarded.
-    text = unicodedata.normalize("NFC", text or "").lower()
-    text = re.sub(r"[`*_~\[\](){}]", "", text).strip()
-    text = re.sub(r"[^\w\s-]", "", text)
-    return re.sub(r"-+", "-", re.sub(r"\s+", "-", text)).strip("-")
+    # Delegate to the shared canonical slugger so TOC anchors always match
+    # the rendered document outline (backend/routers/markdown.py): unicode
+    # word characters are kept, consecutive spaces/hyphens behave exactly
+    # like GitHub's anchors, and inline markup is stripped the same way.
+    return slugify_heading(text)
+
+
+_FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+
+
+def _iter_heading_lines(markdown_text: str):
+    """Yield only the lines that are real ATX headings.
+
+    A ``#`` line inside a fenced code block is code, not a heading, so scanning
+    line-by-line is not enough: a shell comment or a Python comment would be
+    collected as a section title. Track the fence state so those are skipped.
+    """
+    fence: str | None = None
+    for line in (markdown_text or "").replace("\r\n", "\n").split("\n"):
+        if fence is None:
+            match = _FENCE_RE.match(line)
+            if match:
+                fence = match.group(1)[0] * 3
+                continue
+        else:
+            # A closing fence uses the same character and is at least as long
+            # as the opener; anything else is part of the code block.
+            closing = _FENCE_RE.match(line)
+            if closing and closing.group(1)[0] == fence[0]:
+                if len(closing.group(1)) >= len(fence):
+                    fence = None
+            continue
+        yield line
 
 
 def _generate_markdown_toc(markdown_text: str) -> str:
@@ -919,7 +954,7 @@ def _generate_markdown_toc(markdown_text: str) -> str:
     # Track slugs so duplicate headings get the ``-1``, ``-2`` … suffix that
     # GitHub applies when rendering anchors (same rule as ``_extract_outline``).
     slug_counts: dict[str, int] = {}
-    for line in (markdown_text or "").replace("\r\n", "\n").split("\n"):
+    for line in _iter_heading_lines(markdown_text):
         match = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
         if not match:
             continue
@@ -928,9 +963,7 @@ def _generate_markdown_toc(markdown_text: str) -> str:
         anchor = _slugify_heading_text(title)
         if not anchor:
             continue
-        count = slug_counts.get(anchor, 0)
-        unique_anchor = anchor if count == 0 else f"{anchor}-{count}"
-        slug_counts[anchor] = count + 1
+        unique_anchor = unique_heading_slug(anchor, slug_counts)
         toc_lines.append(f"{'  ' * max(0, level - 1)}- [{title}](#{unique_anchor})")
     return "## Table of Contents\n\n" + "\n".join(toc_lines) + "\n" if toc_lines else ""
 
@@ -951,18 +984,27 @@ def _generate_lightweight_summary(markdown_text: str) -> str:
         return ""
     normalized = markdown_text.replace("\r\n", "\n")
     headings = []
-    for line in normalized.split("\n"):
+    for line in _iter_heading_lines(normalized):
         match = re.match(r"^#{1,3}\s+(.+?)\s*$", line)
         if match:
             headings.append(match.group(1).strip())
         if len(headings) >= 5:
             break
     lead = ""
-    for paragraph in re.split(r"\n\s*\n", normalized):
+    # Remove complete fenced blocks before looking for a lead paragraph. A
+    # fenced block may contain blank lines, so splitting the original text
+    # into paragraphs first can otherwise expose a later code paragraph.
+    outside_fences = "\n".join(_iter_heading_lines(normalized))
+    for paragraph in re.split(r"\n\s*\n", outside_fences):
         paragraph = paragraph.strip()
-        if paragraph and not paragraph.startswith("#"):
-            lead = re.sub(r"\s+", " ", paragraph)
-            break
+        # Skip headings, and skip fenced code blocks: quoting ``npm install`` as
+        # the document's opening sentence is worse than having no lead at all.
+        if not paragraph or paragraph.startswith("#"):
+            continue
+        if paragraph.startswith("```") or paragraph.startswith("~~~"):
+            continue
+        lead = re.sub(r"\s+", " ", paragraph)
+        break
     lines = ["## Summary"]
     if lead:
         lines.extend(["", f"- {lead[:240]}{'...' if len(lead) > 240 else ''}"])

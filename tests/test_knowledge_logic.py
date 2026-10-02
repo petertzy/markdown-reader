@@ -48,6 +48,93 @@ Dense embeddings provide semantic generalization but require higher compute reso
 """
 
 
+class TestUtf8BomNotes(unittest.TestCase):
+    """A UTF-8 BOM is category Cf, not whitespace, so str.strip() misses it."""
+
+    BOM = "﻿"
+
+    def setUp(self):
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp_dir.name)
+
+    def tearDown(self):
+        self.tmp_dir.cleanup()
+
+    def _write(self, body: str, name: str = "note.md") -> Path:
+        path = self.root / name
+        path.write_bytes((self.BOM + body).encode("utf-8"))
+        return path
+
+    def _read_indexed(self, path: Path) -> str:
+        """Read exactly the way index_knowledge_base does.
+
+        This deliberately calls the encoding used in the indexing loop rather
+        than hardcoding one, so reverting the fix actually fails these tests.
+        """
+        return path.read_text(
+            encoding=knowledge_logic.NOTE_READ_ENCODING, errors="replace"
+        )
+
+    def test_bom_does_not_hide_the_first_heading(self):
+        path = self._write("# My Note\n\nBody text.")
+        title = knowledge_logic.extract_note_title(self._read_indexed(path), path.name)
+        self.assertEqual(title, "My Note")
+
+    def test_bom_does_not_hide_frontmatter(self):
+        body = "---\ntitle: Real Title\ntags: [a]\n---\n\n# Heading\n\nBody."
+        path = self._write(body)
+        title = knowledge_logic.extract_note_title(self._read_indexed(path), path.name)
+        self.assertEqual(title, "Real Title")
+
+    def test_bom_frontmatter_is_not_chunked_as_body_text(self):
+        body = "---\ntitle: Real Title\ntags: [a]\n---\n\n# Heading\n\nBody."
+        path = self._write(body)
+        chunks = knowledge_logic.chunk_markdown_document(
+            self._read_indexed(path), str(path), path.name
+        )
+        for chunk in chunks:
+            self.assertNotIn("title: Real Title", chunk["content"])
+            self.assertNotIn("tags: [a]", chunk["content"])
+
+    def test_indexing_bom_note_stores_clean_title_and_chunks(self):
+        body = "---\ntitle: Real Title\ntags: [a]\n---\n\n# Heading\n\nBody."
+        self._write(body)
+        db_path = self.root / "knowledge.db"
+
+        with mock.patch.object(
+            knowledge_logic,
+            "APP_SETTINGS_FILE_PATH",
+            self.root / "settings.json",
+        ):
+            stats = knowledge_logic.index_knowledge_base(
+                str(self.root), force=True, db_path=db_path
+            )
+
+        self.assertEqual(stats["total_files"], 1)
+        notes = knowledge_logic.list_indexed_notes(db_path=db_path)
+        self.assertEqual(notes[0]["title"], "Real Title")
+        chunks = knowledge_logic.query_knowledge_base("Body", db_path=db_path)
+        self.assertTrue(chunks)
+        self.assertTrue(all("title: Real Title" not in c["content"] for c in chunks))
+
+    def test_notes_without_a_bom_are_unchanged(self):
+        path = self.root / "plain.md"
+        path.write_text("# Plain Note\n\nBody.", encoding="utf-8")
+        self.assertEqual(
+            knowledge_logic.extract_note_title(
+                path.read_text(encoding="utf-8-sig", errors="replace"), path.name
+            ),
+            "Plain Note",
+        )
+
+    def test_bom_only_file_does_not_crash(self):
+        path = self.root / "bom.md"
+        path.write_bytes(b"\xef\xbb\xbf")
+        content = path.read_text(encoding="utf-8-sig", errors="replace")
+        self.assertEqual(content, "")
+        knowledge_logic.chunk_markdown_document(content, str(path), path.name)
+
+
 class TestKnowledgeLogic(unittest.TestCase):
     def setUp(self):
         self.tmp_dir = tempfile.TemporaryDirectory()
@@ -125,6 +212,71 @@ class TestKnowledgeLogic(unittest.TestCase):
         self.assertIn(
             "Parent > Child > Grandchild", [chunk["section"] for chunk in chunks]
         )
+
+    def test_extract_note_title_ignores_headings_inside_fenced_code(self):
+        # A shell comment inside a fence is not a heading, so it must not be
+        # mistaken for the note's title.
+        content = (
+            "Run this:\n\n```sh\n# Check disk\ndf -h\n```\n\n# Real Title\n\nBody.\n"
+        )
+        self.assertEqual(
+            knowledge_logic.extract_note_title(content, "notes.md"), "Real Title"
+        )
+
+    def test_chunking_keeps_fenced_code_intact_and_out_of_the_section_tree(self):
+        content = (
+            "# Setup\n\nRun this:\n\n```bash\n# Install deps\npip install foo\n```\n\n"
+            "## Config\n\nSet the key.\n"
+        )
+        chunks = knowledge_logic.chunk_markdown_document(
+            content, str(self.note1_path), "setup.md"
+        )
+
+        sections = [chunk["section"] for chunk in chunks]
+        # The shell comment must not become a heading, nor the parent of a
+        # later real section.
+        self.assertIn("Setup", sections)
+        self.assertIn("Setup > Config", sections)
+        self.assertNotIn("Install deps", sections)
+        self.assertNotIn("Install deps > Config", sections)
+
+        # The fenced block stays whole in exactly one chunk, comment included.
+        holding = [chunk for chunk in chunks if "pip install foo" in chunk["content"]]
+        self.assertEqual(len(holding), 1)
+        self.assertIn(
+            "```bash\n# Install deps\npip install foo\n```", holding[0]["content"]
+        )
+
+    def test_chunking_ignores_tilde_fenced_code(self):
+        content = "# Doc\n\n~~~\n# not a heading\n~~~\n\nSome text.\n"
+        chunks = knowledge_logic.chunk_markdown_document(
+            content, str(self.note1_path), "doc.md"
+        )
+        sections = [chunk["section"] for chunk in chunks]
+        self.assertEqual(set(sections), {"Doc"})
+        self.assertTrue(
+            any("not a heading" in chunk["content"] for chunk in chunks),
+            "the fenced body must still be indexed as content",
+        )
+
+    def test_chunking_treats_an_unclosed_fence_as_code_to_end_of_document(self):
+        # Matches CommonMark: an unterminated fence runs to the end of the file.
+        content = "# Real Heading\n\n```\n# inside\n"
+        chunks = knowledge_logic.chunk_markdown_document(
+            content, str(self.note1_path), "open.md"
+        )
+        self.assertEqual([chunk["section"] for chunk in chunks], ["Real Heading"])
+        self.assertIn("# inside", chunks[0]["content"])
+
+    def test_chunking_requires_matching_fence_length_and_character(self):
+        content = (
+            "# Doc\n\n````bash\n# inside\n```\n# still inside\n````\n\n## Next\nBody.\n"
+        )
+        chunks = knowledge_logic.chunk_markdown_document(
+            content, str(self.note1_path), "fences.md"
+        )
+        self.assertEqual([chunk["section"] for chunk in chunks], ["Doc", "Doc > Next"])
+        self.assertIn("# still inside", chunks[0]["content"])
 
     def test_find_note_files_excludes_ignored_directories(self):
         found = knowledge_logic.find_note_files(self.notes_dir)

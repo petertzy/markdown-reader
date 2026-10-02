@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 import sys
@@ -117,17 +118,82 @@ def _format_authors(raw_author: str) -> str:
     return ", ".join(formatted)
 
 
+def _clean_bibtex_value(value: str) -> str:
+    """Remove BibTeX brace-protection, keeping the author's own braces.
+
+    BibTeX lets an author brace-protect a fragment to force capitalisation, as in
+    ``{{Deep} {Learning}}``. Only that one wrapping layer is markup, and it may
+    only be dropped when the whole value is wrapped. ``str.strip("{}")`` cannot
+    express that: it eats characters from both ends independently, so
+    ``{Deep} {Learning}`` came out as ``Deep} {Learning`` and a title that
+    genuinely ends in a brace lost it.
+
+    Unwrap the outer layer only while it is balanced, so inner braces survive.
+    """
+    value = value.strip()
+    while (
+        len(value) >= 2
+        and value.startswith("{")
+        and value.endswith("}")
+        and _braces_are_balanced(value[1:-1])
+    ):
+        value = value[1:-1].strip()
+    return value
+
+
+def _braces_are_balanced(text: str) -> bool:
+    """True when every brace in ``text`` has a matching partner."""
+    depth = 0
+    for char in text:
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth < 0:
+                return False
+    return depth == 0
+
+
 def _entry_to_dict(entry: dict[str, str]) -> dict[str, str]:
     return {
         "key": entry.get("ID", ""),
         "entry_type": entry.get("ENTRYTYPE", ""),
-        "title": entry.get("title", "").strip("{}"),
+        "title": _clean_bibtex_value(entry.get("title", "")),
         "author": _format_authors(entry.get("author", "")),
         "year": entry.get("year", ""),
         "container": entry.get("journal")
         or entry.get("booktitle")
         or entry.get("publisher", ""),
     }
+
+
+def _parse_bib_stream(stream) -> list[dict[str, str]]:
+    """Parse an open BibTeX text stream into lightweight citation dicts."""
+    try:
+        import bibtexparser
+    except ImportError as exc:
+        raise CitationLibraryError(
+            "bibtexparser is required for citation support. "
+            "Install it with: pip install bibtexparser"
+        ) from exc
+
+    try:
+        database = bibtexparser.load(stream)
+    except Exception as exc:
+        raise CitationLibraryError(f"Could not parse BibTeX file: {exc}") from exc
+
+    entries = [_entry_to_dict(entry) for entry in database.entries]
+    entries.sort(key=lambda item: (item["author"], item["year"]))
+    return entries
+
+
+def parse_bib_content(content: str) -> list[dict[str, str]]:
+    """Parse BibTeX *text* into citation dicts without touching the filesystem.
+
+    Used to validate an upload before it is allowed to replace the library that
+    is currently loaded.
+    """
+    return _parse_bib_stream(io.StringIO(content))
 
 
 def parse_bib_file(path: str) -> list[dict[str, str]]:
@@ -139,22 +205,10 @@ def parse_bib_file(path: str) -> list[dict[str, str]]:
         raise CitationLibraryError(f"BibTeX file not found: {path}")
 
     try:
-        import bibtexparser
-    except ImportError as exc:
-        raise CitationLibraryError(
-            "bibtexparser is required for citation support. "
-            "Install it with: pip install bibtexparser"
-        ) from exc
-
-    try:
         with open(path, encoding="utf-8", errors="replace") as file_obj:
-            database = bibtexparser.load(file_obj)
-    except Exception as exc:
-        raise CitationLibraryError(f"Could not parse BibTeX file: {exc}") from exc
-
-    entries = [_entry_to_dict(entry) for entry in database.entries]
-    entries.sort(key=lambda item: (item["author"], item["year"]))
-    return entries
+            return _parse_bib_stream(file_obj)
+    except OSError as exc:
+        raise CitationLibraryError(f"Could not read BibTeX file: {exc}") from exc
 
 
 def load_citation_library(path: str) -> list[dict[str, str]]:
@@ -176,12 +230,23 @@ def load_citation_library_content(
         raise CitationLibraryError(f"Could not decode BibTeX content: {exc}") from exc
 
     path = _imported_library_path(filename)
+    # Parse before writing. The file on disk is the active library, so a
+    # malformed upload must not be able to destroy the one already loaded.
+    # bibtexparser reports many malformed files by simply yielding no entries
+    # rather than raising, so an upload that produces nothing is rejected too.
+    entries = parse_bib_content(content)
+    if not entries:
+        raise CitationLibraryError(
+            "No BibTeX entries found in the uploaded file. The existing library "
+            "was left unchanged."
+        )
+
     try:
         path.write_text(content, encoding="utf-8")
     except OSError as exc:
         raise CitationLibraryError(f"Could not save BibTeX library: {exc}") from exc
 
-    entries = load_citation_library(str(path))
+    _set_persisted_library_path(os.path.abspath(str(path)))
     return str(path), entries
 
 
