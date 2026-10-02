@@ -27,7 +27,13 @@ def strip_markdown(text: str) -> str:
     text = re.sub(r"^>\s?", "", text, flags=re.MULTILINE)
     text = re.sub(r"^[-*_]{3,}\s*$", "", text, flags=re.MULTILINE)
     text = re.sub(r"\|", " ", text)
-    text = re.sub(r"^[\s]*[-*+]\s+", "", text, flags=re.MULTILINE)
+    # A GFM table delimiter row is made only of pipes, dashes and alignment
+    # colons, so it holds no words. It has to be matched after the pipes are
+    # turned into spaces, and after the horizontal-rule rule above (which
+    # cannot see it while the leading pipe is still there).
+    text = re.sub(r"^[\s:\-]*\-[\s:\-]*$", "", text, flags=re.MULTILINE)
+    # Bullets, optionally followed by a GFM task-list checkbox.
+    text = re.sub(r"^[\s]*[-*+]\s+(?:\[[ xX]\]\s+)?", "", text, flags=re.MULTILINE)
     text = re.sub(r"^\s*\d+\.\s+", "", text, flags=re.MULTILINE)
     return text
 
