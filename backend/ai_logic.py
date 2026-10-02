@@ -1109,7 +1109,20 @@ def build_ai_automation_fallback(
     if (
         any(
             keyword in lowered
-            for keyword in ("format code", "code block", "correct syntax", "fix code")
+            for keyword in (
+                "format code",
+                "code block",
+                "correct syntax",
+                "fix code",
+                # The shipped "Format and Fix Code Blocks" template prompts with
+                # "Format Markdown code fences and fix common fence syntax
+                # issues." — none of the keywords above appear in it, so
+                # /fix-code fell through to the plain formatter below and ran
+                # the wrong tool on the selection. "code fence" and "fence
+                # syntax" are what that prompt actually says.
+                "code fence",
+                "fence syntax",
+            )
         )
         and target.strip()
     ):

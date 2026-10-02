@@ -271,5 +271,80 @@ class TestAIAutomationLogic(unittest.TestCase):
         self.assertTrue(result["proposed_action"]["content"].strip().endswith("```"))
 
 
+class TestTemplatePromptsReachTheirOwnHandler(unittest.TestCase):
+    """The UI sends each template's own ``prompt``, not its ``id`` or a slash name.
+
+    ``useSlashCommands.ts`` looks the template up by id and submits
+    ``template.prompt`` verbatim, so ``build_ai_automation_fallback`` has to
+    recognise the wording that is actually shipped. A template whose prompt
+    matches no keyword silently fell through to the plain Markdown formatter,
+    which left an unbalanced fence unbalanced and reported ``format_rules``.
+    """
+
+    def _dispatch(self, template_id, selected_text):
+        template = next(
+            item
+            for item in get_ai_automation_task_templates()
+            if item["id"] == template_id
+        )
+        result = build_ai_automation_fallback(
+            template["prompt"],
+            document_text="# Title\n\nBody text.",
+            selected_text=selected_text,
+        )
+        self.assertIsNotNone(result, template_id)
+        return result["proposed_action"]
+
+    def test_fix_code_blocks_template_runs_the_fence_fixer(self):
+        # "Format Markdown code fences and fix common fence syntax issues."
+        # contains none of the original keywords ("format code", "code block",
+        # "correct syntax", "fix code"), so this used to return format_rules.
+        action = self._dispatch("fix_code_blocks", "```python\nprint(1)\n")
+        self.assertEqual(action["reason"], "fix_code_blocks")
+        self.assertEqual(action["content"], "```python\nprint(1)\n```")
+
+    def test_fix_code_blocks_template_leaves_balanced_fences_alone(self):
+        balanced = "```python\nprint(1)\n```"
+        action = self._dispatch("fix_code_blocks", balanced)
+        self.assertEqual(action["reason"], "fix_code_blocks")
+        self.assertEqual(action["content"], balanced)
+
+    def test_fix_code_template_asks_for_a_selection_when_there_is_none(self):
+        # Reaching the code branch unlocks its own guard, which the formatter
+        # branch never had.
+        action = self._dispatch("fix_code_blocks", "")
+        self.assertEqual(action["reason"], "selection_required_for_code_fix")
+        self.assertEqual(action["type"], "none")
+
+    def test_every_shipped_template_dispatches_to_its_own_handler(self):
+        # The expected reason per template. format_selection shares the
+        # formatter branch with a selection, which is correct.
+        expected = {
+            "format_selection": "format_rules",
+            "generate_toc": "generate_toc",
+            "generate_summary": "generate_summary",
+            "fix_code_blocks": "fix_code_blocks",
+        }
+        self.assertEqual(
+            {item["id"] for item in get_ai_automation_task_templates()},
+            set(expected),
+        )
+        for template_id, reason in expected.items():
+            with self.subTest(template_id=template_id):
+                action = self._dispatch(template_id, "```python\nprint(1)\n")
+                self.assertEqual(action["reason"], reason)
+
+    def test_format_command_still_uses_the_formatter(self):
+        # Guard against the fix over-reaching: adding "code fence" must not
+        # divert ordinary /format requests into the fence fixer.
+        result = build_ai_automation_fallback(
+            "/format",
+            document_text="#head\n\n-item\n",
+            selected_text="#head\n\n-item\n",
+        )
+        self.assertEqual(result["proposed_action"]["reason"], "format_rules")
+        self.assertEqual(result["proposed_action"]["content"], "# head\n\n- item\n")
+
+
 if __name__ == "__main__":
     unittest.main()
