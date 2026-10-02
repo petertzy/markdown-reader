@@ -196,6 +196,7 @@ export function useEditor() {
         updateTab(activeTabId, {
           dirty: false,
           filePath: path,
+          previewBaseDir: parentDirOf(path),
           label: path.split(/[/\\]/).pop() ?? path,
         });
         Files.addRecent(path)
@@ -221,6 +222,7 @@ export function useEditor() {
         updateTab(activeTabId, {
           dirty: false,
           filePath: resolvedPath,
+          previewBaseDir: parentDirOf(resolvedPath),
           browserHandle: null,
           label: resolvedPath.split(/[/\\]/).pop() ?? resolvedPath,
         });
@@ -262,7 +264,12 @@ export function useEditor() {
       if (nextActiveTabId) setActiveTabId(nextActiveTabId);
       // The preview pane and the status-bar word count still show the closed
       // document unless they are refreshed for the tab that became active.
-      if (previewTab) refreshPreview(previewTab.content, previewTab.filePath ?? undefined);
+      if (previewTab) {
+        refreshPreview(
+          previewTab.content,
+          previewTab.previewBaseDir ?? previewTab.filePath ?? undefined
+        );
+      }
     },
     [tabs, activeTabId, refreshPreview]
   );
