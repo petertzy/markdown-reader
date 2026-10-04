@@ -76,6 +76,62 @@ def _find_free_port() -> int:
         return s.getsockname()[1]
 
 
+# STILL_ACTIVE is what GetExitCodeProcess reports for a process that has not
+# exited; PROCESS_QUERY_LIMITED_INFORMATION is the narrowest right that still
+# answers the same question.
+_STILL_ACTIVE = 259
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+
+def _parent_is_running(pid: int) -> bool:
+    """Whether ``pid`` still names a live process.
+
+    ``os.kill(pid, 0)`` asks that without touching the process on POSIX, but it
+    is not a probe on Windows: every signal outside the two console events is
+    handed to ``TerminateProcess``, so a 0 there kills the very process being
+    inspected (https://docs.python.org/3/library/os.html#os.kill). Read the exit
+    code instead.
+    """
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            # The pid is taken, just not by us.
+            return True
+        return True
+
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32")
+    # Declared rather than left to ctypes' defaults: a handle is pointer-sized,
+    # so the default c_int return type would truncate it on 64-bit Windows.
+    kernel32.OpenProcess.argtypes = (ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32)
+    kernel32.OpenProcess.restype = ctypes.c_void_p
+    kernel32.GetExitCodeProcess.argtypes = (
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_uint32),
+    )
+    kernel32.GetExitCodeProcess.restype = ctypes.c_int
+    kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
+    kernel32.CloseHandle.restype = ctypes.c_int
+
+    handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        # No handle means there is nothing left to query.
+        return False
+    try:
+        exit_code = ctypes.c_uint32()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return False
+        # A handle can outlive the process it names, so opening one is not
+        # proof of life; STILL_ACTIVE is.
+        return exit_code.value == _STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _start_parent_watchdog() -> None:
     """Exit the sidecar if the Tauri host process is gone."""
     parent_pid = os.environ.get("MARKDOWN_READER_PARENT_PID")
@@ -90,12 +146,8 @@ def _start_parent_watchdog() -> None:
     def watch_parent() -> None:
         while True:
             time.sleep(2)
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
+            if not _parent_is_running(pid):
                 os._exit(0)
-            except PermissionError:
-                continue
 
     threading.Thread(target=watch_parent, daemon=True).start()
 
