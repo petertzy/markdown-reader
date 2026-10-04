@@ -220,7 +220,11 @@ def get_models(provider: str, base_url_override: str = ""):
             if override.rstrip("/") == str(option["url"]).rstrip("/"):
                 key_slot = logic.get_openai_compatible_storage_key_name(option["key"])
                 break
-    api_key = "" if provider == "local" else logic.get_secure_ai_api_key(key_slot)
+    api_key = ""
+    if provider != "local":
+        env_var = logic._get_key_slot_env_var(key_slot)
+        keyring_key = logic.get_secure_ai_api_key(key_slot)
+        api_key = os.getenv(env_var, "").strip() or keyring_key.strip()
     try:
         models = logic.fetch_available_models(
             provider, api_key, base_url_override=base_url_override
