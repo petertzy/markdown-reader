@@ -156,7 +156,9 @@ def _export_paragraphs(markdown: str) -> list[tuple[str, str]]:
         export_html_to_docx(render_markdown(markdown), output_path)
 
         document = Document(output_path)
-        return [(paragraph.style.name, paragraph.text) for paragraph in document.paragraphs]
+        return [
+            (paragraph.style.name, paragraph.text) for paragraph in document.paragraphs
+        ]
 
 
 class TestDocxExporterLists(unittest.TestCase):
