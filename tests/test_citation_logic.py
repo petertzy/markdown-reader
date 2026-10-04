@@ -325,7 +325,9 @@ class TestCitationAuthorFormatting(unittest.TestCase):
     def test_corporate_author_containing_and_is_one_author(self):
         # "Smith and Sons Ltd" is a single organisation. Splitting it invented a
         # second author and a fabricated comma.
-        self.assertEqual(self._parse_author("{{Smith and Sons Ltd}}"), "Smith and Sons Ltd")
+        self.assertEqual(
+            self._parse_author("{{Smith and Sons Ltd}}"), "Smith and Sons Ltd"
+        )
 
     def test_repeated_and_inside_braces_is_still_one_author(self):
         self.assertEqual(self._parse_author("{{A and B and C}}"), "A and B and C")
