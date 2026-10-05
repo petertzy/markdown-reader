@@ -150,6 +150,12 @@ class TestStripMarkdown(unittest.TestCase):
         md = "Title\n=====\n\nsome prose here"
         self.assertEqual(_count_words(_strip_markdown(md)), 4)
 
+    def test_setext_h1_underline_with_crlf_adds_no_words(self):
+        # Windows line endings must not leave the underline behind as a word.
+        md = "Title\r\n=====\r\n\r\nsome prose here"
+        self.assertIn("<h1", _render_markdown(md))
+        self.assertEqual(_count_words(_strip_markdown(md)), 4)
+
     def test_equals_underline_length_matches_what_the_renderer_accepts(self):
         # A single "=" is already a setext underline as far as the renderer is
         # concerned, so the count has to stop at one and not at three. The

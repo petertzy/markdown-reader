@@ -32,7 +32,7 @@ def strip_markdown(text: str) -> str:
     # followed by "=" into an <h1>, exactly as it does for three. The text line
     # is required, so that a "=" that underlines nothing -- which stays literal
     # text in the rendered document -- keeps its word.
-    text = re.sub(r"^([^\n]+)\n=+[ \t]*$", r"\1", text, flags=re.MULTILINE)
+    text = re.sub(r"^([^\r\n]+)\r?\n=+[ \t]*\r?$", r"\1", text, flags=re.MULTILINE)
     text = re.sub(r"\|", " ", text)
     # A GFM table delimiter row is made only of pipes, dashes and alignment
     # colons, so it holds no words. It has to be matched after the pipes are
