@@ -248,8 +248,9 @@ _FRONTMATTER_DELIMITER = "---"
 def _is_frontmatter_delimiter(line: str) -> bool:
     """Return whether a line is a bare ``---`` frontmatter delimiter.
 
-    ``rstrip`` leaves the Windows ``\\r`` that arrives with ``\\r\\n`` endings, so
-    a note saved on Windows still splits. A longer run is *not* a delimiter:
+    ``rstrip`` accepts harmless trailing whitespace, including the ``\\r`` from
+    Windows ``\\r\\n`` endings, so Windows-authored notes still split. A longer
+    run is *not* a delimiter:
     ``----`` is a thematic break, and ``--- text`` is a paragraph.
     """
     return line.rstrip() == _FRONTMATTER_DELIMITER
