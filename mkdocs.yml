@@ -8,3 +8,5 @@ nav:
   - Prepare For Mac User: PrepareForMacUser.md
   - Prepare For Windows User: PrepareForWindowsUser.md
   - AI Work Panel Feasibility Study: AIWorkPanelFeasibilityStudy.md
+  - Code Signing & Distribution: CodeSigningAndDistribution.md
+  - Hosting Strategy: HostingStrategy.md
