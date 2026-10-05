@@ -28,8 +28,11 @@ _WHITESPACE_RE = re.compile(r"\s+")
 
 # Common inline Markdown markup removed from a heading before slugging so
 # the anchor reflects what a reader sees, mirroring GitHub's behaviour.
+# Each branch that carries visible text captures it: group 1 for an image's alt
+# text, group 2 for a link's label. The remaining branches match no group and so
+# are dropped by the `\1\2` replacement.
 _INLINE_MARKUP_RE = re.compile(
-    r"\*{1,2}|_{1,2}|`|~~|!\[.*?\]\(.*?\)|\[([^\]]*)\]\(.*?\)"
+    r"\*{1,2}|_{1,2}|`|~~|!\[([^\]]*)\]\(.*?\)|\[([^\]]*)\]\(.*?\)"
 )
 
 
@@ -37,12 +40,13 @@ def extract_heading_text(raw_text: str) -> str:
     """Strip inline Markdown from a heading so the label reads as plain text.
 
     Handles bold/italic (``**``/``*``/``__``/``_``), inline code (``...``),
-    strikethrough (``~~...~~``) and links/images (``[text](url)`` keep
-    their visible text; auto-links such as ``<https://example.com>`` are
-    left intact). HTML entities are decoded so the visible label — and the
-    slug derived from it — matches what the rendered preview shows.
+    strikethrough (``~~...~~``) and links/images (``[text](url)`` and
+    ``![alt](url)`` keep their visible text; auto-links such as
+    ``<https://example.com>`` are left intact). HTML entities are decoded so the
+    visible label — and the slug derived from it — matches what the rendered
+    preview shows.
     """
-    plain = html_unescape(_INLINE_MARKUP_RE.sub(r"\1", raw_text or ""))
+    plain = html_unescape(_INLINE_MARKUP_RE.sub(r"\1\2", raw_text or ""))
     return plain.strip()
 
 
