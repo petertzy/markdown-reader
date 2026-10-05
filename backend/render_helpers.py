@@ -144,7 +144,15 @@ def get_mathjax_script() -> str:
 
 
 def fix_image_paths(markdown_text: str, base_path: str) -> str:
-    """Resolve relative Markdown image paths against a base directory."""
+    """Resolve relative Markdown image paths against a base directory.
+
+    Fenced blocks and inline code spans are masked out first. Image syntax
+    inside them is literal sample text, not an image to load, and rewriting it
+    corrupts the code the author is showing: a tutorial demonstrating
+    ``![diagram](diagram.png)`` had its own example rewritten to an absolute
+    ``file://`` URL in the rendered preview. Reuses the same code-region masking
+    that :func:`protect_math` relies on, so both agree on what counts as code.
+    """
 
     def replace_image(match: re.Match[str]) -> str:
         alt = match.group(1)
@@ -155,4 +163,12 @@ def fix_image_paths(markdown_text: str, base_path: str) -> str:
         abs_url = "file://" + abs_path.replace("\\", "/")
         return f"![{alt}]({abs_url})"
 
-    return re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", replace_image, markdown_text)
+    code_replacements: dict[str, str] = {}
+    text = _mask_code_regions(markdown_text or "", code_replacements)
+    text = re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", replace_image, text)
+
+    # Restore the code spans verbatim.
+    for key, value in code_replacements.items():
+        text = text.replace(key, value)
+
+    return text
