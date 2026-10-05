@@ -242,3 +242,48 @@ class TestAIModelsEndpointCredentialResolution(unittest.TestCase):
         self.assertEqual(self.sent_headers, [("/v1/models", None)])
         self.assertEqual(result["models"], [])
         self.assertIn("not reachable", result["message"])
+
+    def test_generic_openai_compatible_env_var_is_the_fallback(self):
+        # `_get_ai_api_key_for_provider` falls back to the provider-wide slot when
+        # the slot for the chosen base URL holds nothing. Without the same
+        # fallback here, a key in OPENAI_COMPATIBLE_API_KEY authenticated every
+        # AI request while this endpoint still reported the fallback model list.
+        with (
+            _provider_state(
+                _EmptyKeyring(), {"OPENAI_COMPATIBLE_API_KEY": "generic-key"}
+            ),
+            patch.object(
+                logic,
+                "get_openai_compatible_base_url",
+                return_value=f"http://127.0.0.1:{_server_port}/v1",
+            ),
+        ):
+            result = ai_router.get_models("openai_compatible")
+
+        self.assertEqual(self.sent_headers, [("/v1/models", "Bearer generic-key")])
+        self.assertEqual(result["models"], ["live-model-1"])
+
+    def test_the_openai_compatible_fallback_does_not_reach_other_providers(self):
+        # The fallback is scoped to openai_compatible; an unrelated provider must
+        # not pick up a credential meant for it.
+        with _provider_state(
+            _EmptyKeyring(), {"OPENAI_COMPATIBLE_API_KEY": "generic-key"}
+        ):
+            result = ai_router.get_models("openai")
+
+        self.assertEqual(self.sent_headers, [("/v1/models", None)])
+        self.assertEqual(result["models"], logic.get_provider_default_models("openai"))
+
+    def test_the_key_sent_here_is_the_one_the_ai_requests_would_use(self):
+        # The defect was two call sites resolving a key slot differently. Compare
+        # the header this endpoint sends with the key the AI request path
+        # resolves for the same provider, so the two cannot drift apart again.
+        with _provider_state(_EmptyKeyring(), {"OPENAI_API_KEY": "env-key"}):
+            ai_router.get_models("openai")
+            request_key, key_slot, _ = logic._get_ai_api_key_for_provider("openai")
+
+        self.assertEqual(
+            request_key, "env-key", "guard: the comparison must not be vacuous"
+        )
+        self.assertEqual(key_slot, "openai")
+        self.assertEqual(self.sent_headers, [("/v1/models", f"Bearer {request_key}")])
