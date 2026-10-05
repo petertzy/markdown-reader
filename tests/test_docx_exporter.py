@@ -204,6 +204,15 @@ class TestDocxExporterLists(unittest.TestCase):
             ],
         )
 
+    def test_paragraph_after_a_heading_in_a_list_item_keeps_its_own_style(self):
+        # The first paragraph is not always the first block in a list item.
+        # It must not be appended to an earlier heading while attempting to
+        # reuse the paragraph opened for ``<li>``.
+        self.assertEqual(
+            _export_paragraphs("- ## Title\n\n  body\n"),
+            [("List Bullet", ""), ("Heading 2", "Title"), ("List Bullet", "body")],
+        )
+
     def test_inline_formatting_inside_a_loose_item_keeps_the_list_style(self):
         paragraphs = _export_paragraphs("- **bold** text\n\n- *ital*\n")
 

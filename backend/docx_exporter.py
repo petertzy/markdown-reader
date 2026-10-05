@@ -117,7 +117,7 @@ class _DocxHtmlParser(HTMLParser):
         self.current_cell = None
         self.current_list_style: list[str] = []
         # Open ``<li>`` elements, innermost last. Each entry is
-        # ``[paragraph style, inner <p> already claimed the paragraph]``.
+        # ``[paragraph style, paragraph opened for the item, claimed]``.
         self.current_list_items: list[list[Any]] = []
         self.current_style: dict[str, Any] = {
             "bold": False,
@@ -141,11 +141,12 @@ class _DocxHtmlParser(HTMLParser):
             self.current_paragraph = cell.paragraphs[0]
         elif tag in ("p", "blockquote"):
             item = self.current_list_items[-1] if self.current_list_items else None
-            if item is not None and not item[1]:
+            if item is not None and not item[2] and self.current_paragraph is item[1]:
                 # A loose list wraps each item in <p>. Reuse the paragraph the
-                # <li> already opened so the bullet is not orphaned; any later
-                # paragraph in the same item continues the list style.
-                item[1] = True
+                # <li> opened so the bullet is not orphaned. Only reuse that
+                # exact paragraph: another block (such as a heading) may have
+                # appeared before the first <p>.
+                item[2] = True
             else:
                 self.current_paragraph = self.document.add_paragraph(
                     style=item[0] if item is not None else None
@@ -166,7 +167,7 @@ class _DocxHtmlParser(HTMLParser):
         elif tag == "li":
             style = self.current_list_style[-1] if self.current_list_style else None
             self.current_paragraph = self.document.add_paragraph(style=style)
-            self.current_list_items.append([style, False])
+            self.current_list_items.append([style, self.current_paragraph, False])
         elif tag == "br" and self.current_paragraph is not None:
             self.current_paragraph.add_run().add_break()
         elif tag == "img":
