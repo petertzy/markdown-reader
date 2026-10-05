@@ -213,6 +213,27 @@ def _docx_paragraph_to_markdown(paragraph) -> str:
     return text
 
 
+def _docx_row_cells(row) -> list[str]:
+    """Return one entry per distinct cell in a DOCX table row.
+
+    ``row.cells`` expands merged cells: a horizontally merged cell is yielded
+    once per grid column it spans, so the same object appears repeatedly and its
+    text would be duplicated. python-docx documents this ("If the table
+    contains a span, one or more |_Cell| object references are repeated"), so
+    repeats are collapsed by object identity. Two distinct cells holding the
+    same text are kept as separate cells.
+    """
+    grid = list(row.cells)  # materialise so every yielded object stays alive
+    texts: list[str] = []
+    emitted: list[object] = []
+    for cell in grid:
+        if any(cell is already for already in emitted):
+            continue
+        emitted.append(cell)
+        texts.append(cell.text.strip().replace("\n", " "))
+    return texts
+
+
 def _convert_docx_to_markdown(path: str) -> str:
     try:
         Document = import_module("docx").Document
@@ -229,9 +250,16 @@ def _convert_docx_to_markdown(path: str) -> str:
             lines.append("")
 
     for table in document.tables:
-        for row in table.rows:
-            cells = [cell.text.strip().replace("\n", " ") for cell in row.cells]
+        for row_index, row in enumerate(table.rows):
+            cells = _docx_row_cells(row)
+            if not cells:
+                continue
             lines.append("| " + " | ".join(cells) + " |")
+            if row_index == 0:
+                # GFM requires a delimiter row beneath the header. Without it
+                # the renderer does not recognise a table at all and shows the
+                # pipes as literal text.
+                lines.append("| " + " | ".join("---" for _ in cells) + " |")
         lines.append("")
 
     markdown = "\n".join(lines).strip()

@@ -79,11 +79,17 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
     scope: "global",
     bindings: [primary("w", { shift: true })],
   },
-  { id: "edit.undo", label: "Undo", scope: "global", bindings: [primary("z")] },
+  // Undo/redo drive the document editor (useActions maps them to
+  // runMonacoAction), so they are scoped to the editor like every other
+  // `edit.*` / `format.*` command. With `scope: "global"` they also fired while
+  // typing in the AI panel's chat and work-instruction textareas and in the
+  // settings inputs: preventDefault killed the field's native undo, then focus
+  // jumped to Monaco and undid a document edit instead.
+  { id: "edit.undo", label: "Undo", scope: "editor", bindings: [primary("z")] },
   {
     id: "edit.redo",
     label: "Redo",
-    scope: "global",
+    scope: "editor",
     bindings: isMac
       ? [primary("z", { shift: true })]
       : [{ key: "y", ctrl: true }, primary("z", { shift: true })],
