@@ -96,54 +96,66 @@ def test_chinese_sentences_split_without_spaces():
     # "next char must be a space/quote/bracket" rule kept the whole paragraph as
     # one unit.
     assert split_text_into_translation_units(
-        "今天天气很好。我们去公园吧。明天再说。"
+        "\u4eca\u5929\u5929\u6c14\u5f88\u597d\u3002\u6211\u4eec\u53bb\u516c\u56ed\u5427\u3002\u660e\u5929\u518d\u8bf4\u3002"
     ) == [
-        "今天天气很好。",
-        "我们去公园吧。",
-        "明天再说。",
+        "\u4eca\u5929\u5929\u6c14\u5f88\u597d\u3002",
+        "\u6211\u4eec\u53bb\u516c\u56ed\u5427\u3002",
+        "\u660e\u5929\u518d\u8bf4\u3002",
     ]
 
 
 def test_fullwidth_question_and_exclamation_split():
-    assert split_text_into_translation_units("你去吗？我不知道！真的。") == [
-        "你去吗？",
-        "我不知道！",
-        "真的。",
+    assert split_text_into_translation_units(
+        "\u4f60\u53bb\u5417\uff1f\u6211\u4e0d\u77e5\u9053\uff01\u771f\u7684\u3002"
+    ) == [
+        "\u4f60\u53bb\u5417\uff1f",
+        "\u6211\u4e0d\u77e5\u9053\uff01",
+        "\u771f\u7684\u3002",
     ]
 
 
 def test_japanese_sentences_split():
-    assert split_text_into_translation_units("これは本です。それはペンです。") == [
-        "これは本です。",
-        "それはペンです。",
+    assert split_text_into_translation_units(
+        "\u3053\u308c\u306f\u672c\u3067\u3059\u3002\u305d\u308c\u306f\u30da\u30f3\u3067\u3059\u3002"
+    ) == [
+        "\u3053\u308c\u306f\u672c\u3067\u3059\u3002",
+        "\u305d\u308c\u306f\u30da\u30f3\u3067\u3059\u3002",
     ]
 
 
 def test_cjk_closing_quote_stays_with_its_sentence():
     # 「停。」 is one unit; the closing bracket must not be orphaned onto the
     # next unit the way ASCII closing quotes are guarded against.
-    assert split_text_into_translation_units("然后他说「停。」接着走了。") == [
-        "然后他说「停。」",
-        "接着走了。",
+    assert split_text_into_translation_units(
+        "\u7136\u540e\u4ed6\u8bf4\u300c\u505c\u3002\u300d\u63a5\u7740\u8d70\u4e86\u3002"
+    ) == [
+        "\u7136\u540e\u4ed6\u8bf4\u300c\u505c\u3002\u300d",
+        "\u63a5\u7740\u8d70\u4e86\u3002",
     ]
 
 
 def test_cjk_closing_parenthesis_stays_with_its_sentence():
-    assert split_text_into_translation_units("看这个（好。）然后呢？") == [
-        "看这个（好。）",
-        "然后呢？",
+    assert split_text_into_translation_units(
+        "\u770b\u8fd9\u4e2a\uff08\u597d\u3002\uff09\u7136\u540e\u5462\uff1f"
+    ) == [
+        "\u770b\u8fd9\u4e2a\uff08\u597d\u3002\uff09",
+        "\u7136\u540e\u5462\uff1f",
     ]
 
 
 def test_mixed_cjk_and_ascii_text_splits():
-    assert split_text_into_translation_units("Hello world. 你好。世界。") == [
-        "Hello world. 你好。",
-        "世界。",
+    assert split_text_into_translation_units(
+        "Hello world. \u4f60\u597d\u3002\u4e16\u754c\u3002"
+    ) == [
+        "Hello world. \u4f60\u597d\u3002",
+        "\u4e16\u754c\u3002",
     ]
 
 
 def test_single_cjk_sentence_is_unchanged():
-    assert split_text_into_translation_units("结束。") == ["结束。"]
+    assert split_text_into_translation_units("\u7ed3\u675f\u3002") == [
+        "\u7ed3\u675f\u3002"
+    ]
 
 
 def test_ascii_sentence_splitting_is_unchanged():
