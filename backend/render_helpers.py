@@ -157,7 +157,7 @@ def fix_image_paths(markdown_text: str, base_path: str) -> str:
     def replace_image(match: re.Match[str]) -> str:
         alt = match.group(1)
         src = match.group(2)
-        if src.startswith(("http://", "https://", "file://", "/")):
+        if src.startswith(("http://", "https://", "file://", "/", "data:")):
             return match.group(0)
         abs_path = os.path.abspath(os.path.join(base_path, src))
         abs_url = "file://" + abs_path.replace("\\", "/")
