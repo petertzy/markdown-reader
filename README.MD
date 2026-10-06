@@ -159,6 +159,16 @@ Markdown Reader is split into three main layers to ensure maximum performance an
 2. **Frontend (`/frontend`)**: A Next.js UI providing the rich editor experience, packaged within a Tauri desktop shell.
 When packaged for desktop use, the Python backend is bundled as a silent Tauri sidecar process, dynamically assigning ports at runtime to avoid conflicts. In development, `./scripts/dev-tauri.sh` uses the same port-handoff path when it needs to avoid a local port conflict.
 
+### Local Backend Security
+
+The packaged desktop sidecar generates a random authentication token for every
+launch. All of its API requests must include that token; it is held in memory
+only and is not written to disk. The standalone development backend remains
+unauthenticated by default for local development. Set
+`MARKDOWN_READER_BACKEND_TOKEN` before starting it to require the same request
+header (`X-Markdown-Reader-Token`). To use that mode with the development UI,
+set `NEXT_PUBLIC_BACKEND_TOKEN` to the same value.
+
 ---
 
 ## ⚡ Slash Commands

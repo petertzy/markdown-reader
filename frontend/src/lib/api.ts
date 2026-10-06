@@ -41,6 +41,9 @@ let _backendToken: string | null = null;
 
 async function getBackendToken(): Promise<string | null> {
   if (_backendToken) return _backendToken;
+  if (!isTauriRuntime()) {
+    return process.env.NEXT_PUBLIC_BACKEND_TOKEN ?? null;
+  }
   const { invoke } = await import("@tauri-apps/api/core");
   const token = await invoke<string | null>("get_backend_token");
   if (token) _backendToken = token;
@@ -98,7 +101,7 @@ async function apiFetch<T>(
   timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS
 ): Promise<T> {
   const base = await getBaseUrl();
-  const token = isTauriRuntime() ? await getBackendToken() : null;
+  const token = await getBackendToken();
   return runWithTimeout(async (signal) => {
     const res = await fetch(`${base}${path}`, {
       ...init,
@@ -123,7 +126,7 @@ async function apiFetchBlob(
   timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS
 ): Promise<Blob> {
   const base = await getBaseUrl();
-  const token = isTauriRuntime() ? await getBackendToken() : null;
+  const token = await getBackendToken();
   return runWithTimeout(async (signal) => {
     const res = await fetch(`${base}${path}`, {
       ...init,
