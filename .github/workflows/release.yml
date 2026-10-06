@@ -108,21 +108,31 @@ jobs:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          if base64 --help 2>&1 | grep -q -- '--decode'; then
+            printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          else
+            printf '%s' "$APPLE_CERTIFICATE" | base64 -D > certificate.p12
+          fi
           security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
           security import certificate.p12 -k build.keychain \
             -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
             -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm certificate.p12
 
       - name: Resolve Apple signing identity
         id: cert
         if: matrix.os == 'macos-14' && secrets.APPLE_CERTIFICATE != ''
         run: |
-          CERT_INFO=$(security find-identity -v -p codesigning build.keychain)
-          CERT_ID=$(echo "$CERT_INFO" | grep "Developer ID Application" | awk -F'"' '{print $2}')
+          CERT_ID=$(security find-identity -v -p codesigning build.keychain | \
+            awk -F'"' '/Developer ID Application/ { print $2; exit }')
+          if [ -z "$CERT_ID" ]; then
+            echo "::error::No Developer ID Application identity was imported"
+            exit 1
+          fi
           echo "cert_id=$CERT_ID" >> "$GITHUB_OUTPUT"
 
       - name: Build and release
@@ -130,8 +140,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # macOS signing & notarization (dormant until secrets are provisioned)
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ steps.cert.outputs.cert_id }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
@@ -139,11 +147,6 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_PATH: ${{ secrets.APPLE_API_KEY_PATH }}
-          # Windows signing credentials (Azure Artifact Signing or SignPath)
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
         with:
           projectPath: frontend
           tagName: ${{ github.ref_name }}
@@ -156,6 +159,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
+          set -o pipefail
           bundle_dir="frontend/src-tauri/target/${{ matrix.target }}/release/bundle"
           out="SHA256SUMS-${{ matrix.target }}.txt"
           : > "$out"
@@ -186,4 +190,3 @@ jobs:
           gh release upload "${{ github.ref_name }}" \
             "SHA256SUMS-${{ matrix.target }}.txt" \
             --clobber --repo "${{ github.repository }}"
-
