@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 from base64 import b64decode
@@ -10,6 +11,12 @@ from pathlib import Path
 from typing import Any
 
 CITATION_MAX_RESULTS = 50
+
+# The `` and `` that separates two BibTeX authors, matched at a fixed position
+# with `match(text, index)` so no capture of the preceding text is needed.
+# Whitespace is required on both sides: `Brand, X and Doe, Y` must not split
+# inside `Brand`, and `Android` must stay one name.
+_AND_SEPARATOR = re.compile(r"\s+and(?=\s)")
 
 
 def _get_settings_file_path() -> Path:
@@ -103,19 +110,144 @@ def _imported_library_path(filename: str) -> Path:
     return directory / _safe_library_filename(filename)
 
 
+def _split_author_names(raw_author: str) -> list[str]:
+    """Split on BibTeX's `` and `` separator, ignoring ones inside braces.
+
+    A corporate author is brace-protected as a whole and its own name may
+    contain the word, as in ``{Smith and Sons Ltd}``. Splitting that on every
+    occurrence of ``" and "`` invents a second author and turns the protected
+    name into a ``Last, First`` pair.
+
+    The separator is matched as whitespace-delimited rather than as a literal
+    ``" and "`` because BibTeX wraps long author fields, so ``and`` can arrive
+    on the next line. Requiring whitespace on both sides keeps ``Android`` and
+    ``Sand`` intact.
+    """
+    names: list[str] = []
+    current: list[str] = []
+    depth = 0
+    index = 0
+    while index < len(raw_author):
+        char = raw_author[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+        separator = _AND_SEPARATOR.match(raw_author, index) if depth == 0 else None
+        if separator is not None:
+            names.append("".join(current))
+            current = []
+            index = separator.end()
+            continue
+        current.append(char)
+        index += 1
+    names.append("".join(current))
+    return [name.strip() for name in names if name.strip()]
+
+
+def _has_top_level_comma(text: str) -> bool:
+    """True when *text* holds a comma outside every brace-protected group.
+
+    BibTeX uses a comma inside braces for a company's own name -- ``{{Google,
+    Inc.}}`` is wrapped precisely so the comma is not read as a ``Last, First``
+    separator -- so the depth of the comma is what decides whether it separates
+    two names.
+    """
+    depth = 0
+    for char in text:
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+        elif char == "," and depth == 0:
+            return True
+    return False
+
+
+def _split_on_top_level_comma(part: str) -> tuple[str, str]:
+    """Split *part* into ``(last, first)`` on the first comma outside braces.
+
+    ``str.partition(",")`` cannot express this: it cuts on the first comma
+    whatever encloses it, so ``{Smith, Jr.}, John`` was cut inside the braces
+    and came out as ``Jr.}, John {Smith``, with the group's own braces leaking
+    into the name.
+    """
+    depth = 0
+    for index, char in enumerate(part):
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+        elif char == "," and depth == 0:
+            return part[:index], part[index + 1 :]
+    return part, ""
+
+
+def _is_protected_author_list(part: str) -> bool:
+    """True when *part* is one brace-protected group holding several authors.
+
+    ``{Doe, Jane and Roe, Richard}`` is an author list the author wrapped as a
+    whole, so the wrapper has to come off before the names can be split.
+
+    A group is only an author list when its contents have an author separator
+    and a comma. A comma alone does not make a list:
+    ``{{Google, Inc.}}`` reaches this function as ``{Google, Inc.}``, and the
+    braces make it a literal corporate name rather than a ``Last, First`` name.
+    """
+    return (
+        len(part) >= 2
+        and part.startswith("{")
+        and part.endswith("}")
+        and _braces_are_balanced(part[1:-1])
+        and len(_split_author_names(part[1:-1])) > 1
+        and "," in part[1:-1]
+    )
+
+
+def _format_author_names(raw_author: str) -> list[str]:
+    formatted: list[str] = []
+    parts = _split_author_names(raw_author)
+    for part in parts:
+        if _is_protected_author_list(part):
+            formatted.extend(_format_author_names(part[1:-1]))
+        elif (
+            len(parts) > 1
+            and part.startswith("{")
+            and part.endswith("}")
+            and _braces_are_balanced(part[1:-1])
+        ):
+            # A braced component in a list can be either a literal corporate
+            # name or a protected ``Last, First`` personal name. Only the
+            # latter has a comma to format after removing its protection.
+            if "," in part[1:-1]:
+                formatted.extend(_format_author_names(part[1:-1]))
+            else:
+                formatted.append(_clean_bibtex_value(part))
+        elif (
+            len(parts) == 1
+            and part.startswith("{")
+            and part.endswith("}")
+            and _braces_are_balanced(part[1:-1])
+        ):
+            # A single protected value is a literal author name. In contrast,
+            # a protected component inside a multi-author field can still be a
+            # conventional ``Last, First`` personal name.
+            formatted.append(_clean_bibtex_value(part))
+        elif _has_top_level_comma(part):
+            last, first = _split_on_top_level_comma(part)
+            formatted.append(
+                f"{_clean_bibtex_value(first)} {_clean_bibtex_value(last)}".strip()
+            )
+        else:
+            formatted.append(_clean_bibtex_value(part))
+    return formatted
+
+
 def _format_authors(raw_author: str) -> str:
     """Turn BibTeX 'Last, First and Last, First' into 'First Last, First Last'."""
     if not raw_author:
         return ""
-    parts = [part.strip() for part in raw_author.split(" and ") if part.strip()]
-    formatted = []
-    for part in parts:
-        if "," in part:
-            last, _, first = part.partition(",")
-            formatted.append(f"{first.strip()} {last.strip()}".strip())
-        else:
-            formatted.append(part)
-    return ", ".join(formatted)
+    return ", ".join(_format_author_names(raw_author))
 
 
 def _clean_bibtex_value(value: str) -> str:
