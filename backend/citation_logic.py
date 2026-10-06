@@ -189,30 +189,50 @@ def _is_protected_author_list(part: str) -> bool:
     ``{Doe, Jane and Roe, Richard}`` is an author list the author wrapped as a
     whole, so the wrapper has to come off before the names can be split.
 
-    A group without a comma is a single organisation, such as
-    ``{Smith and Sons Ltd}``, and must be left intact.
-
-    Note that a braced ``Last, First`` pair is read as a list, so a corporate
-    author whose own name contains a comma -- ``{{Google, Inc.}}`` reaches this
-    function as ``{Google, Inc.}`` -- is reordered into ``Inc. Google``. The two
-    are the same token by the time the .bib parser has removed one brace layer,
-    so no rule here can separate them; the trade-off is pinned by
-    ``test_protected_group_detection_requires_balanced_braces``.
+    A group is only an author list when its contents have an author separator
+    and a comma. A comma alone does not make a list:
+    ``{{Google, Inc.}}`` reaches this function as ``{Google, Inc.}``, and the
+    braces make it a literal corporate name rather than a ``Last, First`` name.
     """
     return (
         len(part) >= 2
         and part.startswith("{")
         and part.endswith("}")
         and _braces_are_balanced(part[1:-1])
-        and "," in part
+        and len(_split_author_names(part[1:-1])) > 1
+        and "," in part[1:-1]
     )
 
 
 def _format_author_names(raw_author: str) -> list[str]:
     formatted: list[str] = []
-    for part in _split_author_names(raw_author):
+    parts = _split_author_names(raw_author)
+    for part in parts:
         if _is_protected_author_list(part):
             formatted.extend(_format_author_names(part[1:-1]))
+        elif (
+            len(parts) > 1
+            and part.startswith("{")
+            and part.endswith("}")
+            and _braces_are_balanced(part[1:-1])
+        ):
+            # A braced component in a list can be either a literal corporate
+            # name or a protected ``Last, First`` personal name. Only the
+            # latter has a comma to format after removing its protection.
+            if "," in part[1:-1]:
+                formatted.extend(_format_author_names(part[1:-1]))
+            else:
+                formatted.append(_clean_bibtex_value(part))
+        elif (
+            len(parts) == 1
+            and part.startswith("{")
+            and part.endswith("}")
+            and _braces_are_balanced(part[1:-1])
+        ):
+            # A single protected value is a literal author name. In contrast,
+            # a protected component inside a multi-author field can still be a
+            # conventional ``Last, First`` personal name.
+            formatted.append(_clean_bibtex_value(part))
         elif _has_top_level_comma(part):
             last, first = _split_on_top_level_comma(part)
             formatted.append(

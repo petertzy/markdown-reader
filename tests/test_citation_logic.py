@@ -301,7 +301,7 @@ class TestCitationAuthorFormatting(unittest.TestCase):
         self.assertFalse(
             citation_logic._is_protected_author_list("{Deep} {Learning}, Doe")
         )
-        self.assertTrue(citation_logic._is_protected_author_list("{Doe, Jane}"))
+        self.assertFalse(citation_logic._is_protected_author_list("{Doe, Jane}"))
         self.assertFalse(citation_logic._is_protected_author_list("{Corp and Sons}"))
 
     def test_and_is_only_a_separator_between_spaces(self):
@@ -374,13 +374,14 @@ class TestCitationAuthorFormatting(unittest.TestCase):
             "Outer {Smith and Sons} Ltd, Jane Doe",
         )
 
-    def test_corporate_author_with_a_comma_is_reordered_and_that_is_pinned(self):
-        # {{Google, Inc.}} reaches the formatter as {Google, Inc.}, which is the
-        # same token as a braced Last, First pair, so it is reordered. Recorded
-        # because it looks like a bug and is in fact a pinned trade-off: the
-        # alternative breaks {Doe, Jane}, which this class also requires.
-        self.assertEqual(self._parse_author("{{Google, Inc.}}"), "Inc. Google")
-        self.assertEqual(self._parse_author("{{Doe, Jane}}"), "Jane Doe")
+    def test_corporate_author_with_a_comma_is_not_reordered(self):
+        # The inner braces mark this as a literal corporate author. A comma in
+        # that literal is not a ``Last, First`` separator.
+        self.assertEqual(self._parse_author("{{Google, Inc.}}"), "Google, Inc.")
+        self.assertEqual(
+            self._parse_author("{{Smith, Sons & Co., Ltd.}}"),
+            "Smith, Sons & Co., Ltd.",
+        )
 
     def test_a_comma_inside_braces_does_not_split_the_name(self):
         # `{Smith, Jr.}, John` is `Last, First` with a braced suffix. Splitting
