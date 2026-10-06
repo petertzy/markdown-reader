@@ -72,6 +72,11 @@ def _add_hyperlink(paragraph, text: str, url: str, style: dict[str, Any]) -> Non
     run.append(run_properties)
     text_element = OxmlElement("w:t")
     text_element.text = text
+    # Mirror python-docx's CT_R.add_t: preserve leading/trailing whitespace
+    # in link text, or LibreOffice/converters trim it while the identical
+    # text in a plain run is kept.
+    if len(text.strip()) < len(text):
+        text_element.set(qn("xml:space"), "preserve")
     run.append(text_element)
     hyperlink.append(run)
     paragraph._p.append(hyperlink)

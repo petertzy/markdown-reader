@@ -1,3 +1,4 @@
+import re
 import tempfile
 import unittest
 from zipfile import ZipFile
@@ -345,4 +346,36 @@ class TestDocxExporterLists(unittest.TestCase):
                 ("List Number", "one"),
                 ("List Number", "two"),
             ],
+        )
+
+
+class TestDocxExporterLinkWhitespace(unittest.TestCase):
+    """Hyperlink text keeps the same whitespace treatment as plain runs.
+
+    python-docx marks a ``w:t`` with ``xml:space="preserve"`` whenever its
+    text has leading/trailing whitespace, so identical text in a plain run
+    survives LibreOffice/converter round-trips. The hand-built hyperlink
+    ``w:t`` must follow the same rule or link text loses its edge spaces.
+    """
+
+    def _hyperlink_t_elements(self, markdown):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = f"{tmp_dir}/links.docx"
+            export_html_to_docx(render_markdown(markdown), output_path)
+            with ZipFile(output_path) as archive:
+                document_xml = archive.read("word/document.xml").decode("utf-8")
+        search = re.search(r"<w:hyperlink[^>]*>.*?</w:hyperlink>", document_xml, re.S)
+        self.assertIsNotNone(search, "no hyperlink found in exported docx")
+        return re.findall(r"<w:t[^>]*>[^<]*</w:t>", search.group(0))
+
+    def test_hyperlink_text_with_edge_whitespace_is_marked_preserve(self):
+        self.assertEqual(
+            self._hyperlink_t_elements("[  spaced  ](https://example.com)"),
+            ['<w:t xml:space="preserve">  spaced  </w:t>'],
+        )
+
+    def test_hyperlink_text_without_edge_whitespace_is_left_alone(self):
+        self.assertEqual(
+            self._hyperlink_t_elements("[docs](https://example.com)"),
+            ["<w:t>docs</w:t>"],
         )
