@@ -116,6 +116,30 @@ class TestDocxTableImport(unittest.TestCase):
 
         self.assertIn("| line one line two |", markdown)
 
+    def test_a_pipe_inside_a_cell_is_escaped(self):
+        document = _build_table(2, 2, [["Name", "Note"], ["Bob", "3 | 4"]])
+
+        markdown = _convert_docx_to_markdown(_save(document))
+
+        # An unescaped pipe would split the cell into two extra columns.
+        self.assertIn("| Bob | 3 \\| 4 |", markdown)
+        self.assertNotIn("| Bob | 3 | 4 |", markdown)
+
+    def test_escaped_pipe_cell_still_renders_as_one_table(self):
+        document = _build_table(2, 2, [["Name", "Note"], ["Bob", "3 | 4"]])
+
+        html = render_markdown(_convert_docx_to_markdown(_save(document)))
+
+        self.assertIn("<td>3 | 4</td>", html)
+
+    def test_ordinary_paragraph_pipes_are_untouched(self):
+        document = Document()
+        document.add_paragraph("a | b is not a table")
+
+        markdown = _convert_docx_to_markdown(_save(document))
+
+        self.assertEqual(markdown, "a | b is not a table")
+
     def test_table_with_empty_cells_still_emits_a_delimiter_row(self):
         document = _build_table(1, 2, [["", ""]])
 
