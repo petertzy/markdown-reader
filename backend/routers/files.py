@@ -230,37 +230,52 @@ def _docx_row_cells(row) -> list[str]:
         if any(cell is already for already in emitted):
             continue
         emitted.append(cell)
-        texts.append(cell.text.strip().replace("\n", " "))
+        texts.append(cell.text.strip().replace("\n", " ").replace("|", "\\|"))
     return texts
+
+
+def _docx_table_to_markdown(table) -> list[str]:
+    """Return the Markdown lines for one DOCX table."""
+    lines: list[str] = []
+    for row_index, row in enumerate(table.rows):
+        cells = _docx_row_cells(row)
+        if not cells:
+            continue
+        lines.append("| " + " | ".join(cells) + " |")
+        if row_index == 0:
+            # GFM requires a delimiter row beneath the header. Without it
+            # the renderer does not recognise a table at all and shows the
+            # pipes as literal text.
+            lines.append("| " + " | ".join("---" for _ in cells) + " |")
+    return lines
 
 
 def _convert_docx_to_markdown(path: str) -> str:
     try:
         Document = import_module("docx").Document
+        Table = import_module("docx.table").Table
     except ImportError as exc:
         raise RuntimeError("python-docx is required to convert DOCX files.") from exc
 
     document = Document(path)
     lines: list[str] = []
 
-    for paragraph in document.paragraphs:
-        line = _docx_paragraph_to_markdown(paragraph)
+    # Walk the body in document order. `document.paragraphs` and
+    # `document.tables` are two independent lists, so draining one and then the
+    # other moves every table to the end of the export whatever position it held
+    # in the document. `iter_inner_content` yields the same top-level
+    # paragraphs and tables — revision-marked paragraphs and tables nested in a
+    # cell are left out by both — but interleaved the way they appear.
+    for block in document.iter_inner_content():
+        if isinstance(block, Table):
+            lines.extend(_docx_table_to_markdown(block))
+            lines.append("")
+            continue
+
+        line = _docx_paragraph_to_markdown(block)
         if line:
             lines.append(line)
             lines.append("")
-
-    for table in document.tables:
-        for row_index, row in enumerate(table.rows):
-            cells = _docx_row_cells(row)
-            if not cells:
-                continue
-            lines.append("| " + " | ".join(cells) + " |")
-            if row_index == 0:
-                # GFM requires a delimiter row beneath the header. Without it
-                # the renderer does not recognise a table at all and shows the
-                # pipes as literal text.
-                lines.append("| " + " | ".join("---" for _ in cells) + " |")
-        lines.append("")
 
     markdown = "\n".join(lines).strip()
     return markdown
