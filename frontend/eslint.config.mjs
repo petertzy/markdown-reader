@@ -6,6 +6,7 @@ const eslintConfig = [
     ignores: [
       ".next/",
       "out/",
+      "public/monaco/",
       "dist/",
       "node_modules/",
       "src-tauri/target/",
