@@ -508,10 +508,7 @@ def _get_ai_api_key_for_provider(provider: str) -> tuple[str, str, str]:
     api_key = resolve_ai_api_key_for_slot(key_slot)
     if provider == "openai_compatible" and not api_key:
         fallback_env_var = get_ai_provider_env_var(provider)
-        api_key = (
-            os.getenv(fallback_env_var, "").strip()
-            or get_secure_ai_api_key(provider).strip()
-        )
+        api_key = resolve_ai_api_key_for_slot(provider)
         env_var = fallback_env_var
     return api_key, key_slot, env_var
 
