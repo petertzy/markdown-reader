@@ -181,8 +181,9 @@ embeds its hydration payload as inline scripts; static files cannot receive a
 per-request nonce. `style-src 'unsafe-inline'` remains necessary for React UI
 layout updates and the isolated Markdown preview's inline styles. Monaco loads
 its editor workers from `blob:`, so `worker-src` explicitly allows `blob:`.
-No WebAssembly runtime is used by the packaged application, so
-`wasm-unsafe-eval` is intentionally omitted. Remote `http:` and `https:` image
+Monaco requires `wasm-unsafe-eval` in the packaged macOS WebView while
+initializing its editor worker. The policy intentionally does not permit the
+broader JavaScript `unsafe-eval` directive. Remote `http:` and `https:` image
 sources remain available only for images referenced by Markdown previews.
 
 ---

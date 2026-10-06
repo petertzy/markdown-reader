@@ -33,12 +33,12 @@ def test_packaged_webview_csp_is_restrictive_and_matches_runtime_requirements():
     assert "default-src 'self'" in csp
     assert "base-uri 'self'" in csp
     assert "object-src 'none'" in csp
-    assert "script-src 'self' 'unsafe-inline'" in csp
+    assert "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'" in csp
     assert "style-src 'self' 'unsafe-inline'" in csp
     assert "font-src 'self' data:" in csp
     assert "worker-src 'self' blob:" in csp
-    assert "wasm-unsafe-eval" not in csp
-    assert "unsafe-eval" not in csp
+    assert "wasm-unsafe-eval" in csp
+    assert "'unsafe-eval'" not in csp
     assert " *;" not in csp
 
 
