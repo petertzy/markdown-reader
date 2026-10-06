@@ -1,3 +1,4 @@
+import re
 import tempfile
 import unittest
 from zipfile import ZipFile
@@ -146,3 +147,235 @@ class TestDocxExporter(unittest.TestCase):
             self.assertIn("Cost: 5 & 6", body_text)
             self.assertIn("R&D", body_text)
             self.assertIn("a < b", body_text)
+
+
+def _export_paragraphs(markdown: str) -> list[tuple[str, str]]:
+    """Render ``markdown`` and return ``(style name, text)`` for each paragraph."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        output_path = f"{tmp_dir}/export.docx"
+
+        export_html_to_docx(render_markdown(markdown), output_path)
+
+        document = Document(output_path)
+        return [
+            (paragraph.style.name, paragraph.text) for paragraph in document.paragraphs
+        ]
+
+
+class TestDocxExporterLists(unittest.TestCase):
+    """Loose lists must not strand an empty bullet beside their text.
+
+    A "loose" Markdown list has a blank line between items, so the renderer
+    emits ``<li><p>text</p></li>``. The ``<p>`` used to open a brand new
+    unstyled paragraph, leaving the bullet that ``<li>`` had already opened
+    empty: Word then showed a stray bullet dot followed by plain body text.
+    """
+
+    def test_loose_bullet_list_keeps_bullets_on_their_text(self):
+        self.assertEqual(
+            _export_paragraphs("- alpha\n\n- beta\n"),
+            [("List Bullet", "alpha"), ("List Bullet", "beta")],
+        )
+
+    def test_loose_ordered_list_keeps_numbers_on_their_text(self):
+        self.assertEqual(
+            _export_paragraphs("1. alpha\n\n2. beta\n"),
+            [("List Number", "alpha"), ("List Number", "beta")],
+        )
+
+    def test_tight_lists_are_unchanged(self):
+        self.assertEqual(
+            _export_paragraphs("- alpha\n- beta\n"),
+            [("List Bullet", "alpha"), ("List Bullet", "beta")],
+        )
+        self.assertEqual(
+            _export_paragraphs("1. alpha\n2. beta\n"),
+            [("List Number", "alpha"), ("List Number", "beta")],
+        )
+
+    def test_every_paragraph_of_a_loose_item_keeps_the_list_style(self):
+        # "alpha" and its continuation paragraph are both part of one item, so
+        # both stay in the list rather than falling back to body text.
+        self.assertEqual(
+            _export_paragraphs("- alpha\n\n  more text\n\n- beta\n"),
+            [
+                ("List Bullet", "alpha"),
+                ("List Bullet", "more text"),
+                ("List Bullet", "beta"),
+            ],
+        )
+
+    def test_paragraph_after_a_heading_in_a_list_item_keeps_its_own_style(self):
+        # The first paragraph is not always the first block in a list item.
+        # It must not be appended to an earlier heading while attempting to
+        # reuse the paragraph opened for ``<li>``.
+        self.assertEqual(
+            _export_paragraphs("- ## Title\n\n  body\n"),
+            [("List Bullet", ""), ("Heading 2", "Title"), ("List Bullet", "body")],
+        )
+
+    def test_inline_formatting_inside_a_loose_item_keeps_the_list_style(self):
+        paragraphs = _export_paragraphs("- **bold** text\n\n- *ital*\n")
+
+        self.assertEqual(
+            paragraphs,
+            [("List Bullet", "bold text"), ("List Bullet", "ital")],
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = f"{tmp_dir}/formatting.docx"
+
+            export_html_to_docx(
+                render_markdown("- **bold** text\n\n- *ital*\n"), output_path
+            )
+
+            document = Document(output_path)
+            self.assertTrue(any(run.bold for run in document.paragraphs[0].runs))
+            self.assertTrue(any(run.italic for run in document.paragraphs[1].runs))
+
+    def test_nested_loose_list_does_not_strand_its_outer_bullet(self):
+        self.assertEqual(
+            _export_paragraphs("- alpha\n\n  - beta\n  - gamma\n"),
+            [
+                ("List Bullet", "alpha"),
+                ("List Bullet", "beta"),
+                ("List Bullet", "gamma"),
+            ],
+        )
+
+    def test_loose_list_item_holding_a_sublist_keeps_both_bullets(self):
+        paragraphs = _export_paragraphs("- alpha\n\n  - beta\n")
+
+        self.assertEqual([style for style, _ in paragraphs], ["List Bullet"] * 2)
+        self.assertEqual([text for _, text in paragraphs], ["alpha", "beta"])
+
+    def test_loose_and_tight_items_in_one_list_stay_uniform(self):
+        self.assertEqual(
+            _export_paragraphs("- a\n- b\n\n- c\n"),
+            [
+                ("List Bullet", "a"),
+                ("List Bullet", "b"),
+                ("List Bullet", "c"),
+            ],
+        )
+
+    def test_paragraphs_outside_lists_are_not_given_a_list_style(self):
+        self.assertEqual(_export_paragraphs("plain text\n"), [("Normal", "plain text")])
+        self.assertEqual(
+            _export_paragraphs("intro\n\n- alpha\n\n- beta\n\noutro\n"),
+            [
+                ("Normal", "intro"),
+                ("List Bullet", "alpha"),
+                ("List Bullet", "beta"),
+                ("Normal", "outro"),
+            ],
+        )
+
+    def test_loose_list_style_does_not_leak_past_the_closing_tag(self):
+        # The paragraph that closes a loose item is recorded as having claimed
+        # it; that bookkeeping must be discarded at </li> so later top-level
+        # blocks are not mistaken for part of the list.
+        self.assertEqual(
+            _export_paragraphs("- alpha\n\n- beta\n\noutro\n"),
+            [
+                ("List Bullet", "alpha"),
+                ("List Bullet", "beta"),
+                ("Normal", "outro"),
+            ],
+        )
+        self.assertEqual(
+            _export_paragraphs("1. alpha\n\n2. beta\n\noutro\n"),
+            [
+                ("List Number", "alpha"),
+                ("List Number", "beta"),
+                ("Normal", "outro"),
+            ],
+        )
+
+    def test_blocks_after_a_loose_list_keep_their_own_styles(self):
+        self.assertEqual(
+            _export_paragraphs("- alpha\n\n- beta\n\n## Section\n\ntail\n"),
+            [
+                ("List Bullet", "alpha"),
+                ("List Bullet", "beta"),
+                ("Heading 2", "Section"),
+                ("Normal", "tail"),
+            ],
+        )
+
+    def test_paragraph_after_a_sublist_stays_in_its_own_list_item(self):
+        # "a" and "c" are two paragraphs of one item separated by a sublist.
+        # Unwinding the inner </li> must not disturb the outer item, so "c"
+        # still belongs to the list rather than falling back to body text.
+        self.assertEqual(
+            _export_paragraphs("- a\n\n  - b\n\n  c\n"),
+            [
+                ("List Bullet", "a"),
+                ("List Bullet", "b"),
+                ("List Bullet", "c"),
+            ],
+        )
+        self.assertEqual(
+            _export_paragraphs("- a\n\n  - b\n\n    - c\n\n  d\n"),
+            [
+                ("List Bullet", "a"),
+                ("List Bullet", "b"),
+                ("List Bullet", "c"),
+                ("List Bullet", "d"),
+            ],
+        )
+
+    def test_a_second_list_after_a_loose_list_picks_its_own_style(self):
+        self.assertEqual(
+            _export_paragraphs("- a\n\n- b\n\n1. one\n\n2. two\n"),
+            [
+                ("List Bullet", "a"),
+                ("List Bullet", "b"),
+                ("List Number", "one"),
+                ("List Number", "two"),
+            ],
+        )
+
+    def test_loose_list_does_not_leak_its_style_into_the_next_list(self):
+        paragraphs = _export_paragraphs("- a\n\n- b\n\n1. one\n\n2. two\n")
+
+        self.assertEqual(
+            paragraphs,
+            [
+                ("List Bullet", "a"),
+                ("List Bullet", "b"),
+                ("List Number", "one"),
+                ("List Number", "two"),
+            ],
+        )
+
+
+class TestDocxExporterLinkWhitespace(unittest.TestCase):
+    """Hyperlink text keeps the same whitespace treatment as plain runs.
+
+    python-docx marks a ``w:t`` with ``xml:space="preserve"`` whenever its
+    text has leading/trailing whitespace, so identical text in a plain run
+    survives LibreOffice/converter round-trips. The hand-built hyperlink
+    ``w:t`` must follow the same rule or link text loses its edge spaces.
+    """
+
+    def _hyperlink_t_elements(self, markdown):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = f"{tmp_dir}/links.docx"
+            export_html_to_docx(render_markdown(markdown), output_path)
+            with ZipFile(output_path) as archive:
+                document_xml = archive.read("word/document.xml").decode("utf-8")
+        search = re.search(r"<w:hyperlink[^>]*>.*?</w:hyperlink>", document_xml, re.S)
+        self.assertIsNotNone(search, "no hyperlink found in exported docx")
+        return re.findall(r"<w:t[^>]*>[^<]*</w:t>", search.group(0))
+
+    def test_hyperlink_text_with_edge_whitespace_is_marked_preserve(self):
+        self.assertEqual(
+            self._hyperlink_t_elements("[  spaced  ](https://example.com)"),
+            ['<w:t xml:space="preserve">  spaced  </w:t>'],
+        )
+
+    def test_hyperlink_text_without_edge_whitespace_is_left_alone(self):
+        self.assertEqual(
+            self._hyperlink_t_elements("[docs](https://example.com)"),
+            ["<w:t>docs</w:t>"],
+        )

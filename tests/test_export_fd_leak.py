@@ -11,6 +11,9 @@ backend/routers/export.py.
 * ``download_html`` previously opened the temp file with an unrelated handle
   (leaking the ``mkstemp`` fd) and never removed the temp file after serving
   the download.
+* ``export_docx`` and ``export_pdf`` create the output file before running the
+  exporter, so an exporter that raised left a zero-byte (or partial) artifact in
+  the temporary directory that nothing ever removed.
 """
 
 from __future__ import annotations
@@ -40,6 +43,30 @@ def _discard_file(path: str) -> None:
         os.unlink(path)
     except OSError:
         pass
+
+
+def _trace_mkstemp(captured: dict) -> mock._patch:
+    """Patch ``tempfile.mkstemp`` so generated paths can be inspected."""
+
+    real_mkstemp = tempfile.mkstemp
+
+    def wrapper(*args, **kwargs):
+        fd, path = real_mkstemp(*args, **kwargs)
+        captured["path"] = path
+        return fd, path
+
+    return mock.patch("tempfile.mkstemp", side_effect=wrapper)
+
+
+def _write_partial_then_fail(*args, **kwargs):
+    """Stand in for an exporter that starts writing and then gives up.
+
+    Both exporters take the destination as their second positional argument.
+    """
+    out_path = args[1]
+    with open(out_path, "wb") as handle:
+        handle.write(b"%PDF-1.7 partial")
+    raise RuntimeError("exporter failed halfway")
 
 
 class TestMakeOutputPathClosesDescriptor(unittest.TestCase):
@@ -113,6 +140,70 @@ class TestDownloadHtmlCleansUpTempFile(unittest.TestCase):
             os.path.exists(captured["path"]),
             "temporary download file should be cleaned up after streaming",
         )
+
+
+class TestFailedExportCleansUpGeneratedFile(unittest.TestCase):
+    """A failed export must not leave its generated file behind."""
+
+    def _fail_export(self, route: str, exporter: str) -> str:
+        """Run ``route`` with ``exporter`` failing; return the generated path."""
+        captured: dict[str, str] = {}
+        with _trace_mkstemp(captured):
+            with mock.patch(exporter, side_effect=_write_partial_then_fail):
+                with TestClient(app) as client:
+                    res = client.post(route, json={"content": SAMPLE_MARKDOWN})
+
+        self.assertEqual(res.status_code, 500)
+        self.assertIn("path", captured, "the route should have generated a temp file")
+        return captured["path"]
+
+    def test_failed_docx_export_removes_its_temporary_file(self):
+        path = self._fail_export(
+            "/api/export/docx", "backend.docx_exporter.export_html_to_docx"
+        )
+        self.addCleanup(_discard_file, path)
+        self.assertFalse(
+            os.path.exists(path), "failed DOCX export left its temporary file behind"
+        )
+
+    def test_failed_pdf_export_removes_its_temporary_file(self):
+        path = self._fail_export(
+            "/api/export/pdf", "backend.pdf_exporter.export_markdown_to_pdf"
+        )
+        self.addCleanup(_discard_file, path)
+        self.assertFalse(
+            os.path.exists(path), "failed PDF export left its temporary file behind"
+        )
+
+    def test_failed_export_keeps_a_caller_supplied_path(self):
+        """Cleanup must not delete a file the caller asked to have."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            target = f"{tmp_dir}/report.pdf"
+            with mock.patch(
+                "backend.pdf_exporter.export_markdown_to_pdf",
+                side_effect=_write_partial_then_fail,
+            ):
+                with TestClient(app) as client:
+                    res = client.post(
+                        "/api/export/pdf",
+                        json={"content": SAMPLE_MARKDOWN, "output_path": target},
+                    )
+
+            self.assertEqual(res.status_code, 500)
+            self.assertTrue(
+                os.path.exists(target),
+                "a caller-supplied output path must be left for inspection",
+            )
+
+    def test_successful_pdf_export_still_keeps_its_file(self):
+        with TestClient(app) as client:
+            res = client.post("/api/export/pdf", json={"content": SAMPLE_MARKDOWN})
+
+        self.assertEqual(res.status_code, 200)
+        exported = res.json()["path"]
+        self.addCleanup(_discard_file, exported)
+        self.assertTrue(os.path.exists(exported))
+        self.assertGreater(os.path.getsize(exported), 0)
 
 
 if __name__ == "__main__":
