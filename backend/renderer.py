@@ -349,7 +349,11 @@ class _HeadingIdAssigner(HTMLParser):
             self.parts.append(f"<!--{data}-->")
 
     def handle_decl(self, decl: str) -> None:
-        self.parts.append(f"<!{decl}>")
+        raw = f"<!{decl}>"
+        if self._heading_tag is not None:
+            self._heading_inner.append(raw)
+        else:
+            self.parts.append(raw)
 
     def handle_pi(self, data: str) -> None:
         # Without this the assigner — which runs after the linkifier — would be

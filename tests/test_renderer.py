@@ -276,6 +276,16 @@ class TestRawHtmlTokensSurviveRendering(unittest.TestCase):
 
         self.assertIn("<?php echo 1; ?>", html)
 
+    def test_declaration_inside_a_heading_stays_in_place(self):
+        html = render_markdown("# Title <!DOCTYPE html>")
+
+        self.assertIn('<h1 id="title">Title <!DOCTYPE html></h1>', html)
+
+    def test_processing_instruction_inside_a_heading_stays_in_place(self):
+        html = render_markdown("# Title <?pi value?>")
+
+        self.assertIn('<h1 id="title">Title <?pi value?></h1>', html)
+
     def test_comment_inside_a_heading_keeps_the_heading_and_its_anchor(self):
         html = render_markdown("# Title <!-- note -->")
 
