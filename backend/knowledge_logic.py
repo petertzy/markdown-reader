@@ -242,6 +242,39 @@ def _init_db_schema(con: sqlite3.Connection) -> None:
 
 # ── Document Parsing & Chunking ───────────────────────────────────────────────
 
+_FRONTMATTER_DELIMITER = "---"
+
+
+def _is_frontmatter_delimiter(line: str) -> bool:
+    """Return whether a line is a bare ``---`` frontmatter delimiter.
+
+    ``rstrip`` accepts harmless trailing whitespace, including the ``\\r`` from
+    Windows ``\\r\\n`` endings, so Windows-authored notes still split. A longer
+    run is *not* a delimiter:
+    ``----`` is a thematic break, and ``--- text`` is a paragraph.
+    """
+    return line.rstrip() == _FRONTMATTER_DELIMITER
+
+
+def _split_frontmatter(text: str) -> tuple[str, str] | None:
+    """Split a leading YAML frontmatter block off a note.
+
+    Returns ``(frontmatter, remainder)``, or ``None`` when the note does not open
+    with a complete frontmatter block.
+
+    Both delimiters have to be a line of their own. Searching for the next run of
+    dashes anywhere in the text also matches one in the middle of a line, which
+    ends the block early: the rest of the metadata is then treated as body text
+    and prepended to the first indexed chunk.
+    """
+    lines = text.split("\n")
+    if not lines or not _is_frontmatter_delimiter(lines[0]):
+        return None
+    for index in range(1, len(lines)):
+        if _is_frontmatter_delimiter(lines[index]):
+            return "\n".join(lines[1:index]), "\n".join(lines[index + 1 :])
+    return None
+
 
 def _markdown_fence(
     line: str, active: tuple[str, int] | None = None
@@ -263,17 +296,16 @@ def _markdown_fence(
 def extract_note_title(content: str, fallback_filename: str) -> str:
     """Extract a descriptive note title from frontmatter, first # heading, or filename."""
     # 1. Check YAML frontmatter: title: "..."
-    if content.startswith("---"):
-        end_idx = content.find("---", 3)
-        if end_idx != -1:
-            frontmatter = content[3:end_idx]
-            match = re.search(
-                r"^title:\s*[\"']?(.*?)[\"']?\s*$",
-                frontmatter,
-                re.MULTILINE | re.IGNORECASE,
-            )
-            if match and match.group(1).strip():
-                return match.group(1).strip()
+    frontmatter_split = _split_frontmatter(content)
+    if frontmatter_split is not None:
+        frontmatter = frontmatter_split[0]
+        match = re.search(
+            r"^title:\s*[\"']?(.*?)[\"']?\s*$",
+            frontmatter,
+            re.MULTILINE | re.IGNORECASE,
+        )
+        if match and match.group(1).strip():
+            return match.group(1).strip()
 
     # 2. Check first Markdown heading, ignoring anything inside a fenced code
     #    block (a shell/YAML comment such as "# Install deps" is not a heading).
@@ -316,10 +348,9 @@ def chunk_markdown_document(
 
     # Strip YAML frontmatter if present for chunking
     body = text
-    if body.startswith("---"):
-        end_idx = body.find("---", 3)
-        if end_idx != -1:
-            body = body[end_idx + 3 :].strip()
+    frontmatter_split = _split_frontmatter(body)
+    if frontmatter_split is not None:
+        body = frontmatter_split[1].strip()
 
     lines = body.splitlines()
     sections: list[tuple[str, list[str]]] = []

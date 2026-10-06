@@ -204,9 +204,11 @@ def word_count(payload: RenderPayload):
     stripped = strip_markdown(payload.content)
     words = count_words(stripped)
     chars_with = len(payload.content)
-    chars_without = len(
-        payload.content.replace(" ", "").replace("\n", "").replace("\t", "")
-    )
+    # Splitting on whitespace drops every character Python recognises as
+    # whitespace, rather than only space, newline and tab. A carriage return
+    # from a CRLF file and a non-breaking space pasted out of a web page are
+    # both spaces, and neither is a character of the document.
+    chars_without = len("".join(payload.content.split()))
     return {
         "words": words,
         "chars_with_spaces": chars_with,

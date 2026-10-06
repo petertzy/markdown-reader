@@ -517,3 +517,197 @@ class TestKnowledgeApiEndpoints(unittest.TestCase):
                     self.assertEqual(
                         mock_chat.call_args.kwargs.get("knowledge_context"), ""
                     )
+
+
+class TestFrontmatterDelimitersMustOwnTheirLine(unittest.TestCase):
+    """A YAML frontmatter block ends at a ``---`` line, not at the next dashes.
+
+    Locating the closing delimiter with a plain substring search also matches a
+    run of dashes in the middle of a line, which ends the block early. The rest
+    of the metadata is then treated as body text: it is prepended to the first
+    indexed chunk, where it becomes searchable noise, and a ``title:`` value
+    containing ``---`` is truncated mid-word.
+    """
+
+    # A dash run inside a metadata value. Nothing here is a delimiter.
+    DASHES_IN_VALUE = (
+        "---\n"
+        "title: Groceries --- weekly\n"
+        "tags: [home]\n"
+        "---\n"
+        "\n"
+        "# Shopping\n"
+        "\n"
+        "Buy milk.\n"
+    )
+
+    def test_title_keeps_the_dash_run_inside_its_value(self):
+        self.assertEqual(
+            knowledge_logic.extract_note_title(self.DASHES_IN_VALUE, "shopping.md"),
+            "Groceries --- weekly",
+        )
+
+    def test_trailing_metadata_never_reaches_the_chunk_text(self):
+        chunks = knowledge_logic.chunk_markdown_document(
+            self.DASHES_IN_VALUE, "/vault/shopping.md", "shopping.md"
+        )
+        indexed = "\n".join(chunk["content"] for chunk in chunks)
+        self.assertIn("Buy milk.", indexed)
+        for leaked in ("tags: [home]", "Groceries --- weekly", "title:"):
+            self.assertNotIn(leaked, indexed)
+
+    def test_body_after_the_real_delimiter_is_still_chunked(self):
+        chunks = knowledge_logic.chunk_markdown_document(
+            "---\ntitle: A --- B\n---\n\n# Real\n\nBody text.\n",
+            "/vault/n.md",
+            "n.md",
+        )
+        self.assertEqual([chunk["section"] for chunk in chunks], ["Real"])
+        self.assertEqual(chunks[0]["content"], "Body text.")
+
+    def test_several_dash_runs_in_one_block_do_not_truncate(self):
+        note = "---\ntitle: A --- B --- C\nnote: x --- y\n---\n\n# H\n\nBody.\n"
+        self.assertEqual(
+            knowledge_logic.extract_note_title(note, "n.md"), "A --- B --- C"
+        )
+
+    def test_longer_dash_run_is_a_thematic_break_not_a_delimiter(self):
+        # "----" is a horizontal rule in CommonMark, so a note that opens with
+        # one has no frontmatter and the line must stay in the body.
+        note = "----\ntitle: Not frontmatter\n----\n\n# Heading\n\nBody.\n"
+        self.assertEqual(knowledge_logic.extract_note_title(note, "n.md"), "Heading")
+        chunks = knowledge_logic.chunk_markdown_document(note, "/v/n.md", "n.md")
+        self.assertEqual(chunks[0]["content"], "----\ntitle: Not frontmatter\n----")
+
+    def test_dashes_followed_by_text_are_a_paragraph_not_a_delimiter(self):
+        note = "--- not a delimiter\n\n# Heading\n\nBody.\n"
+        self.assertEqual(knowledge_logic.extract_note_title(note, "n.md"), "Heading")
+        chunks = knowledge_logic.chunk_markdown_document(note, "/v/n.md", "n.md")
+        self.assertEqual(chunks[0]["content"], "--- not a delimiter")
+
+    def test_unterminated_block_is_left_in_the_body(self):
+        # YAML needs both delimiters; without one the whole note is content.
+        note = "---\ntitle: Never closed\n\n# Heading\n\nBody.\n"
+        self.assertEqual(knowledge_logic.extract_note_title(note, "n.md"), "Heading")
+        chunks = knowledge_logic.chunk_markdown_document(note, "/v/n.md", "n.md")
+        self.assertIn("title: Never closed", chunks[0]["content"])
+
+    def test_crlf_notes_still_split(self):
+        note = "---\r\ntitle: Windows Note\r\nnote: a --- b\r\n---\r\n\r\nBody.\r\n"
+        self.assertEqual(
+            knowledge_logic.extract_note_title(note, "n.md"), "Windows Note"
+        )
+        chunks = knowledge_logic.chunk_markdown_document(note, "/v/n.md", "n.md")
+        self.assertEqual(chunks[0]["content"], "Body.")
+
+    def test_closing_delimiter_may_carry_trailing_whitespace(self):
+        note = "---\ntitle: Padded\n---   \n\nBody.\n"
+        self.assertEqual(knowledge_logic.extract_note_title(note, "n.md"), "Padded")
+        chunks = knowledge_logic.chunk_markdown_document(note, "/v/n.md", "n.md")
+        self.assertEqual(chunks[0]["content"], "Body.")
+
+    def test_empty_block_yields_no_frontmatter_and_keeps_the_body(self):
+        chunks = knowledge_logic.chunk_markdown_document(
+            "---\n---\n\n# Heading\n\nBody.\n", "/v/n.md", "n.md"
+        )
+        self.assertEqual([chunk["section"] for chunk in chunks], ["Heading"])
+        self.assertEqual(chunks[0]["content"], "Body.")
+
+    def test_split_frontmatter_returns_none_without_an_opening_line(self):
+        for text in (
+            "",
+            "Body only.",
+            "----\nnope\n----\n",
+            "--- x\nnope\n",
+            "---\nno closing delimiter\n",
+            # Delimiters only ever count at the very start. A rule partway down
+            # the note must not retroactively turn everything above it into
+            # metadata, which would drop the opening prose from the index.
+            "Meeting notes\n\n---\n\nAction items\n",
+            "Intro.\n---\ntitle: x\n---\nrest\n",
+        ):
+            with self.subTest(text=text):
+                self.assertIsNone(knowledge_logic._split_frontmatter(text))
+
+    def test_a_rule_partway_down_the_note_keeps_the_prose_above_it(self):
+        note = "Meeting notes\n\n---\n\nAction items\n"
+        chunks = knowledge_logic.chunk_markdown_document(note, "/v/n.md", "n.md")
+        indexed = "\n".join(chunk["content"] for chunk in chunks)
+        self.assertIn("Meeting notes", indexed)
+        self.assertIn("Action items", indexed)
+
+    def test_an_indented_rule_is_not_a_delimiter(self):
+        # The delimiter has to sit in column 0. An indented "---" is a rule
+        # inside a list item, and must not close a frontmatter block.
+        for text in (
+            "  ---\ntitle: indented\n---\n\n# Heading\n\nBody.\n",
+            "\t---\ntitle: tabbed\n---\n\n# Heading\n\nBody.\n",
+        ):
+            with self.subTest(text=text):
+                self.assertIsNone(knowledge_logic._split_frontmatter(text))
+                self.assertEqual(
+                    knowledge_logic.extract_note_title(text, "n.md"), "Heading"
+                )
+
+    def test_split_frontmatter_returns_the_block_and_the_remainder(self):
+        self.assertEqual(
+            knowledge_logic._split_frontmatter("---\na: 1\nb: 2\n---\nrest\n"),
+            ("a: 1\nb: 2", "rest\n"),
+        )
+
+
+class TestIndexingStoresCleanFrontmatterMetadata(unittest.TestCase):
+    """End-to-end: what the parser returns is what lands in the database."""
+
+    def setUp(self):
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        self.root_path = Path(self.tmp_dir.name)
+        self.notes_dir = self.root_path / "notes"
+        self.notes_dir.mkdir(parents=True)
+        self.settings_path = self.root_path / "settings.json"
+        self.db_path = self.root_path / "knowledge_base.db"
+        self._patcher_settings = mock.patch.object(
+            knowledge_logic, "APP_SETTINGS_FILE_PATH", self.settings_path
+        )
+        self._patcher_db = mock.patch.object(
+            knowledge_logic, "_get_db_file_path", return_value=self.db_path
+        )
+        self._patcher_settings.start()
+        self._patcher_db.start()
+
+    def tearDown(self):
+        self._patcher_db.stop()
+        self._patcher_settings.stop()
+        self.tmp_dir.cleanup()
+
+    def _index(self, name, text):
+        (self.notes_dir / name).write_text(text, encoding="utf-8")
+        return knowledge_logic.index_knowledge_base(str(self.notes_dir))
+
+    def test_indexed_title_and_chunks_are_free_of_stray_metadata(self):
+        self._index(
+            "shopping.md",
+            "---\ntitle: Groceries --- weekly\ntags: [home]\n---\n\n"
+            "# Shopping\n\nBuy milk.\n",
+        )
+
+        notes = knowledge_logic.list_indexed_notes(db_path=self.db_path)
+        self.assertEqual(len(notes), 1)
+        self.assertEqual(notes[0]["title"], "Groceries --- weekly")
+
+        hits = knowledge_logic.query_knowledge_base("tags", db_path=self.db_path)
+        self.assertEqual(hits, [], "frontmatter leaked into the searchable chunks")
+
+        hits = knowledge_logic.query_knowledge_base("milk", db_path=self.db_path)
+        self.assertEqual(len(hits), 1)
+        self.assertEqual(hits[0]["title"], "Groceries --- weekly")
+        self.assertIn("Buy milk.", hits[0]["content"])
+
+    def test_reindexing_a_rewritten_note_updates_the_stored_title(self):
+        self._index("n.md", "---\ntitle: First --- draft\n---\n\nBody.\n")
+        self._index("n.md", "---\ntitle: Second --- draft\n---\n\nBody.\n")
+
+        notes = knowledge_logic.list_indexed_notes(db_path=self.db_path)
+        self.assertEqual([note["title"] for note in notes], ["Second --- draft"])
+        hits = knowledge_logic.query_knowledge_base("draft", db_path=self.db_path)
+        self.assertEqual([hit["title"] for hit in hits], ["Second --- draft"])

@@ -27,6 +27,7 @@ import shutil
 import tempfile
 import unittest
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from backend.main import app
@@ -44,7 +45,7 @@ class TestMakeOutputPathRefusesDirectories(unittest.TestCase):
             victim = os.path.join(tmp_dir, "Exports")
             os.makedirs(victim)
 
-            with self.assertRaises(Exception) as caught:
+            with self.assertRaises(HTTPException) as caught:
                 _make_output_path(victim, ".pdf")
 
             self.assertEqual(getattr(caught.exception, "status_code", None), 400)
@@ -57,7 +58,7 @@ class TestMakeOutputPathRefusesDirectories(unittest.TestCase):
 
             for suffix in (".html", ".docx", ".pdf"):
                 with self.subTest(suffix=suffix):
-                    with self.assertRaises(Exception) as caught:
+                    with self.assertRaises(HTTPException) as caught:
                         _make_output_path(victim, suffix)
                     self.assertEqual(
                         getattr(caught.exception, "status_code", None), 400
@@ -72,7 +73,7 @@ class TestMakeOutputPathRefusesDirectories(unittest.TestCase):
             os.makedirs(target)
             os.symlink(target, link)
 
-            with self.assertRaises(Exception) as caught:
+            with self.assertRaises(HTTPException) as caught:
                 _make_output_path(link, ".pdf")
 
             self.assertEqual(getattr(caught.exception, "status_code", None), 400)
@@ -131,9 +132,7 @@ class TestExportRefusesDirectoryDestination(unittest.TestCase):
                     still_a_directory,
                     f"/{endpoint} removed the directory it was pointed at",
                 )
-                self.assertNotEqual(
-                    status, 200, f"/{endpoint} reported success: {body[:120]}"
-                )
+                self.assertEqual(status, 400, f"/{endpoint} response: {body[:120]}")
 
     def test_directory_holding_a_file_is_refused_too(self):
         for endpoint in EXPORT_ENDPOINTS:
