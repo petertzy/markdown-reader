@@ -33,6 +33,17 @@ class ExportPayload(BaseModel):
 
 def _make_output_path(suggested: str | None, suffix: str) -> str:
     if suggested:
+        # A directory is a mistake, not a destination, and it has to be
+        # rejected here rather than by the exporter: the PDF path falls back to
+        # fitz.Document.save(), which removes whatever sits at the target, so
+        # exporting onto an empty directory the user made for their exports
+        # deleted that directory and answered 200 with its path. isdir() follows
+        # symlinks, so a link to a directory is refused too.
+        if os.path.isdir(suggested):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Export destination is a directory, not a file path: {suggested}",
+            )
         return suggested
     fd, path = tempfile.mkstemp(suffix=suffix)
     # mkstemp leaves the descriptor open, but the endpoints open() the path
@@ -49,6 +60,19 @@ def _remove_file(path: str) -> None:
         os.remove(path)
     except OSError:
         pass
+
+
+def _discard_failed_export(out_path: str, requested_path: str | None) -> None:
+    """Drop the file a failed export left behind.
+
+    ``_make_output_path`` creates the output file before the exporter runs, so an
+    exporter that raises leaves a zero-byte artifact in the temporary directory
+    that nothing ever removes. Only clean up paths we generated ourselves: a
+    caller who asked for a specific path may be holding a partial file worth
+    looking at.
+    """
+    if not requested_path:
+        _remove_file(out_path)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -129,6 +153,7 @@ def export_docx(payload: ExportPayload):
     try:
         docx_exporter.export_html_to_docx(html, out_path, base_dir=payload.base_dir)
     except Exception as exc:
+        _discard_failed_export(out_path, payload.output_path)
         raise HTTPException(status_code=500, detail=str(exc))
     return {"path": out_path}
 
@@ -154,5 +179,6 @@ def export_pdf(payload: ExportPayload):
     try:
         pdf_exporter.export_markdown_to_pdf(html, out_path, base_url=payload.base_dir)
     except Exception as exc:
+        _discard_failed_export(out_path, payload.output_path)
         raise HTTPException(status_code=500, detail=str(exc))
     return {"path": out_path}
