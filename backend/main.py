@@ -12,6 +12,7 @@ or:
 from __future__ import annotations
 
 import os
+import secrets
 import sys
 import threading
 import time
@@ -26,8 +27,9 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from backend.routers import ai, citations, export, files, knowledge, markdown
 
@@ -36,6 +38,24 @@ app = FastAPI(
     description="Local Python backend for Markdown Reader desktop application.",
     version="2.0.0",
 )
+
+_BACKEND_AUTH_TOKEN = os.environ.get("MARKDOWN_READER_BACKEND_TOKEN", "")
+
+
+@app.middleware("http")
+async def require_backend_token(request: Request, call_next):
+    """Require the per-launch sidecar token in packaged desktop builds.
+
+    Development servers retain their existing no-token workflow. Packaged
+    sidecars generate an unpredictable token at launch and expose it only to
+    the Tauri host over the child process stdout pipe.
+    """
+    if _BACKEND_AUTH_TOKEN and not secrets.compare_digest(
+        request.headers.get("X-Markdown-Reader-Token", ""), _BACKEND_AUTH_TOKEN
+    ):
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
+
 
 # Allow the Next.js dev server and Tauri webview to communicate with us.
 app.add_middleware(
@@ -165,7 +185,12 @@ def main() -> None:
     """
     _start_parent_watchdog()
     port = _find_free_port()
+    token = secrets.token_urlsafe(32)
+    os.environ["MARKDOWN_READER_BACKEND_TOKEN"] = token
+    global _BACKEND_AUTH_TOKEN
+    _BACKEND_AUTH_TOKEN = token
     # Flush immediately so the Tauri stdout reader sees it without delay.
+    print(f"BACKEND_TOKEN={token}", flush=True)
     print(f"BACKEND_PORT={port}", flush=True)
     uvicorn.run(app, host="127.0.0.1", port=port, reload=False)
 

@@ -41,12 +41,12 @@ LOCAL_AI_BASE_URL_LABELS = {
     "custom": "Custom",
 }
 OPENAI_COMPATIBLE_BASE_URL_OPTIONS = {
-    "navidia": "https://integrate.api.nvidia.com/v1",
+    "nvidia": "https://integrate.api.nvidia.com/v1",
     "groq": "https://api.groq.com/openai/v1",
 }
-OPENAI_COMPATIBLE_BASE_URL_LABELS = {"navidia": "Navidia", "groq": "Groq"}
+OPENAI_COMPATIBLE_BASE_URL_LABELS = {"nvidia": "NVIDIA", "groq": "Groq"}
 OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION = {
-    "navidia": [
+    "nvidia": [
         "mistralai/mistral-large-3-675b-instruct-2512",
         "mistralai/mistral-medium-3-instruct",
         "mistralai/mistral-small-3.1-24b-instruct-2503",
@@ -66,7 +66,7 @@ AI_PROVIDER_PRIORITY = (
 )
 AI_PROVIDER_BASE_URLS = {
     "local": LOCAL_AI_DEFAULT_BASE_URL,
-    "openai_compatible": OPENAI_COMPATIBLE_BASE_URL_OPTIONS["navidia"],
+    "openai_compatible": OPENAI_COMPATIBLE_BASE_URL_OPTIONS["nvidia"],
     "openrouter": "https://openrouter.ai/api/v1",
     "openai": "https://api.openai.com/v1",
     "anthropic": "https://api.anthropic.com/v1",
@@ -224,17 +224,21 @@ def get_local_ai_base_url_options() -> list[dict[str, str]]:
 
 def get_openai_compatible_base_url_choice() -> str:
     choice = (
-        os.getenv("OPENAI_COMPATIBLE_BASE_URL_CHOICE")
-        or _load_app_settings().get("openai_compatible_base_url_choice")
-        or "navidia"
-    ).strip()
-    return choice if choice in OPENAI_COMPATIBLE_BASE_URL_OPTIONS else "navidia"
+        str(
+            os.getenv("OPENAI_COMPATIBLE_BASE_URL_CHOICE")
+            or _load_app_settings().get("openai_compatible_base_url_choice")
+            or "nvidia"
+        )
+        .strip()
+        .lower()
+    )
+    return choice if choice in OPENAI_COMPATIBLE_BASE_URL_OPTIONS else "nvidia"
 
 
 def set_openai_compatible_base_url_choice(choice_key: str) -> str:
-    choice = (
-        choice_key if choice_key in OPENAI_COMPATIBLE_BASE_URL_OPTIONS else "navidia"
-    )
+    choice = choice_key.strip().lower()
+    if choice not in OPENAI_COMPATIBLE_BASE_URL_OPTIONS:
+        choice = "nvidia"
     os.environ["OPENAI_COMPATIBLE_BASE_URL_CHOICE"] = choice
     os.environ["OPENAI_COMPATIBLE_BASE_URL"] = OPENAI_COMPATIBLE_BASE_URL_OPTIONS[
         choice
@@ -376,7 +380,7 @@ def get_provider_default_models(
         for key, option_url in OPENAI_COMPATIBLE_BASE_URL_OPTIONS.items():
             if url == option_url.rstrip("/"):
                 return list(OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION[key])
-        return list(OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION["navidia"])
+        return list(OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION["nvidia"])
     return list(AI_PROVIDER_DEFAULT_MODELS[provider])
 
 

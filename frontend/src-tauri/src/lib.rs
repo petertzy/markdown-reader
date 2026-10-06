@@ -6,6 +6,7 @@ use tauri_plugin_shell::ShellExt;
 
 /// Shared state that holds the port the Python sidecar chose at runtime.
 struct BackendPort(Arc<Mutex<Option<u16>>>);
+struct BackendToken(Arc<Mutex<Option<String>>>);
 struct BackendChild(Mutex<Option<CommandChild>>);
 struct PendingOpenFiles(Mutex<Vec<String>>);
 
@@ -14,6 +15,12 @@ struct PendingOpenFiles(Mutex<Vec<String>>);
 #[tauri::command]
 fn get_backend_port(state: tauri::State<'_, BackendPort>) -> Option<u16> {
     *state.0.lock().unwrap()
+}
+
+/// Return the ephemeral token used to authenticate requests to the local sidecar.
+#[tauri::command]
+fn get_backend_token(state: tauri::State<'_, BackendToken>) -> Option<String> {
+    state.0.lock().unwrap().clone()
 }
 
 #[tauri::command]
@@ -78,6 +85,7 @@ fn normalize_windows_path(arg: &str) -> Option<String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let port_state = Arc::new(Mutex::new(None::<u16>));
+    let token_state = Arc::new(Mutex::new(None::<String>));
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
@@ -106,10 +114,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(BackendPort(port_state))
+        .manage(BackendToken(token_state))
         .manage(BackendChild(Mutex::new(None)))
         .manage(PendingOpenFiles(Mutex::new(Vec::new())))
         .invoke_handler(tauri::generate_handler![
             get_backend_port,
+            get_backend_token,
             take_pending_open_files
         ])
         .on_window_event(|window, event| {
@@ -163,17 +173,22 @@ pub fn run() {
 
             // Clone the port store so the async task can write into it.
             let port_arc = app.state::<BackendPort>().0.clone();
+            let token_arc = app.state::<BackendToken>().0.clone();
 
             tauri::async_runtime::spawn(async move {
                 while let Some(event) = rx.recv().await {
                     if let CommandEvent::Stdout(bytes) = event {
                         let line = String::from_utf8_lossy(&bytes);
-                        // Backend prints "BACKEND_PORT=<n>" as its very first line.
+                        if let Some(token) = line.trim().strip_prefix("BACKEND_TOKEN=") {
+                            *token_arc.lock().unwrap() = Some(token.to_string());
+                        }
                         if let Some(rest) = line.trim().strip_prefix("BACKEND_PORT=") {
                             if let Ok(port) = rest.parse::<u16>() {
                                 *port_arc.lock().unwrap() = Some(port);
-                                break; // port received — no need to keep reading
                             }
+                        }
+                        if port_arc.lock().unwrap().is_some() && token_arc.lock().unwrap().is_some() {
+                            break;
                         }
                     }
                 }

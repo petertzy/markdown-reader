@@ -25,6 +25,8 @@ import threading
 import unittest
 from unittest import mock
 
+from fastapi.testclient import TestClient
+
 from backend import main
 
 # STILL_ACTIVE (STILL_ACTIVE) is what GetExitCodeProcess reports for a process
@@ -162,6 +164,27 @@ def _run_watchdog(
     # The scripted clock answers one call per iteration plus the one that ends
     # the loop, so this also pins the 2 s poll interval.
     test.assertEqual(clock.slept, [2.0] * (iterations + 1))
+
+
+class TestSidecarRequestAuthentication(unittest.TestCase):
+    def test_packaged_sidecar_rejects_missing_or_incorrect_tokens(self):
+        with mock.patch.object(main, "_BACKEND_AUTH_TOKEN", "test-session-token"):
+            with TestClient(main.app) as client:
+                self.assertEqual(client.get("/api/health").status_code, 401)
+                self.assertEqual(
+                    client.get(
+                        "/api/health",
+                        headers={"X-Markdown-Reader-Token": "wrong-token"},
+                    ).status_code,
+                    401,
+                )
+                self.assertEqual(
+                    client.get(
+                        "/api/health",
+                        headers={"X-Markdown-Reader-Token": "test-session-token"},
+                    ).status_code,
+                    200,
+                )
 
 
 class TestWatchdogNeverSignalsTheParent(unittest.TestCase):
