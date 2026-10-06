@@ -91,12 +91,13 @@ test("an override given as a file path is reduced to its folder", () => {
   );
 });
 
-test("an override given as a folder is passed through unchanged", () => {
+test("an override ending in a separator is preserved", () => {
   assert.equal(
     resolvePreviewBaseDir("/somewhere/else/", undefined, MD_FILE),
     "/somewhere/else/"
   );
-  // A folder with no trailing separator keeps its own last segment.
+  // Without a trailing separator the shared path rule treats the final segment
+  // as a document name, so only its parent directory is used.
   assert.equal(resolvePreviewBaseDir("/somewhere/else", undefined, MD_FILE), "/somewhere/");
 });
 
