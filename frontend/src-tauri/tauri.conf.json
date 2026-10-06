@@ -28,6 +28,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "macOS": {
+      "entitlements": "entitlements.mac.plist"
+    },
     "externalBin": [
       "binaries/markdown-reader-backend"
     ],
