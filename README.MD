@@ -170,6 +170,21 @@ header (`X-Markdown-Reader-Token`). Tauri development mode forwards that token
 from Rust without exposing it to WebView JavaScript. For browser-only
 development, set `NEXT_PUBLIC_BACKEND_TOKEN` to the same value.
 
+### Desktop Content Security Policy
+
+The packaged Tauri WebView uses a default-deny policy and permits network
+connections only to the app origin and the loopback backend. `object-src` is
+disabled and `base-uri` is restricted to the application origin.
+
+`script-src 'unsafe-inline'` remains necessary because a Next.js static export
+embeds its hydration payload as inline scripts; static files cannot receive a
+per-request nonce. `style-src 'unsafe-inline'` remains necessary for React UI
+layout updates and the isolated Markdown preview's inline styles. Monaco loads
+its editor workers from `blob:`, so `worker-src` explicitly allows `blob:`.
+No WebAssembly runtime is used by the packaged application, so
+`wasm-unsafe-eval` is intentionally omitted. Remote `http:` and `https:` image
+sources remain available only for images referenced by Markdown previews.
+
 ---
 
 ## ⚡ Slash Commands
