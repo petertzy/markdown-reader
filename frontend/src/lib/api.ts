@@ -37,17 +37,47 @@ function isTauriRuntime() {
 }
 
 let _resolvedBaseUrl: string | null = null;
-let _backendToken: string | null = null;
+type BackendProxyResponse = {
+  status: number;
+  bodyBase64: string;
+  contentType: string | null;
+};
 
-async function getBackendToken(): Promise<string | null> {
-  if (_backendToken) return _backendToken;
-  if (!isTauriRuntime()) {
-    return process.env.NEXT_PUBLIC_BACKEND_TOKEN ?? null;
-  }
+function decodeBase64(bodyBase64: string): Uint8Array {
+  return Uint8Array.from(atob(bodyBase64), (char) => char.charCodeAt(0));
+}
+
+function decodeProxyText(response: BackendProxyResponse): string {
+  return new TextDecoder().decode(decodeBase64(response.bodyBase64));
+}
+
+async function proxyBackendRequest(
+  path: string,
+  init?: RequestInit,
+  signal?: AbortSignal
+): Promise<BackendProxyResponse> {
   const { invoke } = await import("@tauri-apps/api/core");
-  const token = await invoke<string | null>("get_backend_token");
-  if (token) _backendToken = token;
-  return token;
+  const requestId = crypto.randomUUID();
+  const cancel = () => {
+    void invoke("cancel_backend_request", { requestId });
+  };
+  if (signal?.aborted) {
+    cancel();
+    throw new DOMException("Aborted", "AbortError");
+  }
+  signal?.addEventListener("abort", cancel, { once: true });
+  try {
+    return await invoke<BackendProxyResponse>("proxy_backend_request", {
+    request: {
+      requestId,
+      path,
+      method: init?.method ?? "GET",
+      body: typeof init?.body === "string" ? init.body : undefined,
+    },
+    });
+  } finally {
+    signal?.removeEventListener("abort", cancel);
+  }
 }
 
 /**
@@ -67,16 +97,8 @@ export async function getBaseUrl(): Promise<string> {
       if (port) {
         const candidate = `http://127.0.0.1:${port}`;
         try {
-          const token = await getBackendToken();
-          const health = await fetchWithTimeout(
-            `${candidate}/api/health`,
-            {
-              cache: "no-store",
-              headers: token ? { "X-Markdown-Reader-Token": token } : undefined,
-            },
-            2000
-          );
-          if (health.ok) {
+          const health = await proxyBackendRequest("/api/health");
+          if (health.status >= 200 && health.status < 300) {
             _resolvedBaseUrl = candidate;
             return _resolvedBaseUrl;
           }
@@ -100,8 +122,19 @@ async function apiFetch<T>(
   init?: RequestInit,
   timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS
 ): Promise<T> {
+  if (isTauriRuntime()) {
+    return runWithTimeout(async (signal) => {
+      const response = await proxyBackendRequest(path, init, signal);
+      const text = decodeProxyText(response);
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`API ${path} → ${response.status}: ${text}`);
+      }
+      return JSON.parse(text) as T;
+    }, init?.signal ?? undefined, timeoutMs);
+  }
+
   const base = await getBaseUrl();
-  const token = await getBackendToken();
+  const token = process.env.NEXT_PUBLIC_BACKEND_TOKEN ?? null;
   return runWithTimeout(async (signal) => {
     const res = await fetch(`${base}${path}`, {
       ...init,
@@ -125,8 +158,23 @@ async function apiFetchBlob(
   init?: RequestInit,
   timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS
 ): Promise<Blob> {
+  if (isTauriRuntime()) {
+    return runWithTimeout(async (signal) => {
+      const response = await proxyBackendRequest(path, init, signal);
+      const bytes = decodeBase64(response.bodyBase64);
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`API ${path} → ${response.status}: ${new TextDecoder().decode(bytes)}`);
+      }
+      const body = bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength
+      ) as ArrayBuffer;
+      return new Blob([body], { type: response.contentType ?? "application/octet-stream" });
+    }, init?.signal ?? undefined, timeoutMs);
+  }
+
   const base = await getBaseUrl();
-  const token = await getBackendToken();
+  const token = process.env.NEXT_PUBLIC_BACKEND_TOKEN ?? null;
   return runWithTimeout(async (signal) => {
     const res = await fetch(`${base}${path}`, {
       ...init,
