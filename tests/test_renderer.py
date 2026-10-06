@@ -229,6 +229,71 @@ class TestRenderMarkdown(unittest.TestCase):
         self.assertIn("</a>&quot; for details.", html)
 
 
+class TestRawHtmlTokensSurviveRendering(unittest.TestCase):
+    """Raw HTML markdown2 passes through must survive the render pipeline.
+
+    The pipeline re-parses its own HTML twice: once to linkify bare URLs, once
+    to stamp heading ids. html.parser's default handlers for comments,
+    declarations and processing instructions are bare ``pass``, so any parser
+    that does not reimplement them deletes the token instead of re-emitting it.
+    """
+
+    def test_block_comment_survives_rendering(self):
+        html = render_markdown("Intro\n\n<!-- pagebreak -->\n\nBody")
+
+        self.assertIn("<!-- pagebreak -->", html)
+
+    def test_comment_with_escapable_characters_is_kept_verbatim(self):
+        # The comment payload must not be escaped: that would turn "<" into
+        # "&lt;" and silently alter the content the author wrote.
+        html = render_markdown("<!-- a < b & c -->\n\nBody")
+
+        self.assertIn("<!-- a < b & c -->", html)
+
+    def test_inline_comment_survives_rendering(self):
+        html = render_markdown("Text with <!-- note --> inside.")
+
+        self.assertIn("Text with <!-- note --> inside.", html)
+
+    def test_comment_content_is_not_linkified(self):
+        # Verbatim is the whole point: were the URL wrapped in an anchor the
+        # comment's exact text would no longer be found.
+        html = render_markdown("<!-- see http://example.com -->\n\nBody")
+
+        self.assertIn("<!-- see http://example.com -->", html)
+
+    def test_doctype_survives_rendering(self):
+        # The document template already contains its own plain doctype, so
+        # assert on one only the source could have produced.
+        html = render_markdown(
+            '<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">\n\nBody'
+        )
+
+        self.assertIn('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">', html)
+
+    def test_processing_instruction_survives_rendering(self):
+        html = render_markdown("<?php echo 1; ?>\n\nBody")
+
+        self.assertIn("<?php echo 1; ?>", html)
+
+    def test_declaration_inside_a_heading_stays_in_place(self):
+        html = render_markdown("# Title <!DOCTYPE html>")
+
+        self.assertIn('<h1 id="title">Title <!DOCTYPE html></h1>', html)
+
+    def test_processing_instruction_inside_a_heading_stays_in_place(self):
+        html = render_markdown("# Title <?pi value?>")
+
+        self.assertIn('<h1 id="title">Title <?pi value?></h1>', html)
+
+    def test_comment_inside_a_heading_keeps_the_heading_and_its_anchor(self):
+        html = render_markdown("# Title <!-- note -->")
+
+        # The comment stays inside the heading element, where the author wrote
+        # it, and the anchor is still built from the visible text only.
+        self.assertIn('<h1 id="title">Title <!-- note --></h1>', html)
+
+
 class TestHeadingAnchors(unittest.TestCase):
     """Rendered headings carry canonical anchors matching the outline and TOC."""
 
