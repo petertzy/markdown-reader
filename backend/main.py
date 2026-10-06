@@ -81,6 +81,7 @@ def _find_free_port() -> int:
 # answers the same question.
 _STILL_ACTIVE = 259
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+_ERROR_ACCESS_DENIED = 5
 
 
 def _parent_is_running(pid: int) -> bool:
@@ -116,11 +117,14 @@ def _parent_is_running(pid: int) -> bool:
     kernel32.GetExitCodeProcess.restype = ctypes.c_int
     kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
     kernel32.CloseHandle.restype = ctypes.c_int
+    kernel32.GetLastError.argtypes = ()
+    kernel32.GetLastError.restype = ctypes.c_uint32
 
     handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
     if not handle:
-        # No handle means there is nothing left to query.
-        return False
+        # An access-denied error still means the pid exists.  Conservatively
+        # leave the sidecar running rather than orphan it while its host lives.
+        return kernel32.GetLastError() == _ERROR_ACCESS_DENIED
     try:
         exit_code = ctypes.c_uint32()
         if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):

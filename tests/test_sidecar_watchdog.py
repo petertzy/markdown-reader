@@ -88,8 +88,9 @@ class _FakeKernel32:
     rather than bound methods.
     """
 
-    def __init__(self, exit_code: int | None) -> None:
+    def __init__(self, exit_code: int | None, *, last_error: int = 87) -> None:
         self._exit_code = exit_code
+        self._last_error = last_error
         self.opened: list[tuple[int, int]] = []
         self.closed: list[int] = []
 
@@ -106,9 +107,13 @@ class _FakeKernel32:
             self.closed.append(handle)
             return 1
 
+        def get_last_error():  # noqa: ANN202
+            return self._last_error
+
         self.OpenProcess = open_process
         self.GetExitCodeProcess = get_exit_code
         self.CloseHandle = close_handle
+        self.GetLastError = get_last_error
 
 
 @contextlib.contextmanager
@@ -199,13 +204,26 @@ class TestWatchdogNeverSignalsTheParent(unittest.TestCase):
 
     def test_windows_probe_exits_the_sidecar_when_the_host_is_gone(self):
         # OpenProcess yields nothing, which is how Windows reports a pid that
-        # names no process -- there is no handle left to query.
+        # names no process (ERROR_INVALID_PARAMETER) -- there is no handle left
+        # to query.
         os_stub = _FakeOS("nt")
 
         _run_watchdog(self, os_stub, kernel32=_FakeKernel32(exit_code=None))
 
         self.assertEqual(os_stub.signalled, [])
         self.assertEqual(os_stub.exit_codes, [0])
+
+    def test_windows_access_denied_keeps_the_sidecar_running(self):
+        # OpenProcess can fail with ERROR_ACCESS_DENIED for a live process. The
+        # watchdog must not orphan itself merely because it cannot inspect it.
+        os_stub = _FakeOS("nt")
+
+        _run_watchdog(
+            self, os_stub, kernel32=_FakeKernel32(exit_code=None, last_error=5)
+        )
+
+        self.assertEqual(os_stub.signalled, [])
+        self.assertEqual(os_stub.exit_codes, [])
 
     def test_windows_probe_exits_the_sidecar_once_the_host_has_exited(self):
         # A handle can outlive the process it names, so a successful open is not
