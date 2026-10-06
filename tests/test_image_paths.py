@@ -21,6 +21,10 @@ class TestDataUriImagesSurviveResolution(unittest.TestCase):
         text = "![pic](data:image/png;base64,iVBORw0KGgoAAAANSUhEUg)"
         self.assertEqual(fix_image_paths(text, self.BASE), text)
 
+    def test_data_uri_scheme_is_case_insensitive(self):
+        text = "![pic](DATA:image/png;base64,iVBORw0KGgoAAAANSUhEUg)"
+        self.assertEqual(fix_image_paths(text, self.BASE), text)
+
     def test_data_uri_renders_as_an_embedded_image(self):
         html = render_markdown(
             "![pic](data:image/png;base64,iVBORw0KGgo)",
