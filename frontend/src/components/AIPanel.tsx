@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
 import { useAIChat, type TranslationPair, type TranslationProgress } from "@/hooks/useAIChat";
 import { AI, getDefaultAISettings, type AISettings, Knowledge, type KnowledgeStatus } from "@/lib/api";
+import { tokenizeInlineMarkdown } from "@/lib/inline-markdown.mjs";
 
 export type AIPanelTab = "chat" | "translate" | "settings" | "work";
 type Tab = AIPanelTab;
@@ -38,51 +39,37 @@ function normalizeBaseUrl(url: string) {
 }
 
 function renderInlineMarkdown(text: string): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  const pattern = /(\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|(https?:\/\/[^\s]+))/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
+  // The scan itself lives in lib/inline-markdown.mjs so the Node suite can test
+  // where a bare URL ends; text runs stay bare strings, as before.
+  return tokenizeInlineMarkdown(text).map((token, index) => {
+    if (token.type === "strong") {
+      return <strong key={index}>{token.value}</strong>;
     }
-
-    if (match[2]) {
-      nodes.push(<strong key={match.index}>{match[2]}</strong>);
-    } else if (match[3]) {
-      nodes.push(
+    if (token.type === "code") {
+      return (
         <code
-          key={match.index}
+          key={index}
           className="rounded bg-black/10 dark:bg-white/10 px-1 py-0.5 font-mono text-[11px]"
         >
-          {match[3]}
+          {token.value}
         </code>
       );
-    } else {
-      const label = match[4] ?? match[6];
-      const href = match[5] ?? match[6];
-      nodes.push(
+    }
+    if (token.type === "link") {
+      return (
         <a
-          key={match.index}
-          href={href}
+          key={index}
+          href={token.href}
           target="_blank"
           rel="noreferrer"
           className="underline underline-offset-2 hover:text-blue-600 dark:hover:text-blue-300"
         >
-          {label}
+          {token.label}
         </a>
       );
     }
-
-    lastIndex = pattern.lastIndex;
-  }
-
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
-  }
-
-  return nodes;
+    return token.value;
+  });
 }
 
 function ChatMessageContent({ content }: { content: string }) {
