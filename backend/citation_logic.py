@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 from base64 import b64decode
@@ -10,6 +11,12 @@ from pathlib import Path
 from typing import Any
 
 CITATION_MAX_RESULTS = 50
+
+# The `` and `` that separates two BibTeX authors, matched at a fixed position
+# with `match(text, index)` so no capture of the preceding text is needed.
+# Whitespace is required on both sides: `Brand, X and Doe, Y` must not split
+# inside `Brand`, and `Android` must stay one name.
+_AND_SEPARATOR = re.compile(r"\s+and(?=\s)")
 
 
 def _get_settings_file_path() -> Path:
@@ -110,22 +117,27 @@ def _split_author_names(raw_author: str) -> list[str]:
     contain the word, as in ``{Smith and Sons Ltd}``. Splitting that on every
     occurrence of ``" and "`` invents a second author and turns the protected
     name into a ``Last, First`` pair.
+
+    The separator is matched as whitespace-delimited rather than as a literal
+    ``" and "`` because BibTeX wraps long author fields, so ``and`` can arrive
+    on the next line. Requiring whitespace on both sides keeps ``Android`` and
+    ``Sand`` intact.
     """
     names: list[str] = []
     current: list[str] = []
     depth = 0
     index = 0
-    separator = " and "
     while index < len(raw_author):
         char = raw_author[index]
         if char == "{":
             depth += 1
         elif char == "}":
             depth = max(0, depth - 1)
-        if depth == 0 and raw_author.startswith(separator, index):
+        separator = _AND_SEPARATOR.match(raw_author, index) if depth == 0 else None
+        if separator is not None:
             names.append("".join(current))
             current = []
-            index += len(separator)
+            index = separator.end()
             continue
         current.append(char)
         index += 1
@@ -133,13 +145,59 @@ def _split_author_names(raw_author: str) -> list[str]:
     return [name.strip() for name in names if name.strip()]
 
 
+def _has_top_level_comma(text: str) -> bool:
+    """True when *text* holds a comma outside every brace-protected group.
+
+    BibTeX uses a comma inside braces for a company's own name -- ``{{Google,
+    Inc.}}`` is wrapped precisely so the comma is not read as a ``Last, First``
+    separator -- so the depth of the comma is what decides whether it separates
+    two names.
+    """
+    depth = 0
+    for char in text:
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+        elif char == "," and depth == 0:
+            return True
+    return False
+
+
+def _split_on_top_level_comma(part: str) -> tuple[str, str]:
+    """Split *part* into ``(last, first)`` on the first comma outside braces.
+
+    ``str.partition(",")`` cannot express this: it cuts on the first comma
+    whatever encloses it, so ``{Smith, Jr.}, John`` was cut inside the braces
+    and came out as ``Jr.}, John {Smith``, with the group's own braces leaking
+    into the name.
+    """
+    depth = 0
+    for index, char in enumerate(part):
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth = max(0, depth - 1)
+        elif char == "," and depth == 0:
+            return part[:index], part[index + 1 :]
+    return part, ""
+
+
 def _is_protected_author_list(part: str) -> bool:
     """True when *part* is one brace-protected group holding several authors.
 
     ``{Doe, Jane and Roe, Richard}`` is an author list the author wrapped as a
-    whole, so the wrapper has to come off before the names can be split. A
-    group without a comma is a single organisation, such as
+    whole, so the wrapper has to come off before the names can be split.
+
+    A group without a comma is a single organisation, such as
     ``{Smith and Sons Ltd}``, and must be left intact.
+
+    Note that a braced ``Last, First`` pair is read as a list, so a corporate
+    author whose own name contains a comma -- ``{{Google, Inc.}}`` reaches this
+    function as ``{Google, Inc.}`` -- is reordered into ``Inc. Google``. The two
+    are the same token by the time the .bib parser has removed one brace layer,
+    so no rule here can separate them; the trade-off is pinned by
+    ``test_protected_group_detection_requires_balanced_braces``.
     """
     return (
         len(part) >= 2
@@ -155,8 +213,8 @@ def _format_author_names(raw_author: str) -> list[str]:
     for part in _split_author_names(raw_author):
         if _is_protected_author_list(part):
             formatted.extend(_format_author_names(part[1:-1]))
-        elif "," in part:
-            last, _, first = part.partition(",")
+        elif _has_top_level_comma(part):
+            last, first = _split_on_top_level_comma(part)
             formatted.append(
                 f"{_clean_bibtex_value(first)} {_clean_bibtex_value(last)}".strip()
             )

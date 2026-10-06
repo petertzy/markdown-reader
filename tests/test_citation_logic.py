@@ -374,6 +374,62 @@ class TestCitationAuthorFormatting(unittest.TestCase):
             "Outer {Smith and Sons} Ltd, Jane Doe",
         )
 
+    def test_corporate_author_with_a_comma_is_reordered_and_that_is_pinned(self):
+        # {{Google, Inc.}} reaches the formatter as {Google, Inc.}, which is the
+        # same token as a braced Last, First pair, so it is reordered. Recorded
+        # because it looks like a bug and is in fact a pinned trade-off: the
+        # alternative breaks {Doe, Jane}, which this class also requires.
+        self.assertEqual(self._parse_author("{{Google, Inc.}}"), "Inc. Google")
+        self.assertEqual(self._parse_author("{{Doe, Jane}}"), "Jane Doe")
+
+    def test_a_comma_inside_braces_does_not_split_the_name(self):
+        # `{Smith, Jr.}, John` is `Last, First` with a braced suffix. Splitting
+        # on the first comma regardless of depth cut inside the braces and
+        # produced `Jr.}, John {Smith`, leaking the group's own braces.
+        self.assertEqual(self._parse_author("{{Smith, Jr.}, John}"), "John Smith, Jr.")
+        self.assertEqual(
+            self._parse_author("{van Beethoven, Ludwig}"), "Ludwig van Beethoven"
+        )
+        self.assertEqual(
+            citation_logic._split_on_top_level_comma("{Smith, Jr.}, John"),
+            ("{Smith, Jr.}", " John"),
+        )
+        # Through the real upload path the parser takes one brace layer off, so
+        # the field arrives as `author = {{Smith, Jr.}, John}`.
+        self.assertEqual(
+            citation_logic._format_authors("{Smith, Jr.}, John"), "John Smith, Jr."
+        )
+
+    def test_and_separates_authors_across_a_line_break(self):
+        # Long .bib fields wrap, so `and` can arrive on the next line. Requiring
+        # a literal " and " folded both names into one and left the word inside
+        # the result.
+        self.assertEqual(
+            self._parse_author("{Doe, Jane and\nRoe, Richard}"), "Jane Doe, Richard Roe"
+        )
+        self.assertEqual(
+            self._parse_author("{Doe, Jane and\tRoe, Richard}"), "Jane Doe, Richard Roe"
+        )
+        # Still one word, whatever the line break does.
+        self.assertEqual(self._parse_author("{Sandoval, Ana}"), "Ana Sandoval")
+        self.assertEqual(self._parse_author("{Brand, X and Doe, Y}"), "X Brand, Y Doe")
+
+    def test_and_needs_whitespace_on_both_sides(self):
+        # A stray comma or an unspaced "and" in a hand-written .bib is not a
+        # separator. Cutting there invents a second author and strands the comma
+        # on the first one, which is the corruption this parser exists to stop.
+        self.assertEqual(
+            citation_logic._split_author_names("Doe, J,and Roe, R"),
+            ["Doe, J,and Roe, R"],
+        )
+        self.assertEqual(
+            citation_logic._split_author_names("{Doe, J}and Roe, R"),
+            ["{Doe, J}and Roe, R"],
+        )
+        self.assertEqual(
+            citation_logic._split_author_names("Android Inc."), ["Android Inc."]
+        )
+
     def test_search_matches_a_corporate_author_by_its_full_name(self):
         content = (
             "@article{who2020, author = {{World Health Organization}},"
