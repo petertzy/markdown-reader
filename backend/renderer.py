@@ -211,6 +211,26 @@ class _HeadingIdAssigner(HTMLParser):
 
     # -- heading lifecycle ------------------------------------------------------
 
+    @staticmethod
+    def _alt_of_image(attrs) -> str | None:
+        """Return an ``<img>``'s alt text, which is the content it shows.
+
+        An ``<img>`` has no text node, so nothing else in a heading can account
+        for it. ``backend.heading_anchor`` keeps an image's alt text when it
+        builds the outline label, so it has to be counted here too or the two
+        disagree on the anchor. html.parser has already decoded the attribute
+        value, so this is exactly what the preview displays.
+        """
+        if not attrs:
+            return None
+        return dict(attrs).get("alt") or None
+
+    def _note_inline_image(self, tag: str, attrs) -> None:
+        if tag.lower() == "img":
+            alt = self._alt_of_image(attrs)
+            if alt:
+                self._heading_text.append(alt)
+
     def _close_heading(self, tag: str) -> None:
         slug = slugify_heading("".join(self._heading_text))
         if slug:
@@ -239,6 +259,7 @@ class _HeadingIdAssigner(HTMLParser):
             # Inline markup inside a heading (e.g. ``<code>``, ``<a>``) —
             # keep it verbatim; only text contributes to the slug.
             self._heading_inner.append(tag_text)
+            self._note_inline_image(tag, attrs)
             return
         if self._skip_stack:
             self.parts.append(tag_text)
@@ -261,6 +282,7 @@ class _HeadingIdAssigner(HTMLParser):
         tag_text = self.get_starttag_text() or ""
         if self._heading_tag is not None:
             self._heading_inner.append(tag_text)
+            self._note_inline_image(tag, attrs)
         else:
             self.parts.append(tag_text)
 
