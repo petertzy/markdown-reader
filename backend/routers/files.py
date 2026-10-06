@@ -230,7 +230,7 @@ def _docx_row_cells(row) -> list[str]:
         if any(cell is already for already in emitted):
             continue
         emitted.append(cell)
-        texts.append(cell.text.strip().replace("\n", " "))
+        texts.append(cell.text.strip().replace("\n", " ").replace("|", "\\|"))
     return texts
 
 

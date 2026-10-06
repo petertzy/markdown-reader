@@ -393,6 +393,21 @@ def get_secure_ai_api_key(provider: str) -> str:
         return ""
 
 
+def resolve_ai_api_key_for_slot(key_slot: str) -> str:
+    """Resolve the API key a key slot should authenticate with.
+
+    The environment variable wins over the secure store, so a key supplied
+    through the environment applies even on a machine that has a keyring
+    backend installed but no credential stored for this slot. Every caller that
+    needs a slot's key goes through here, because the two orders that were once
+    spelled out at two call sites disagreed.
+    """
+    return (
+        os.getenv(_get_key_slot_env_var(key_slot), "").strip()
+        or get_secure_ai_api_key(key_slot).strip()
+    )
+
+
 def is_ai_api_key_configured(
     provider: str, env_var: str = "", timeout_seconds: float = 1.0
 ) -> bool:
@@ -490,13 +505,10 @@ def _get_ai_api_key_for_provider(provider: str) -> tuple[str, str, str]:
         key_slot = get_openai_compatible_storage_key_name(choice)
         env_var = get_openai_compatible_env_var(choice)
 
-    api_key = os.getenv(env_var, "").strip() or get_secure_ai_api_key(key_slot).strip()
+    api_key = resolve_ai_api_key_for_slot(key_slot)
     if provider == "openai_compatible" and not api_key:
         fallback_env_var = get_ai_provider_env_var(provider)
-        api_key = (
-            os.getenv(fallback_env_var, "").strip()
-            or get_secure_ai_api_key(provider).strip()
-        )
+        api_key = resolve_ai_api_key_for_slot(provider)
         env_var = fallback_env_var
     return api_key, key_slot, env_var
 

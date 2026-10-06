@@ -143,6 +143,24 @@ class _BareUrlLinkifier(HTMLParser):
     def handle_charref(self, name: str) -> None:
         self._buf.append((True, f"&#{name};"))
 
+    # html.parser's default implementations of the four raw-HTML callbacks are
+    # bare ``pass``, so any token below is parsed and then thrown away instead
+    # of being re-emitted into ``parts``. Tags are handled above; these are the
+    # non-tag forms, and each one has to be rebuilt from its payload or it
+    # silently disappears from the preview and from every HTML/PDF/DOCX export.
+
+    def handle_comment(self, data: str) -> None:
+        self._flush()
+        self.parts.append(f"<!--{data}-->")
+
+    def handle_decl(self, decl: str) -> None:
+        self._flush()
+        self.parts.append(f"<!{decl}>")
+
+    def handle_pi(self, data: str) -> None:
+        self._flush()
+        self.parts.append(f"<?{data}>")
+
 
 def _linkify_text_with_entities(
     tokens: list[tuple[bool, str]],
@@ -331,7 +349,20 @@ class _HeadingIdAssigner(HTMLParser):
             self.parts.append(f"<!--{data}-->")
 
     def handle_decl(self, decl: str) -> None:
-        self.parts.append(f"<!{decl}>")
+        raw = f"<!{decl}>"
+        if self._heading_tag is not None:
+            self._heading_inner.append(raw)
+        else:
+            self.parts.append(raw)
+
+    def handle_pi(self, data: str) -> None:
+        # Without this the assigner — which runs after the linkifier — would be
+        # the one to drop a processing instruction the linkifier had just
+        # preserved, so the token would still never reach the output.
+        if self._heading_tag is not None:
+            self._heading_inner.append(f"<?{data}>")
+        else:
+            self.parts.append(f"<?{data}>")
 
 
 def assign_heading_ids(html: str) -> str:
