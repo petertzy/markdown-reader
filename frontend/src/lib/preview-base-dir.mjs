@@ -27,13 +27,15 @@ export function parentDirOf(filePath) {
 /**
  * Resolve the base directory for a preview render.
  *
- * `override` is an explicit argument at the call site and always wins. Failing
- * that, a tab's own `previewBaseDir` is used: a document imported from
- * `.html`/`.pdf`/`.docx` is converted on open and deliberately keeps
- * `filePath === null` (so Save asks for a destination instead of overwriting
- * the source file), yet its relative image paths still belong to the folder it
- * was imported from. `filePath` is the last resort, which is what plain
- * Markdown tabs use.
+ * `override` is an explicit argument at the call site and always wins. It is
+ * the base directory the caller wants, which may be given either as a folder
+ * or as the document's own path, so it is reduced to its directory part rather
+ * than forwarded as-is. Failing that, a tab's own `previewBaseDir` is used: a
+ * document imported from `.html`/`.pdf`/`.docx` is converted on open and
+ * deliberately keeps `filePath === null` (so Save asks for a destination
+ * instead of overwriting the source file), yet its relative image paths still
+ * belong to the folder it was imported from. `filePath` is the last resort,
+ * which is what plain Markdown tabs use.
  *
  * `previewBaseDir` and `filePath` are passed separately rather than as a tab
  * object so the caller can list them individually in its `useCallback` deps.
@@ -44,7 +46,10 @@ export function parentDirOf(filePath) {
  * @returns {string | undefined}
  */
 export function resolvePreviewBaseDir(override, previewBaseDir, filePath) {
-  if (override) return override;
+  // The override is reduced with the same rule as `filePath` below, so a value
+  // carrying no directory component yields `undefined` rather than a file name
+  // the backend would join image paths onto.
+  if (override) return parentDirOf(override);
   if (previewBaseDir) return previewBaseDir;
   return parentDirOf(filePath);
 }

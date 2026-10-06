@@ -220,7 +220,14 @@ def get_models(provider: str, base_url_override: str = ""):
             if override.rstrip("/") == str(option["url"]).rstrip("/"):
                 key_slot = logic.get_openai_compatible_storage_key_name(option["key"])
                 break
-    api_key = "" if provider == "local" else logic.get_secure_ai_api_key(key_slot)
+    api_key = ""
+    if provider != "local":
+        api_key = logic.resolve_ai_api_key_for_slot(key_slot)
+        # Mirrors the fallback in `_get_ai_api_key_for_provider`: an
+        # openai-compatible endpoint falls back to the provider-wide slot when
+        # the slot chosen for `base_url_override` holds nothing.
+        if provider == "openai_compatible" and not api_key:
+            api_key = logic.resolve_ai_api_key_for_slot(provider)
     try:
         models = logic.fetch_available_models(
             provider, api_key, base_url_override=base_url_override

@@ -346,5 +346,52 @@ class TestTemplatePromptsReachTheirOwnHandler(unittest.TestCase):
         self.assertEqual(result["proposed_action"]["content"], "# head\n\n- item\n")
 
 
+class TestFormattingRulesPreserveThematicBreaks(unittest.TestCase):
+    """A run of 3+ list markers is a thematic break, not a tight list item."""
+
+    def test_thematic_break_is_not_split_into_a_list_item(self):
+        # "---" is an <hr>; splitting it to "- -" destroys the rule.
+        for src in (
+            "Intro\n\n---\n\nOutro",
+            "para\n\n***\n\npara2",
+            "  ---\n",
+            "- - -\n",
+            "* * *\n",
+        ):
+            with self.subTest(src=src):
+                self.assertEqual(_apply_markdown_formatting_rules(src), src)
+
+    def test_yaml_frontmatter_delimiters_are_preserved(self):
+        # "---" also delimits frontmatter, which the knowledge base parses
+        # (backend/knowledge_logic.py extract_note_title).
+        src = "---\ntitle: My Note\n---\n\nIntro paragraph.\n\n---\n\nOutro.\n"
+        self.assertEqual(_apply_markdown_formatting_rules(src), src)
+
+    def test_format_automation_preserves_thematic_breaks(self):
+        # Reachable end-to-end: /format proposes a whole-document replacement.
+        document = "Intro paragraph.\n\n---\n\nOutro paragraph.\n"
+        result = build_ai_automation_fallback(
+            "format", document_text=document, selected_text=""
+        )
+
+        self.assertIsNotNone(result)
+        action = result["proposed_action"]
+        self.assertEqual(action["type"], "replace_document")
+        self.assertEqual(action["content"], document)
+
+    def test_tight_list_items_are_still_normalised(self):
+        # The genuine behaviour of the rule is unchanged.
+        for src, want in (
+            ("-item", "- item"),
+            ("*item", "* item"),
+            ("+item", "+ item"),
+            ("  -nested", "  - nested"),
+            ("1.item", "1. item"),
+            ("#head", "# head"),
+        ):
+            with self.subTest(src=src):
+                self.assertEqual(_apply_markdown_formatting_rules(src), want)
+
+
 if __name__ == "__main__":
     unittest.main()
