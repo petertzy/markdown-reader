@@ -100,8 +100,11 @@ export function useEditor() {
       // Debounced word-count update, guarded the same way: the debounce limits
       // how often a request starts, not how long one takes.
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      // Issue before scheduling the debounce. A tab switch can supersede this
+      // token before the timer runs, preventing an old document's delayed
+      // count from being applied in the tab that replaced it.
+      const countToken = wordCountGuardRef.current.issue();
       debounceRef.current = setTimeout(() => {
-        const countToken = wordCountGuardRef.current.issue();
         Markdown.wordCount(content)
           .then((stats) => {
             if (wordCountGuardRef.current.isCurrent(countToken)) setWordCount(stats);
@@ -286,6 +289,8 @@ export function useEditor() {
     // would repaint itself into the empty tab.
     previewGuardRef.current.supersede();
     wordCountGuardRef.current.supersede();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = null;
   }, []);
 
   const closeTab = useCallback(
@@ -297,6 +302,8 @@ export function useEditor() {
       if (id === activeTabId) {
         previewGuardRef.current.supersede();
         wordCountGuardRef.current.supersede();
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = null;
       }
       if (remaining.length === 0) {
         // Closing the last tab leaves a fresh empty tab behind, so the preview
@@ -330,6 +337,8 @@ export function useEditor() {
     setWordCount(null);
     previewGuardRef.current.supersede();
     wordCountGuardRef.current.supersede();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = null;
   }, []);
 
   // ── recent files ───────────────────────────────────────────────────────────
