@@ -887,7 +887,10 @@ def _apply_markdown_formatting_rules(markdown_text: str) -> str:
             continue
         line = raw_line.rstrip()
         line = re.sub(r"^(#{1,6})([^\s#])", r"\1 \2", line)
-        line = re.sub(r"^(\s*)([-*+])(\S)", r"\1\2 \3", line)
+        # The next char must not be another list marker: a run such as "---"
+        # or "***" is a thematic break (and "---" also delimits YAML
+        # frontmatter), not a tight list item, so it must stay verbatim.
+        line = re.sub(r"^(\s*)([-*+])(?![-*+])([^\s])", r"\1\2 \3", line)
         line = re.sub(r"^(\s*\d+\.)(\S)", r"\1 \2", line)
         lines.append(line)
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
