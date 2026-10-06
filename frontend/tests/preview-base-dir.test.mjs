@@ -80,6 +80,61 @@ test("the backend receives a directory, not a file name", () => {
   assert.ok(baseDir.endsWith("/"), `${baseDir} must keep its trailing separator`);
 });
 
+test("an override given as a file path is reduced to its folder", () => {
+  // `useEditor.refreshPreview(content, baseDirOverride)` is called with
+  // `tab.filePath` on every keystroke, on opening a plain Markdown tab, and on
+  // switching tabs, so this is the shape production actually passes.
+  assert.equal(resolvePreviewBaseDir(MD_FILE, undefined, MD_FILE), "/work/notes/");
+  assert.equal(
+    resolvePreviewBaseDir("C:\\notes\\report.md", undefined, undefined),
+    "C:\\notes\\"
+  );
+});
+
+test("an override ending in a separator is preserved", () => {
+  assert.equal(
+    resolvePreviewBaseDir("/somewhere/else/", undefined, MD_FILE),
+    "/somewhere/else/"
+  );
+  // Without a trailing separator the shared path rule treats the final segment
+  // as a document name, so only its parent directory is used.
+  assert.equal(resolvePreviewBaseDir("/somewhere/else", undefined, MD_FILE), "/somewhere/");
+});
+
+test("an override with no directory component yields no base directory", () => {
+  // There is no folder to report, so this answers `undefined` exactly as the
+  // `filePath` branch does for the same input.
+  assert.equal(resolvePreviewBaseDir("report.md", undefined, MD_FILE), undefined);
+});
+
+test("an explicit override wins over previewBaseDir", () => {
+  // Precedence is only observable when the two disagree, so both have to be
+  // set. Production passes `previewBaseDir ?? filePath` as the override, which
+  // never conflicts; this pins the stated rule rather than the call shapes.
+  assert.equal(
+    resolvePreviewBaseDir("/from/override/", "/from/preview-base-dir/", undefined),
+    "/from/override/"
+  );
+});
+
+test("neither the override nor the file path can yield a file path", () => {
+  // `previewBaseDir` is excluded because every call site builds it with
+  // `parentDirOf(filePath)`, so it is always a folder or undefined already.
+  // The override and `filePath` are the two arguments a caller supplies
+  // directly, and either may be given as a document path.
+  const inputs = [undefined, null, "", "/work/notes/", "report.md", MD_FILE];
+  for (const override of inputs) {
+    for (const filePath of inputs) {
+      const baseDir = resolvePreviewBaseDir(override, undefined, filePath);
+      const label = `o=${override} f=${filePath}`;
+      assert.ok(
+        baseDir === undefined || /[\\/]$/.test(baseDir),
+        `${label} produced a file path: ${baseDir}`
+      );
+    }
+  }
+});
+
 test("a converted tab's base dir survives closing the active tab", () => {
   // The converted tab has no `filePath`, so once the user switches back to it
   // the preview can only resolve its relative images if `previewBaseDir` came
