@@ -31,6 +31,11 @@ from backend.render_helpers import (
 
 _BARE_URL_RE = re.compile(r"https?://[^\s<]+")
 _AUTOLINK_SKIP_TAGS = {"a", "code", "pre", "script", "style"}
+# `script` and `style` are CDATA elements: html.parser hands us their body
+# verbatim in handle_data, with no entity splitting. markdown2 has already
+# escaped `code`/`pre`, which therefore arrive as entity refs and pass through
+# _flush untouched.
+_CDATA_SKIP_TAGS = frozenset({"script", "style"})
 _TRAILING_URL_PUNCTUATION = ".,;:!?)]}\"'"
 _URL_CLOSER_TO_OPENER = {")": "(", "]": "[", "}": "{"}
 
@@ -92,11 +97,16 @@ class _BareUrlLinkifier(HTMLParser):
         if not self._buf:
             return
         if self.skip_stack:
-            self.parts.append(
-                "".join(
-                    s if is_entity else html_escape(s) for is_entity, s in self._buf
+            if self.skip_stack[-1] in _CDATA_SKIP_TAGS:
+                # Emit verbatim: escaping here would corrupt the source, e.g.
+                # ".x > .y" would stop being a child selector.
+                self.parts.append("".join(s for _, s in self._buf))
+            else:
+                self.parts.append(
+                    "".join(
+                        s if is_entity else html_escape(s) for is_entity, s in self._buf
+                    )
                 )
-            )
         else:
             self.parts.append(_linkify_text_with_entities(self._buf))
         self._buf = []
@@ -132,6 +142,24 @@ class _BareUrlLinkifier(HTMLParser):
 
     def handle_charref(self, name: str) -> None:
         self._buf.append((True, f"&#{name};"))
+
+    # html.parser's default implementations of the four raw-HTML callbacks are
+    # bare ``pass``, so any token below is parsed and then thrown away instead
+    # of being re-emitted into ``parts``. Tags are handled above; these are the
+    # non-tag forms, and each one has to be rebuilt from its payload or it
+    # silently disappears from the preview and from every HTML/PDF/DOCX export.
+
+    def handle_comment(self, data: str) -> None:
+        self._flush()
+        self.parts.append(f"<!--{data}-->")
+
+    def handle_decl(self, decl: str) -> None:
+        self._flush()
+        self.parts.append(f"<!{decl}>")
+
+    def handle_pi(self, data: str) -> None:
+        self._flush()
+        self.parts.append(f"<?{data}>")
 
 
 def _linkify_text_with_entities(
@@ -201,6 +229,26 @@ class _HeadingIdAssigner(HTMLParser):
 
     # -- heading lifecycle ------------------------------------------------------
 
+    @staticmethod
+    def _alt_of_image(attrs) -> str | None:
+        """Return an ``<img>``'s alt text, which is the content it shows.
+
+        An ``<img>`` has no text node, so nothing else in a heading can account
+        for it. ``backend.heading_anchor`` keeps an image's alt text when it
+        builds the outline label, so it has to be counted here too or the two
+        disagree on the anchor. html.parser has already decoded the attribute
+        value, so this is exactly what the preview displays.
+        """
+        if not attrs:
+            return None
+        return dict(attrs).get("alt") or None
+
+    def _note_inline_image(self, tag: str, attrs) -> None:
+        if tag.lower() == "img":
+            alt = self._alt_of_image(attrs)
+            if alt:
+                self._heading_text.append(alt)
+
     def _close_heading(self, tag: str) -> None:
         slug = slugify_heading("".join(self._heading_text))
         if slug:
@@ -229,6 +277,7 @@ class _HeadingIdAssigner(HTMLParser):
             # Inline markup inside a heading (e.g. ``<code>``, ``<a>``) —
             # keep it verbatim; only text contributes to the slug.
             self._heading_inner.append(tag_text)
+            self._note_inline_image(tag, attrs)
             return
         if self._skip_stack:
             self.parts.append(tag_text)
@@ -251,6 +300,7 @@ class _HeadingIdAssigner(HTMLParser):
         tag_text = self.get_starttag_text() or ""
         if self._heading_tag is not None:
             self._heading_inner.append(tag_text)
+            self._note_inline_image(tag, attrs)
         else:
             self.parts.append(tag_text)
 
@@ -299,7 +349,20 @@ class _HeadingIdAssigner(HTMLParser):
             self.parts.append(f"<!--{data}-->")
 
     def handle_decl(self, decl: str) -> None:
-        self.parts.append(f"<!{decl}>")
+        raw = f"<!{decl}>"
+        if self._heading_tag is not None:
+            self._heading_inner.append(raw)
+        else:
+            self.parts.append(raw)
+
+    def handle_pi(self, data: str) -> None:
+        # Without this the assigner — which runs after the linkifier — would be
+        # the one to drop a processing instruction the linkifier had just
+        # preserved, so the token would still never reach the output.
+        if self._heading_tag is not None:
+            self._heading_inner.append(f"<?{data}>")
+        else:
+            self.parts.append(f"<?{data}>")
 
 
 def assign_heading_ids(html: str) -> str:

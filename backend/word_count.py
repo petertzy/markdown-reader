@@ -26,8 +26,21 @@ def strip_markdown(text: str) -> str:
     text = re.sub(r"~~", "", text)
     text = re.sub(r"^>\s?", "", text, flags=re.MULTILINE)
     text = re.sub(r"^[-*_]{3,}\s*$", "", text, flags=re.MULTILINE)
+    # A setext H1 underline is a run of "=" directly beneath a text line. It
+    # becomes part of the heading when the document is rendered, so it must not
+    # be counted as a word. The run needs a single "=": markdown2 turns "Title"
+    # followed by "=" into an <h1>, exactly as it does for three. The text line
+    # is required, so that a "=" that underlines nothing -- which stays literal
+    # text in the rendered document -- keeps its word.
+    text = re.sub(r"^([^\r\n]+)\r?\n=+[ \t]*\r?$", r"\1", text, flags=re.MULTILINE)
     text = re.sub(r"\|", " ", text)
-    text = re.sub(r"^[\s]*[-*+]\s+", "", text, flags=re.MULTILINE)
+    # A GFM table delimiter row is made only of pipes, dashes and alignment
+    # colons, so it holds no words. It has to be matched after the pipes are
+    # turned into spaces, and after the horizontal-rule rule above (which
+    # cannot see it while the leading pipe is still there).
+    text = re.sub(r"^[\s:\-]*\-[\s:\-]*$", "", text, flags=re.MULTILINE)
+    # Bullets, optionally followed by a GFM task-list checkbox.
+    text = re.sub(r"^[\s]*[-*+]\s+(?:\[[ xX]\]\s+)?", "", text, flags=re.MULTILINE)
     text = re.sub(r"^\s*\d+\.\s+", "", text, flags=re.MULTILINE)
     return text
 

@@ -28,12 +28,18 @@ from backend.recent_files import (
     _middle_ellipsis,
     _safe_write_json,
 )
+from backend.renderer import render_markdown as _render_markdown
 from backend.routers.files import (
     ConvertToMarkdownPayload,
     convert_to_markdown,
     get_supported_formats,
 )
-from backend.routers.markdown import OpenPreviewPayload, open_preview_in_browser
+from backend.routers.markdown import (
+    OpenPreviewPayload,
+    RenderPayload,
+    open_preview_in_browser,
+    word_count,
+)
 from backend.word_count import count_words as _count_words
 from backend.word_count import reading_time as _reading_time
 from backend.word_count import strip_markdown as _strip_markdown
@@ -101,6 +107,167 @@ class TestStripMarkdown(unittest.TestCase):
         result = _strip_markdown("| col1 | col2 |")
         self.assertNotIn("|", result)
         self.assertIn("col1", result)
+
+    def test_table_delimiter_row_adds_no_words(self):
+        # A GFM delimiter row is made only of pipes, dashes and colons, so it
+        # must not contribute phantom words. It cannot be matched before the
+        # pipes are stripped, because the leading pipe hides it from the
+        # horizontal-rule rule.
+        md = "| Name | Age | City |\n| --- | --- | --- |\n| Bob | 30 | Rome |"
+        self.assertEqual(_count_words(_strip_markdown(md)), 6)
+
+    def test_table_delimiter_row_with_alignment_colons_adds_no_words(self):
+        md = "| Metric | Q1 |\n| :--- | ---: |\n| Revenue | 10 |"
+        self.assertEqual(_count_words(_strip_markdown(md)), 4)
+
+    def test_task_list_checkboxes_add_no_words(self):
+        # `- [x]` / `- [ ]` used to leave the brackets behind, and an unchecked
+        # box cost one word more than a checked one.
+        self.assertEqual(_count_words(_strip_markdown("- [x] Ship it")), 2)
+        self.assertEqual(_count_words(_strip_markdown("- [ ] Ship it")), 2)
+        self.assertEqual(_count_words(_strip_markdown("- [X] Ship it")), 2)
+
+    def test_mixed_task_list_counts_only_the_items(self):
+        md = "- [x] Wire up the exporter\n- [ ] Ship the release"
+        self.assertEqual(_count_words(_strip_markdown(md)), 7)
+
+    def test_checkbox_marker_outside_a_list_is_preserved(self):
+        # The checkbox is only stripped directly after a bullet, so prose is
+        # untouched.
+        self.assertIn("[x]", _strip_markdown("[x] is a plain token"))
+        self.assertIn("mid line", _strip_markdown("see - [ ] mid line"))
+
+    def test_horizontal_rules_and_bullets_are_unaffected(self):
+        for rule in ("---", "***", "___"):
+            self.assertEqual(_strip_markdown(rule).strip(), "")
+        self.assertEqual(_count_words(_strip_markdown("- alpha\n- beta")), 2)
+        self.assertEqual(_count_words(_strip_markdown("1. one\n2. two")), 2)
+
+    def test_setext_h1_underline_adds_no_words(self):
+        # The "=" underline of a setext H1 became part of the heading when the
+        # document was rendered, but it was counted as a word, while the "-"
+        # underline of a setext H2 was not.
+        md = "Title\n=====\n\nsome prose here"
+        self.assertEqual(_count_words(_strip_markdown(md)), 4)
+
+    def test_setext_h1_underline_with_crlf_adds_no_words(self):
+        # Windows line endings must not leave the underline behind as a word.
+        md = "Title\r\n=====\r\n\r\nsome prose here"
+        self.assertIn("<h1", _render_markdown(md))
+        self.assertEqual(_count_words(_strip_markdown(md)), 4)
+
+    def test_equals_underline_length_matches_what_the_renderer_accepts(self):
+        # A single "=" is already a setext underline as far as the renderer is
+        # concerned, so the count has to stop at one and not at three. The
+        # rules above already cover the "-" underline at two and at three or
+        # more, which is why only "=" needs a rule of its own here.
+        for length in range(1, 6):
+            underline = "=" * length
+            with self.subTest(underline=underline):
+                markdown = f"Title\n{underline}"
+                self.assertIn("<h1", _render_markdown(markdown))
+                self.assertEqual(_count_words(_strip_markdown(markdown)), 1)
+
+    def test_bare_equals_at_the_top_of_the_document_keeps_its_word(self):
+        # There is no line above to underline, so the "=" stays literal text.
+        md = "=\nTitle"
+        self.assertNotIn("<h1", _render_markdown(md))
+        self.assertEqual(_count_words(_strip_markdown(md)), 2)
+
+    def test_equals_run_followed_by_more_text_is_not_an_underline(self):
+        # The run has to be the whole line. "= tail" is ordinary text, and
+        # dropping it would lose a word the rendered document still shows.
+        for md in ("Title\n= tail", "Title\n== tail"):
+            with self.subTest(markdown=md):
+                self.assertNotIn("<h1", _render_markdown(md))
+                self.assertEqual(_count_words(_strip_markdown(md)), 3)
+
+    def test_trailing_spaces_do_not_stop_the_underline_matching(self):
+        for underline in ("=  ", "===   ", "=\t"):
+            with self.subTest(underline=underline):
+                md = f"Title\n{underline}\nprose here"
+                self.assertIn("<h1", _render_markdown(md))
+                self.assertEqual(_count_words(_strip_markdown(md)), 3)
+
+    def test_setext_h1_and_h2_underlines_count_the_same(self):
+        # Both underlines become part of the heading, so neither may count.
+        h1 = _count_words(_strip_markdown("Release Notes\n==========="))
+        h2 = _count_words(_strip_markdown("Release Notes\n-----------"))
+        self.assertEqual(h1, 2)
+        self.assertEqual(h1, h2)
+
+    def test_consecutive_setext_h1_headings(self):
+        md = "First\n=====\n\nSecond\n====="
+        self.assertEqual(_count_words(_strip_markdown(md)), 2)
+
+    def test_bare_equals_paragraph_is_still_counted(self):
+        # A "===" that underlines nothing stays literal text in the rendered
+        # document, so counting it is correct.
+        md = "a\n\n===\n\nb"
+        self.assertEqual(_count_words(_strip_markdown(md)), 3)
+
+    def test_equals_separated_from_its_heading_is_still_counted(self):
+        # The underline only disappears when it is directly under the text.
+        md = "Title\n\n==="
+        self.assertEqual(_count_words(_strip_markdown(md)), 2)
+
+
+class TestWordCountStatistics(unittest.TestCase):
+    """The character statistics reported next to the editor word count."""
+
+    def _stats(self, content: str) -> dict:
+        return word_count(RenderPayload(content=content))
+
+    def test_carriage_returns_are_not_counted(self):
+        # Only " ", "\n" and "\t" were dropped, so every line of a CRLF file
+        # contributed one phantom character.
+        lf = self._stats("# Title\n\nHello world.\n")
+        crlf = self._stats("# Title\r\n\r\nHello world.\r\n")
+        self.assertEqual(crlf["chars_without_spaces"], lf["chars_without_spaces"])
+
+    def test_many_crlf_lines_do_not_inflate_the_total(self):
+        # 5000 line endings used to be 5000 characters that are not in the
+        # document at all: a 25% overcount on a 20k character file.
+        self.assertEqual(self._stats("word\r\n" * 5000)["chars_without_spaces"], 20000)
+
+    def test_non_breaking_and_em_spaces_are_not_counted(self):
+        # Both are ordinary spaces to a reader, and both arrive constantly in
+        # text pasted from a web page or a word processor.
+        self.assertEqual(
+            self._stats("Tom\xa0Jerry\u2003and\u2009friends")["chars_without_spaces"],
+            len("TomJerryandfriends"),
+        )
+
+    def test_vertical_tab_and_form_feed_are_not_counted(self):
+        self.assertEqual(self._stats("a\x0bb\x0cc")["chars_without_spaces"], 3)
+
+    def test_markdown_syntax_is_still_counted(self):
+        # The count describes the document, not the rendered text, so a "#"
+        # and a "|" are characters of the file just like a letter is.
+        self.assertEqual(self._stats("# a | b")["chars_without_spaces"], 4)
+
+    def test_characters_with_spaces_still_counts_whitespace(self):
+        # The two figures have to differ by exactly the whitespace between
+        # them, which is what makes the pair usable side by side.
+        content = "# Title\r\n\nHello world.\t\r\n"
+        stats = self._stats(content)
+        self.assertEqual(stats["chars_with_spaces"], len(content))
+        self.assertEqual(
+            stats["chars_with_spaces"] - stats["chars_without_spaces"],
+            sum(1 for ch in content if ch.isspace()),
+        )
+
+    def test_whitespace_only_document_counts_no_characters(self):
+        stats = self._stats("  \n\t \r\n \xa0 ")
+        self.assertEqual(stats["chars_with_spaces"], 10)
+        self.assertEqual(stats["chars_without_spaces"], 0)
+        self.assertEqual(stats["words"], 0)
+
+    def test_empty_document(self):
+        stats = self._stats("")
+        self.assertEqual(stats["chars_with_spaces"], 0)
+        self.assertEqual(stats["chars_without_spaces"], 0)
+        self.assertEqual(stats["words"], 0)
 
 
 class TestCountWords(unittest.TestCase):

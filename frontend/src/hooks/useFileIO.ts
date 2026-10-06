@@ -144,19 +144,14 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
   const handleExport = useCallback(async (format: "html" | "pdf" | "docx") => {
     try {
       const content = monacoRef.current?.getValue() ?? editor.activeTab.content;
-      const restoreExportContent = () => {
-        flushSync(() => {
-          editor.handleContentChange(content);
-        });
-        const monaco = monacoRef.current;
-        const model = monaco?.getModel();
-        if (model && model.getValue() !== content) {
-          const position = monaco?.getPosition();
-          model.setValue(content);
-          if (position) monaco?.setPosition(position);
-        }
-      };
-      restoreExportContent();
+      // Flush the live editor buffer into React state so the tab, the model and
+      // the payload we are about to export all agree. This must happen *before*
+      // the export: `exportAs` only builds a payload and never writes back to
+      // the editor, so re-applying `content` after an `await` would discard
+      // anything typed while the export was in flight.
+      flushSync(() => {
+        editor.handleContentChange(content);
+      });
       const extension = format === "pdf" ? "pdf" : format === "docx" ? "docx" : "html";
       const defaultName = `${editor.activeTab.label.replace(/\.[^/.]+$/, "") || "document"}.${extension}`;
       let outputPath: string | undefined;
@@ -172,14 +167,11 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
         }
         const payload: ExportPayload = { content, base_dir: editor.activeTab.filePath?.replace(/[^/\\]+$/, ""), dark_mode: editor.darkMode, font_size: editor.fontSize };
         downloadBlob(await Export.downloadHtml(payload), defaultName);
-        restoreExportContent();
         return;
       }
       const result = await editor.exportAs(format, outputPath, content);
-      restoreExportContent();
       if (result) {
         alert(`Exported to:\n${result.path}`);
-        restoreExportContent();
       }
     } catch (error) {
       alert(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
