@@ -33,6 +33,17 @@ class ExportPayload(BaseModel):
 
 def _make_output_path(suggested: str | None, suffix: str) -> str:
     if suggested:
+        # A directory is a mistake, not a destination, and it has to be
+        # rejected here rather than by the exporter: the PDF path falls back to
+        # fitz.Document.save(), which removes whatever sits at the target, so
+        # exporting onto an empty directory the user made for their exports
+        # deleted that directory and answered 200 with its path. isdir() follows
+        # symlinks, so a link to a directory is refused too.
+        if os.path.isdir(suggested):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Export destination is a directory, not a file path: {suggested}",
+            )
         return suggested
     fd, path = tempfile.mkstemp(suffix=suffix)
     # mkstemp leaves the descriptor open, but the endpoints open() the path
