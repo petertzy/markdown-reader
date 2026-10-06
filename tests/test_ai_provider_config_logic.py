@@ -251,7 +251,7 @@ class TestAIProviderConfigLogic(unittest.TestCase):
         self.assertEqual(result["models"], ["llama3.2:latest"])
 
     def test_openai_compatible_default_models_depend_on_base_url(self):
-        navidia_defaults = logic.get_provider_default_models(
+        nvidia_defaults = logic.get_provider_default_models(
             "openai_compatible",
             base_url_override="https://integrate.api.nvidia.com/v1",
         )
@@ -260,8 +260,8 @@ class TestAIProviderConfigLogic(unittest.TestCase):
             base_url_override="https://api.groq.com/openai/v1",
         )
 
-        self.assertNotEqual(navidia_defaults, groq_defaults)
-        self.assertTrue(len(navidia_defaults) > 0)
+        self.assertNotEqual(nvidia_defaults, groq_defaults)
+        self.assertTrue(len(nvidia_defaults) > 0)
         self.assertIn("llama-3.3-70b-versatile", groq_defaults)
 
     def test_openai_compatible_slot_uses_choice_specific_env_without_keyring(self):

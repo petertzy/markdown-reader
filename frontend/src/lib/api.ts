@@ -37,6 +37,15 @@ function isTauriRuntime() {
 }
 
 let _resolvedBaseUrl: string | null = null;
+let _backendToken: string | null = null;
+
+async function getBackendToken(): Promise<string | null> {
+  if (_backendToken) return _backendToken;
+  const { invoke } = await import("@tauri-apps/api/core");
+  const token = await invoke<string | null>("get_backend_token");
+  if (token) _backendToken = token;
+  return token;
+}
 
 /**
  * Returns the backend base URL, resolving it once and caching the result.
@@ -55,9 +64,13 @@ export async function getBaseUrl(): Promise<string> {
       if (port) {
         const candidate = `http://127.0.0.1:${port}`;
         try {
+          const token = await getBackendToken();
           const health = await fetchWithTimeout(
             `${candidate}/api/health`,
-            { cache: "no-store" },
+            {
+              cache: "no-store",
+              headers: token ? { "X-Markdown-Reader-Token": token } : undefined,
+            },
             2000
           );
           if (health.ok) {
@@ -85,12 +98,14 @@ async function apiFetch<T>(
   timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS
 ): Promise<T> {
   const base = await getBaseUrl();
+  const token = isTauriRuntime() ? await getBackendToken() : null;
   return runWithTimeout(async (signal) => {
     const res = await fetch(`${base}${path}`, {
       ...init,
       signal,
       headers: {
         "Content-Type": "application/json",
+        ...(token ? { "X-Markdown-Reader-Token": token } : {}),
         ...(init?.headers ?? {}),
       },
     });
@@ -108,12 +123,14 @@ async function apiFetchBlob(
   timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS
 ): Promise<Blob> {
   const base = await getBaseUrl();
+  const token = isTauriRuntime() ? await getBackendToken() : null;
   return runWithTimeout(async (signal) => {
     const res = await fetch(`${base}${path}`, {
       ...init,
       signal,
       headers: {
         "Content-Type": "application/json",
+        ...(token ? { "X-Markdown-Reader-Token": token } : {}),
         ...(init?.headers ?? {}),
       },
     });
@@ -359,8 +376,8 @@ const AI_PROVIDER_ENV_VARS: Record<string, string> = {
 
 const OPENAI_COMPATIBLE_BASE_URL_OPTIONS: OpenAICompatibleBaseUrlOption[] = [
   {
-    key: "navidia",
-    label: "Navidia",
+    key: "nvidia",
+    label: "NVIDIA",
     url: "https://integrate.api.nvidia.com/v1",
   },
   {
@@ -415,7 +432,7 @@ function normalizeAISettings(raw: PartialAISettings): AISettings {
     providers: normalizedProviders,
     provider_order: normalizedProviderOrder,
     openai_compatible_base_url_choice:
-      raw.openai_compatible_base_url_choice ?? "navidia",
+      raw.openai_compatible_base_url_choice ?? "nvidia",
     openai_compatible_base_url_options:
       raw.openai_compatible_base_url_options ??
       OPENAI_COMPATIBLE_BASE_URL_OPTIONS,

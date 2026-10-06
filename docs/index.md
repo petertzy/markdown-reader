@@ -299,7 +299,7 @@ To enable AI-powered translation features, you need to set up API keys:
 1. Open `Settings -> AI Provider & API Keys...`.
 2. Choose provider and model.
 3. Enter API key and save.
-4. If you choose `OpenAI Compatible`, you can also choose a Base URL option (`Navidia` or `Groq`).
+4. If you choose `OpenAI Compatible`, you can also choose a Base URL option (`NVIDIA` or `Groq`).
 
 The app stores provider and model in a per-user JSON file:
 
@@ -312,7 +312,7 @@ The app stores provider and model in a per-user JSON file:
 - **OpenAI**: [platform.openai.com](https://platform.openai.com/)
 - **Anthropic**: [console.anthropic.com](https://console.anthropic.com/)
 - **OpenAI Compatible**: Create an API key from your chosen compatible provider console, then select the matching Base URL preset in this app:
-  - **Navidia preset**: [NVIDIA Integrate](https://build.nvidia.com/)
+  - **NVIDIA preset**: [NVIDIA Integrate](https://build.nvidia.com/)
   - **Groq preset**: [Groq Console](https://console.groq.com/keys)
 
 API keys are saved in the OS credential store (Keychain on macOS, Credential Manager on Windows, Secret Service/KWallet on Linux when available).

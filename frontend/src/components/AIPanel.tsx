@@ -185,7 +185,7 @@ export default function AIPanel({
   const [modelsFetching, setModelsFetching] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const [provider, setProvider] = useState("openai_compatible");
-  const [baseUrlChoice, setBaseUrlChoice] = useState("navidia");
+  const [baseUrlChoice, setBaseUrlChoice] = useState("nvidia");
   const [localBaseUrlChoice, setLocalBaseUrlChoice] = useState("lm_studio");
   const [localBaseUrl, setLocalBaseUrl] = useState("[http://127.0.0.1:1234/v1](http://127.0.0.1:1234/v1)");
   const [model, setModel] = useState("");
@@ -247,7 +247,7 @@ export default function AIPanel({
       "[http://127.0.0.1:1234/v1](http://127.0.0.1:1234/v1)";
     setSettings(nextSettings);
     setProvider(nextProvider);
-    setBaseUrlChoice(nextSettings.openai_compatible_base_url_choice || "navidia");
+    setBaseUrlChoice(nextSettings.openai_compatible_base_url_choice || "nvidia");
     setLocalBaseUrlChoice(nextLocalChoice);
     setLocalBaseUrl(nextLocalBaseUrl);
     providerRef.current = nextProvider;
@@ -280,7 +280,7 @@ export default function AIPanel({
           if (nextLocalChoice !== "custom" || nextLocalBaseUrl.trim()) {
             void refreshModelOptions(
               "local",
-              nextSettings.openai_compatible_base_url_choice || "navidia",
+              nextSettings.openai_compatible_base_url_choice || "nvidia",
               nextLocalChoice,
               nextLocalBaseUrl
             );
