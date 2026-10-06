@@ -166,8 +166,9 @@ launch. All of its API requests must include that token; it is held in memory
 only and is not written to disk. The standalone development backend remains
 unauthenticated by default for local development. Set
 `MARKDOWN_READER_BACKEND_TOKEN` before starting it to require the same request
-header (`X-Markdown-Reader-Token`). To use that mode with the development UI,
-set `NEXT_PUBLIC_BACKEND_TOKEN` to the same value.
+header (`X-Markdown-Reader-Token`). Tauri development mode forwards that token
+from Rust without exposing it to WebView JavaScript. For browser-only
+development, set `NEXT_PUBLIC_BACKEND_TOKEN` to the same value.
 
 ---
 
