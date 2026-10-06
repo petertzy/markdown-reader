@@ -508,10 +508,7 @@ def _get_ai_api_key_for_provider(provider: str) -> tuple[str, str, str]:
     api_key = resolve_ai_api_key_for_slot(key_slot)
     if provider == "openai_compatible" and not api_key:
         fallback_env_var = get_ai_provider_env_var(provider)
-        api_key = (
-            os.getenv(fallback_env_var, "").strip()
-            or get_secure_ai_api_key(provider).strip()
-        )
+        api_key = resolve_ai_api_key_for_slot(provider)
         env_var = fallback_env_var
     return api_key, key_slot, env_var
 
@@ -902,7 +899,10 @@ def _apply_markdown_formatting_rules(markdown_text: str) -> str:
             continue
         line = raw_line.rstrip()
         line = re.sub(r"^(#{1,6})([^\s#])", r"\1 \2", line)
-        line = re.sub(r"^(\s*)([-*+])(\S)", r"\1\2 \3", line)
+        # The next char must not be another list marker: a run such as "---"
+        # or "***" is a thematic break (and "---" also delimits YAML
+        # frontmatter), not a tight list item, so it must stay verbatim.
+        line = re.sub(r"^(\s*)([-*+])(?![-*+])([^\s])", r"\1\2 \3", line)
         line = re.sub(r"^(\s*\d+\.)(\S)", r"\1 \2", line)
         lines.append(line)
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines))

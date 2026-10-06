@@ -13,8 +13,10 @@
     "windows": [
       {
         "title": "Markdown Reader",
-        "width": 800,
-        "height": 600,
+        "width": 1100,
+        "height": 700,
+        "minWidth": 1000,
+        "minHeight": 600,
         "resizable": true,
         "fullscreen": false
       }
@@ -26,6 +28,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "macOS": {
+      "entitlements": "entitlements.mac.plist"
+    },
     "externalBin": [
       "binaries/markdown-reader-backend"
     ],
