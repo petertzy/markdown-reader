@@ -16,8 +16,15 @@
 // Captures strong, code, link and bare-URL, in that order of preference.
 // Kept as a source string and compiled per call: a module-level /g regex would
 // carry `lastIndex` between calls, so two scans of the same text could disagree.
+// Two URL classes are deliberately narrower than prose:
+//  - the bare-URL class stops before `*` and backticks, so emphasis or code
+//    that begins right after a link ("https://a.io**now**") is not swallowed
+//    into the href;
+//  - the authored-URL class admits one level of balanced parentheses, so a
+//    "(film)"-style path keeps its closing paren and only the paren that
+//    closes the markdown link may terminate the URL.
 const INLINE_SOURCE =
-  "(\\*\\*([^*]+)\\*\\*|`([^`]+)`|\\[([^\\]]+)\\]\\((https?:\\/\\/[^)\\s]+)\\)|(https?:\\/\\/[^\\s]+))";
+  "(\\*\\*([^*]+)\\*\\*|`([^`]+)`|\\[([^\\]]+)\\]\\((https?:\\/\\/[^()\\s]*(?:\\([^()\\s]*\\)[^()\\s]*)*)\\)|(https?:\\/\\/[^\\s*`]+))";
 
 // Punctuation and quotes that belong to the surrounding prose. A URL that runs
 // straight into one of these ends before it.
