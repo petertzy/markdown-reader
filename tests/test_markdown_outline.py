@@ -15,17 +15,72 @@ These tests cover:
 
 from __future__ import annotations
 
+import re
+
 from backend.ai_logic import _generate_markdown_toc, _slugify_heading_text
 
 # Import directly from the module under test.
+from backend.renderer import assign_heading_ids, render_markdown
 from backend.routers.markdown import _extract_outline, _slugify
 
 
 def test_toc_slug_matches_outline_slug():
     # Generated TOC anchors must resolve to the anchors used by the
-    # rendered document outline.
-    for heading in ["第一章", "Résumé", "Über Alles", "Data 分析", "Hello World"]:
-        assert _slugify_heading_text(heading) == _slugify(heading)
+    # rendered document outline. This set covers the edge cases that used
+    # to diverge: consecutive hyphens, leading/trailing hyphens, inline
+    # links, inline code, strikethrough and closing-hash ATX headings.
+    headings = [
+        "第一章",
+        "Résumé",
+        "Über Alles",
+        "Data 分析",
+        "Hello World",
+        "Intro -- Details",
+        "A --- B",
+        "-Leading Dash",
+        "Trailing Dash-",
+        "[Click here](https://example.com)",
+        "link [text](url) more",
+        "`code span` heading",
+        "~~strike~~ me",
+        "UPPER Case TITLE",
+        "Tom &amp; Jerry",
+        "A &#x27;quote&#x27; B",
+        "5 &lt; 10",
+    ]
+    for heading in headings:
+        # Delegate both to the canonical implementation, but confirm the
+        # two call sites still agree with each other.
+        assert _slugify_heading_text(heading) == _slugify(heading), heading
+
+
+def test_toc_anchor_matches_outline_anchor_for_divergent_headings():
+    # End-to-end: the AI TOC links and the rendered outline anchors must
+    # agree even for headings whose anchors used to be generated
+    # differently by the two code paths.
+    md = (
+        "# Intro -- Details\n\n"
+        "## [Click here](https://example.com)\n\n"
+        "### A --- B\n\n"
+        "#### Trailing Dash-\n\n"
+        "##### -Leading Dash\n\n"
+        "###### `code span` heading\n"
+    )
+    outline_anchors = [node["anchor"] for node in _extract_outline(md)]
+    toc = _generate_markdown_toc(md)
+
+    import re
+
+    toc_anchors = [m.group(1) for m in re.finditer(r"\]\(#([^)]+)\)", toc)]
+    assert toc_anchors == outline_anchors
+    assert toc_anchors == [
+        "intro----details",
+        "click-here",
+        "a-----b",
+        "trailing-dash-",
+        "-leading-dash",
+        "code-span-heading",
+    ]
 
 
 def test_toc_keeps_unicode_headings():
@@ -141,3 +196,145 @@ def test_mixed_content():
     assert len(outline) == 4
     assert [n["level"] for n in outline] == [1, 2, 3, 2]
     assert outline[2]["text"] == "Subsection"
+
+
+# ── image headings ────────────────────────────────────────────────────────────
+#
+# An <img> in a heading renders as a tag with no text node, so its alt text is
+# the only thing a reader sees. The outline label, the AI table of contents and
+# the preview's id all have to agree on it, or a TOC link points at nothing.
+
+
+def _outline_anchors(markdown: str) -> list[str]:
+    return [node["anchor"] for node in _extract_outline(markdown)]
+
+
+def _rendered_ids(markdown: str) -> list[str]:
+    return re.findall(r'<h[1-6][^>]*\bid="([^"]*)"', render_markdown(markdown))
+
+
+def _toc_anchors(markdown: str) -> list[str]:
+    return re.findall(r"\]\(#([^)]*)\)", _generate_markdown_toc(markdown))
+
+
+def test_inline_image_alt_text_preserved():
+    md = "## ![Architecture diagram](arch.png)"
+    outline = _extract_outline(md)
+    assert outline[0]["text"] == "Architecture diagram"
+    assert outline[0]["anchor"] == "architecture-diagram"
+
+
+def test_image_only_heading_is_still_anchored():
+    # Used to produce a blank outline row and a preview heading with no id at
+    # all, so the section could not be linked to from anywhere.
+    md = "## ![Architecture diagram](arch.png)"
+
+    assert _outline_anchors(md) == ["architecture-diagram"]
+    assert _rendered_ids(md) == ["architecture-diagram"]
+    assert _toc_anchors(md) == ["architecture-diagram"]
+
+
+def test_image_only_heading_is_listed_in_the_toc():
+    # The AI table of contents used to drop the heading entirely.
+    toc = _generate_markdown_toc("## ![Architecture diagram](arch.png)\n\n## Plain")
+
+    assert "architecture-diagram" in toc
+    assert toc.count("#") >= 2
+
+
+def test_alt_text_participates_in_a_mixed_heading():
+    md = "## ![Architecture diagram](arch.png) Results"
+
+    assert _outline_anchors(md) == ["architecture-diagram-results"]
+    assert _rendered_ids(md) == ["architecture-diagram-results"]
+    assert _toc_anchors(md) == ["architecture-diagram-results"]
+
+
+def test_alt_text_is_joined_with_the_rest_of_the_heading():
+    md = "## Results ![chart](c.png) and ![legend](l.png)"
+
+    assert _extract_outline(md)[0]["text"] == "Results chart and legend"
+
+
+def test_ampersand_in_alt_text_does_not_break_the_anchor():
+    md = "## Architecture & Co ![logo](l.png)"
+
+    assert _outline_anchors(md) == ["architecture-co-logo"]
+    assert _rendered_ids(md) == ["architecture-co-logo"]
+
+
+def test_duplicate_image_headings_are_still_disambiguated():
+    md = "## ![Diagram](d.png)\n\n## ![Diagram](d.png)\n\n## ![Diagram](d.png)"
+
+    assert _outline_anchors(md) == ["diagram", "diagram-1", "diagram-2"]
+    assert _rendered_ids(md) == ["diagram", "diagram-1", "diagram-2"]
+    assert _toc_anchors(md) == ["diagram", "diagram-1", "diagram-2"]
+
+
+def test_headings_without_images_are_unchanged():
+    md = "# Overview\n\n## **Bold** heading\n\n## Use `code` here\n\n## [Link](https://x.io)"
+
+    assert _outline_anchors(md) == ["overview", "bold-heading", "use-code-here", "link"]
+    assert _rendered_ids(md) == ["overview", "bold-heading", "use-code-here", "link"]
+
+
+def test_outline_toc_and_preview_agree_on_every_anchor():
+    """The invariant the three anchor producers exist to keep.
+
+    ``_extract_outline``, ``_generate_markdown_toc`` and ``assign_heading_ids``
+    all slugify the same headings. If any one of them accounts for a piece of
+    inline markup that another ignores, TOC links silently stop resolving, so
+    the agreement is asserted directly rather than case by case.
+    """
+    document = "\n\n".join(
+        [
+            "# Title",
+            "## ![Architecture diagram](arch.png)",
+            "## Plain section",
+            "## **Bold** and *italic*",
+            "## Code `snippet()`",
+            "## [Link label](https://example.com)",
+            "## Trailing ![icon](i.png)",
+            "## [Strikethrough ~~old~~ new](https://example.com)",
+            "## Unicode — naïve café",
+            "## Duplicate",
+            "## Duplicate",
+            "### ![Nested image](n.png) child",
+        ]
+    )
+
+    outline = _outline_anchors(document)
+    assert outline == _rendered_ids(document) == _toc_anchors(document)
+
+    # Spot-check that the shared anchors are the ones the document actually has.
+    assert "architecture-diagram" in outline
+    assert "plain-section" in outline
+    assert outline.count("duplicate") == 1
+    assert "duplicate-1" in outline
+    assert "nested-image-child" in outline
+
+
+def test_heading_id_counts_an_img_written_without_a_self_closing_slash():
+    # markdown2 always emits "<img ... />", but assign_heading_ids is handed
+    # arbitrary HTML, so the plain start-tag path has to agree too.
+    html = '<h1>Title <img src="a.png" alt="Diagram"></h1>'
+
+    assert 'id="title-diagram"' in assign_heading_ids(html)
+
+
+def test_only_an_img_contributes_its_alt_to_a_heading_id():
+    # Guarding on the tag matters: any element carrying an alt attribute must
+    # not pull its value into the anchor.
+    html = '<h1>Title <span alt="ghost"></span></h1>'
+
+    assert 'id="title"' in assign_heading_ids(html)
+
+
+def test_a_heading_id_without_images_is_untouched_by_alt_handling():
+    for html, expected in (
+        ("<h2>Plain</h2>", "plain"),
+        ("<h2><code>x()</code> inline</h2>", "x-inline"),
+        ('<h2><a href="https://example.com">text</a></h2>', "text"),
+        ("<h2>Alt without an image: alt</h2>", "alt-without-an-image-alt"),
+    ):
+        assert f'id="{expected}"' in assign_heading_ids(html), html

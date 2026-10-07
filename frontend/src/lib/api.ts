@@ -13,6 +13,15 @@
  * This means NO hard-coded port leaks into the packaged desktop app.
  */
 
+import {
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  LONG_REQUEST_TIMEOUT_MS,
+  fetchWithTimeout,
+  runWithTimeout,
+} from "./http-timeout.mjs";
+
+export { DEFAULT_REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS, fetchWithTimeout };
+
 // Detect Tauri without relying only on globals. Tauri v2 may not expose
 // window.__TAURI__ unless withGlobalTauri is enabled, while packaged pages are
 // served from tauri.localhost and usually include "Tauri" in the user agent.
@@ -28,17 +37,47 @@ function isTauriRuntime() {
 }
 
 let _resolvedBaseUrl: string | null = null;
+type BackendProxyResponse = {
+  status: number;
+  bodyBase64: string;
+  contentType: string | null;
+};
 
-function fetchWithTimeout(
-  input: RequestInfo | URL,
-  init: RequestInit = {},
-  timeoutMs = 10000
-) {
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
-  return fetch(input, { ...init, signal: init.signal ?? controller.signal }).finally(
-    () => window.clearTimeout(timeoutId)
-  );
+function decodeBase64(bodyBase64: string): Uint8Array {
+  return Uint8Array.from(atob(bodyBase64), (char) => char.charCodeAt(0));
+}
+
+function decodeProxyText(response: BackendProxyResponse): string {
+  return new TextDecoder().decode(decodeBase64(response.bodyBase64));
+}
+
+async function proxyBackendRequest(
+  path: string,
+  init?: RequestInit,
+  signal?: AbortSignal
+): Promise<BackendProxyResponse> {
+  const { invoke } = await import("@tauri-apps/api/core");
+  const requestId = crypto.randomUUID();
+  const cancel = () => {
+    void invoke("cancel_backend_request", { requestId });
+  };
+  if (signal?.aborted) {
+    cancel();
+    throw new DOMException("Aborted", "AbortError");
+  }
+  signal?.addEventListener("abort", cancel, { once: true });
+  try {
+    return await invoke<BackendProxyResponse>("proxy_backend_request", {
+    request: {
+      requestId,
+      path,
+      method: init?.method ?? "GET",
+      body: typeof init?.body === "string" ? init.body : undefined,
+    },
+    });
+  } finally {
+    signal?.removeEventListener("abort", cancel);
+  }
 }
 
 /**
@@ -58,12 +97,8 @@ export async function getBaseUrl(): Promise<string> {
       if (port) {
         const candidate = `http://127.0.0.1:${port}`;
         try {
-          const health = await fetchWithTimeout(
-            `${candidate}/api/health`,
-            { cache: "no-store" },
-            2000
-          );
-          if (health.ok) {
+          const health = await proxyBackendRequest("/api/health");
+          if (health.status >= 200 && health.status < 300) {
             _resolvedBaseUrl = candidate;
             return _resolvedBaseUrl;
           }
@@ -84,40 +119,78 @@ export async function getBaseUrl(): Promise<string> {
 
 async function apiFetch<T>(
   path: string,
-  init?: RequestInit
+  init?: RequestInit,
+  timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS
 ): Promise<T> {
-  const base = await getBaseUrl();
-  const res = await fetch(`${base}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`API ${path} → ${res.status}: ${detail}`);
+  if (isTauriRuntime()) {
+    return runWithTimeout(async (signal) => {
+      const response = await proxyBackendRequest(path, init, signal);
+      const text = decodeProxyText(response);
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`API ${path} → ${response.status}: ${text}`);
+      }
+      return JSON.parse(text) as T;
+    }, init?.signal ?? undefined, timeoutMs);
   }
-  return res.json() as Promise<T>;
+
+  const base = await getBaseUrl();
+  const token = process.env.NEXT_PUBLIC_BACKEND_TOKEN ?? null;
+  return runWithTimeout(async (signal) => {
+    const res = await fetch(`${base}${path}`, {
+      ...init,
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { "X-Markdown-Reader-Token": token } : {}),
+        ...(init?.headers ?? {}),
+      },
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`API ${path} → ${res.status}: ${detail}`);
+    }
+    return res.json() as Promise<T>;
+  }, init?.signal ?? undefined, timeoutMs);
 }
 
 async function apiFetchBlob(
   path: string,
-  init?: RequestInit
+  init?: RequestInit,
+  timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS
 ): Promise<Blob> {
-  const base = await getBaseUrl();
-  const res = await fetch(`${base}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`API ${path} → ${res.status}: ${detail}`);
+  if (isTauriRuntime()) {
+    return runWithTimeout(async (signal) => {
+      const response = await proxyBackendRequest(path, init, signal);
+      const bytes = decodeBase64(response.bodyBase64);
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(`API ${path} → ${response.status}: ${new TextDecoder().decode(bytes)}`);
+      }
+      const body = bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength
+      ) as ArrayBuffer;
+      return new Blob([body], { type: response.contentType ?? "application/octet-stream" });
+    }, init?.signal ?? undefined, timeoutMs);
   }
-  return res.blob();
+
+  const base = await getBaseUrl();
+  const token = process.env.NEXT_PUBLIC_BACKEND_TOKEN ?? null;
+  return runWithTimeout(async (signal) => {
+    const res = await fetch(`${base}${path}`, {
+      ...init,
+      signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { "X-Markdown-Reader-Token": token } : {}),
+        ...(init?.headers ?? {}),
+      },
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`API ${path} → ${res.status}: ${detail}`);
+    }
+    return res.blob();
+  }, init?.signal ?? undefined, timeoutMs);
 }
 
 // ── File API ──────────────────────────────────────────────────────────────────
@@ -159,10 +232,14 @@ export const Files = {
     }),
 
   convertToMarkdown: (payload: ConvertToMarkdownPayload) =>
-    apiFetch<{ markdown: string }>("/api/files/convert-to-markdown", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    apiFetch<{ markdown: string }>(
+      "/api/files/convert-to-markdown",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   getSupportedFormats: () =>
     apiFetch<SupportedFormatsResponse>("/api/files/supported-formats"),
@@ -217,16 +294,24 @@ export const Markdown = {
     }),
 
   htmlToMarkdown: (html: string) =>
-    apiFetch<{ markdown: string }>("/api/markdown/convert/html", {
-      method: "POST",
-      body: JSON.stringify({ html }),
-    }),
+    apiFetch<{ markdown: string }>(
+      "/api/markdown/convert/html",
+      {
+        method: "POST",
+        body: JSON.stringify({ html }),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   pdfToMarkdown: (path: string, use_docling = false) =>
-    apiFetch<{ markdown: string }>("/api/markdown/convert/pdf", {
-      method: "POST",
-      body: JSON.stringify({ path, use_docling }),
-    }),
+    apiFetch<{ markdown: string }>(
+      "/api/markdown/convert/pdf",
+      {
+        method: "POST",
+        body: JSON.stringify({ path, use_docling }),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   wordCount: (content: string) =>
     apiFetch<WordCountResult>("/api/markdown/wordcount", {
@@ -243,11 +328,19 @@ export const Markdown = {
 
 // ── AI API ────────────────────────────────────────────────────────────────────
 
+export type KnowledgeSource = {
+  rel_path: string;
+  title: string;
+  section: string;
+};
+
 export type AgentChatPayload = {
   message: string;
   document_text?: string;
   selected_text?: string;
   chat_history?: { role: string; content: string }[];
+  use_knowledge_base?: boolean;
+  knowledge_top_k?: number;
 };
 
 export type AgentResponse = {
@@ -264,6 +357,7 @@ export type AgentResponse = {
     reason: string;
   };
   used_provider: string;
+  used_sources?: KnowledgeSource[];
 };
 
 export type AIAutomationTemplate = {
@@ -333,8 +427,8 @@ const AI_PROVIDER_ENV_VARS: Record<string, string> = {
 
 const OPENAI_COMPATIBLE_BASE_URL_OPTIONS: OpenAICompatibleBaseUrlOption[] = [
   {
-    key: "navidia",
-    label: "Navidia",
+    key: "nvidia",
+    label: "NVIDIA",
     url: "https://integrate.api.nvidia.com/v1",
   },
   {
@@ -389,7 +483,7 @@ function normalizeAISettings(raw: PartialAISettings): AISettings {
     providers: normalizedProviders,
     provider_order: normalizedProviderOrder,
     openai_compatible_base_url_choice:
-      raw.openai_compatible_base_url_choice ?? "navidia",
+      raw.openai_compatible_base_url_choice ?? "nvidia",
     openai_compatible_base_url_options:
       raw.openai_compatible_base_url_options ??
       OPENAI_COMPATIBLE_BASE_URL_OPTIONS,
@@ -409,15 +503,7 @@ export function getDefaultAISettings(): AISettings {
 export const AI = {
   getSettings: async () =>
     normalizeAISettings(
-      await Promise.race([
-        apiFetch<PartialAISettings>("/api/ai/settings"),
-        new Promise<never>((_, reject) =>
-          window.setTimeout(
-            () => reject(new Error("AI settings request timed out.")),
-            30000
-          )
-        ),
-      ])
+      await apiFetch<PartialAISettings>("/api/ai/settings")
     ),
 
   setProvider: (provider: string) =>
@@ -446,14 +532,20 @@ export const AI = {
 
   getModels: (provider: string, base_url_override = "") =>
     apiFetch<{ provider: string; models: string[]; message?: string }>(
-      `/api/ai/models/${provider}${base_url_override ? `?base_url_override=${encodeURIComponent(base_url_override)}` : ""}`
+      `/api/ai/models/${provider}${base_url_override ? `?base_url_override=${encodeURIComponent(base_url_override)}` : ""}`,
+      {},
+      LONG_REQUEST_TIMEOUT_MS
     ),
 
   fetchModelsWithKey: (provider: string, api_key: string, base_url_override = "") =>
-    apiFetch<{ provider: string; models: string[]; message?: string }>("/api/ai/models", {
-      method: "POST",
-      body: JSON.stringify({ provider, api_key, base_url_override }),
-    }),
+    apiFetch<{ provider: string; models: string[]; message?: string }>(
+      "/api/ai/models",
+      {
+        method: "POST",
+        body: JSON.stringify({ provider, api_key, base_url_override }),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   setOpenAICompatibleBaseUrlChoice: async (choice_key: string) => {
     try {
@@ -485,16 +577,24 @@ export const AI = {
     ),
 
   chat: (payload: AgentChatPayload) =>
-    apiFetch<AgentResponse>("/api/ai/chat", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    apiFetch<AgentResponse>(
+      "/api/ai/chat",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   work: (instruction: string, document_content: string) =>
-    apiFetch<{ modified_content: string }>("/api/ai/work", {
-      method: "POST",
-      body: JSON.stringify({ instruction, document_content }),
-    }),
+    apiFetch<{ modified_content: string }>(
+      "/api/ai/work",
+      {
+        method: "POST",
+        body: JSON.stringify({ instruction, document_content }),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   getChatHistory: () =>
     apiFetch<{ histories: unknown[] }>("/api/ai/chat/history"),
@@ -512,10 +612,14 @@ export const AI = {
     apiFetch<{ logs: unknown[] }>(`/api/ai/automation/logs?limit=${limit}`),
 
   translate: (content: string, source_language: string, target_language: string) =>
-    apiFetch<{ translated: string }>("/api/ai/translate", {
-      method: "POST",
-      body: JSON.stringify({ content, source_language, target_language }),
-    }),
+    apiFetch<{ translated: string }>(
+      "/api/ai/translate",
+      {
+        method: "POST",
+        body: JSON.stringify({ content, source_language, target_language }),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   translateSentences: (content: string, source_language: string, target_language: string) =>
     apiFetch<{ translated: string; pairs: { source: string; translated: string }[] }>(
@@ -523,7 +627,8 @@ export const AI = {
       {
         method: "POST",
         body: JSON.stringify({ content, source_language, target_language }),
-      }
+      },
+      LONG_REQUEST_TIMEOUT_MS
     ),
 
   translateSentenceBatch: (
@@ -538,7 +643,8 @@ export const AI = {
         method: "POST",
         body: JSON.stringify({ items, source_language, target_language }),
         signal,
-      }
+      },
+      LONG_REQUEST_TIMEOUT_MS
     ),
 };
 
@@ -555,28 +661,44 @@ export type ExportPayload = {
 
 export const Export = {
   toHtml: (payload: ExportPayload) =>
-    apiFetch<{ path: string }>("/api/export/html", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    apiFetch<{ path: string }>(
+      "/api/export/html",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   downloadHtml: (payload: ExportPayload) =>
-    apiFetchBlob("/api/export/html/download", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    apiFetchBlob(
+      "/api/export/html/download",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   toPdf: (payload: ExportPayload) =>
-    apiFetch<{ path: string }>("/api/export/pdf", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    apiFetch<{ path: string }>(
+      "/api/export/pdf",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 
   toDocx: (payload: ExportPayload) =>
-    apiFetch<{ path: string }>("/api/export/docx", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
+    apiFetch<{ path: string }>(
+      "/api/export/docx",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+      LONG_REQUEST_TIMEOUT_MS
+    ),
 };
 
 // ── Citations API ────────────────────────────────────────────────────────────
@@ -610,4 +732,76 @@ export const Citations = {
     apiFetch<{ entries: CitationEntry[] }>(
       `/api/citations/search?q=${encodeURIComponent(query)}`
     ),
+};
+
+// ── Knowledge Base / Directory Context API ────────────────────────────────────
+
+export type KnowledgeStatus = {
+  path: string;
+  exists: boolean;
+  enabled: boolean;
+  file_count: number;
+  chunk_count: number;
+  last_indexed_at: number | null;
+};
+
+export type KnowledgeNote = {
+  path: string;
+  rel_path: string;
+  title: string;
+  mtime: number;
+  size: number;
+  chunk_count: number;
+};
+
+export type KnowledgeChunk = {
+  id: number;
+  file_path: string;
+  rel_path: string;
+  title: string;
+  section: string;
+  content: string;
+  score?: number;
+};
+
+export const Knowledge = {
+  getStatus: () => apiFetch<KnowledgeStatus>("/api/knowledge/status"),
+
+  index: (path: string, force = false) =>
+    apiFetch<{
+      path: string;
+      total_files: number;
+      indexed_files: number;
+      skipped_files: number;
+      total_chunks: number;
+      duration_ms: number;
+    }>("/api/knowledge/index", {
+      method: "POST",
+      body: JSON.stringify({ path, force }),
+    }),
+
+  query: (query: string, top_k = 5) =>
+    apiFetch<{ query: string; count: number; results: KnowledgeChunk[] }>(
+      "/api/knowledge/query",
+      {
+        method: "POST",
+        body: JSON.stringify({ query, top_k }),
+      }
+    ),
+
+  listNotes: (limit = 100) =>
+    apiFetch<{ count: number; notes: KnowledgeNote[] }>(
+      `/api/knowledge/notes?limit=${limit}`
+    ),
+
+  toggle: (enabled: boolean) =>
+    apiFetch<{ enabled: boolean }>("/api/knowledge/toggle", {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    }),
+
+  clear: () =>
+    apiFetch<{ cleared: boolean }>("/api/knowledge/index", {
+      method: "DELETE",
+    }),
 };

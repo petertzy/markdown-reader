@@ -72,6 +72,11 @@ def _add_hyperlink(paragraph, text: str, url: str, style: dict[str, Any]) -> Non
     run.append(run_properties)
     text_element = OxmlElement("w:t")
     text_element.text = text
+    # Mirror python-docx's CT_R.add_t: preserve leading/trailing whitespace
+    # in link text, or LibreOffice/converters trim it while the identical
+    # text in a plain run is kept.
+    if len(text.strip()) < len(text):
+        text_element.set(qn("xml:space"), "preserve")
     run.append(text_element)
     hyperlink.append(run)
     paragraph._p.append(hyperlink)
@@ -116,6 +121,9 @@ class _DocxHtmlParser(HTMLParser):
         self.current_row = None
         self.current_cell = None
         self.current_list_style: list[str] = []
+        # Open ``<li>`` elements, innermost last. Each entry is
+        # ``[paragraph style, paragraph opened for the item, claimed]``.
+        self.current_list_items: list[list[Any]] = []
         self.current_style: dict[str, Any] = {
             "bold": False,
             "italic": False,
@@ -137,7 +145,17 @@ class _DocxHtmlParser(HTMLParser):
             self.current_style["pre"] = True
             self.current_paragraph = cell.paragraphs[0]
         elif tag in ("p", "blockquote"):
-            self.current_paragraph = self.document.add_paragraph()
+            item = self.current_list_items[-1] if self.current_list_items else None
+            if item is not None and not item[2] and self.current_paragraph is item[1]:
+                # A loose list wraps each item in <p>. Reuse the paragraph the
+                # <li> opened so the bullet is not orphaned. Only reuse that
+                # exact paragraph: another block (such as a heading) may have
+                # appeared before the first <p>.
+                item[2] = True
+            else:
+                self.current_paragraph = self.document.add_paragraph(
+                    style=item[0] if item is not None else None
+                )
         elif tag == "code":
             self.current_style["code"] = True
         elif tag in ("strong", "b"):
@@ -154,6 +172,7 @@ class _DocxHtmlParser(HTMLParser):
         elif tag == "li":
             style = self.current_list_style[-1] if self.current_list_style else None
             self.current_paragraph = self.document.add_paragraph(style=style)
+            self.current_list_items.append([style, self.current_paragraph, False])
         elif tag == "br" and self.current_paragraph is not None:
             self.current_paragraph.add_run().add_break()
         elif tag == "img":
@@ -184,6 +203,8 @@ class _DocxHtmlParser(HTMLParser):
         if tag in ("h1", "h2", "h3", "h4", "h5", "h6", "p", "blockquote", "li", "pre"):
             if tag == "pre":
                 self.current_style["pre"] = False
+            if tag == "li" and self.current_list_items:
+                self.current_list_items.pop()
             self.current_paragraph = None
         elif tag == "code":
             self.current_style["code"] = False
@@ -215,6 +236,16 @@ class _DocxHtmlParser(HTMLParser):
 
     def handle_data(self, data: str):
         self.data_buffer += data
+
+    def handle_entityref(self, name: str) -> None:
+        # The parser runs with convert_charrefs=False so escaped text such as
+        # "&amp;" or "&lt;" arrives through entity/character ref callbacks
+        # instead of being pre-decoded. Buffer the literal reference so the
+        # existing unescape() pass in _flush_text restores the real character.
+        self.data_buffer += f"&{name};"
+
+    def handle_charref(self, name: str) -> None:
+        self.data_buffer += f"&#{name};"
 
     def _flush_text(self):
         if not self.data_buffer:

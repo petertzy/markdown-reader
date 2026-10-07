@@ -1,3 +1,6 @@
+use base64::Engine;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::process::Command as StdCommand;
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
@@ -6,6 +9,8 @@ use tauri_plugin_shell::ShellExt;
 
 /// Shared state that holds the port the Python sidecar chose at runtime.
 struct BackendPort(Arc<Mutex<Option<u16>>>);
+struct BackendToken(Arc<Mutex<Option<String>>>);
+struct BackendRequestCancels(Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>);
 struct BackendChild(Mutex<Option<CommandChild>>);
 struct PendingOpenFiles(Mutex<Vec<String>>);
 
@@ -14,6 +19,104 @@ struct PendingOpenFiles(Mutex<Vec<String>>);
 #[tauri::command]
 fn get_backend_port(state: tauri::State<'_, BackendPort>) -> Option<u16> {
     *state.0.lock().unwrap()
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BackendRequest {
+    request_id: String,
+    path: String,
+    method: String,
+    body: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BackendResponse {
+    status: u16,
+    body_base64: String,
+    content_type: Option<String>,
+}
+
+fn backend_url(port: u16, path: &str) -> Result<String, String> {
+    if !path.starts_with("/api/") || path.starts_with("//") {
+        return Err("Only local backend API paths are allowed.".to_string());
+    }
+    Ok(format!("http://127.0.0.1:{port}{path}"))
+}
+
+/// Forward a WebView request to the local sidecar without exposing its token.
+#[tauri::command]
+async fn proxy_backend_request(
+    request: BackendRequest,
+    port_state: tauri::State<'_, BackendPort>,
+    token_state: tauri::State<'_, BackendToken>,
+    request_cancels: tauri::State<'_, BackendRequestCancels>,
+) -> Result<BackendResponse, String> {
+    let port = (*port_state.0.lock().unwrap())
+        .ok_or_else(|| "Backend sidecar is not ready.".to_string())?;
+    let token = token_state.0.lock().unwrap().clone();
+    let method = reqwest::Method::from_bytes(request.method.as_bytes())
+        .map_err(|_| "Invalid backend request method.".to_string())?;
+    let url = backend_url(port, &request.path)?;
+
+    let (cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel();
+    request_cancels
+        .0
+        .lock()
+        .unwrap()
+        .insert(request.request_id.clone(), cancel_tx);
+
+    let client = reqwest::Client::new();
+    let mut outbound = client.request(method, url);
+    if let Some(token) = token {
+        outbound = outbound.header("X-Markdown-Reader-Token", token);
+    }
+    if let Some(body) = request.body {
+        outbound = outbound
+            .header("Content-Type", "application/json")
+            .body(body);
+    }
+    let response = tokio::select! {
+        result = async {
+            let response = outbound
+                .send()
+                .await
+                .map_err(|error| format!("Backend request failed: {error}"))?;
+            let status = response.status().as_u16();
+            let content_type = response
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_owned);
+            let body = response
+                .bytes()
+                .await
+                .map_err(|error| format!("Could not read backend response: {error}"))?;
+            Ok(BackendResponse {
+                status,
+                body_base64: base64::engine::general_purpose::STANDARD.encode(body),
+                content_type,
+            })
+        } => result,
+        _ = &mut cancel_rx => Err("Backend request was cancelled.".to_string()),
+    };
+    request_cancels
+        .0
+        .lock()
+        .unwrap()
+        .remove(&request.request_id);
+    response
+}
+
+#[tauri::command]
+fn cancel_backend_request(
+    request_id: String,
+    request_cancels: tauri::State<'_, BackendRequestCancels>,
+) {
+    if let Some(cancel_tx) = request_cancels.0.lock().unwrap().remove(&request_id) {
+        let _ = cancel_tx.send(());
+    }
 }
 
 #[tauri::command]
@@ -78,6 +181,7 @@ fn normalize_windows_path(arg: &str) -> Option<String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let port_state = Arc::new(Mutex::new(None::<u16>));
+    let token_state = Arc::new(Mutex::new(None::<String>));
 
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
@@ -106,10 +210,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(BackendPort(port_state))
+        .manage(BackendToken(token_state))
+        .manage(BackendRequestCancels(Mutex::new(HashMap::new())))
         .manage(BackendChild(Mutex::new(None)))
         .manage(PendingOpenFiles(Mutex::new(Vec::new())))
         .invoke_handler(tauri::generate_handler![
             get_backend_port,
+            proxy_backend_request,
+            cancel_backend_request,
             take_pending_open_files
         ])
         .on_window_event(|window, event| {
@@ -141,6 +249,10 @@ pub fn run() {
                     .and_then(|value| value.parse::<u16>().ok())
                     .unwrap_or(8000);
                 *app.state::<BackendPort>().0.lock().unwrap() = Some(backend_port);
+                *app.state::<BackendToken>().0.lock().unwrap() =
+                    std::env::var("MARKDOWN_READER_BACKEND_TOKEN")
+                        .ok()
+                        .filter(|token| !token.is_empty());
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
                         .level(log::LevelFilter::Info)
@@ -163,17 +275,23 @@ pub fn run() {
 
             // Clone the port store so the async task can write into it.
             let port_arc = app.state::<BackendPort>().0.clone();
+            let token_arc = app.state::<BackendToken>().0.clone();
 
             tauri::async_runtime::spawn(async move {
                 while let Some(event) = rx.recv().await {
                     if let CommandEvent::Stdout(bytes) = event {
                         let line = String::from_utf8_lossy(&bytes);
-                        // Backend prints "BACKEND_PORT=<n>" as its very first line.
+                        if let Some(token) = line.trim().strip_prefix("BACKEND_TOKEN=") {
+                            *token_arc.lock().unwrap() = Some(token.to_string());
+                        }
                         if let Some(rest) = line.trim().strip_prefix("BACKEND_PORT=") {
                             if let Ok(port) = rest.parse::<u16>() {
                                 *port_arc.lock().unwrap() = Some(port);
-                                break; // port received — no need to keep reading
                             }
+                        }
+                        if port_arc.lock().unwrap().is_some() && token_arc.lock().unwrap().is_some()
+                        {
+                            break;
                         }
                     }
                 }
@@ -236,6 +354,17 @@ mod tests {
         assert_eq!(normalize_windows_path("--config"), None);
         assert_eq!(normalize_windows_path("-v"), None);
         assert_eq!(normalize_windows_path(""), None);
+    }
+
+    #[test]
+    fn test_backend_url_accepts_only_local_api_paths() {
+        assert_eq!(
+            backend_url(8123, "/api/health").unwrap(),
+            "http://127.0.0.1:8123/api/health"
+        );
+        assert!(backend_url(8123, "https://example.com").is_err());
+        assert!(backend_url(8123, "//example.com/api/health").is_err());
+        assert!(backend_url(8123, "/other/path").is_err());
     }
 
     #[test]

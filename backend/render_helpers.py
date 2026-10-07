@@ -84,7 +84,16 @@ def protect_math(markdown_text: str) -> tuple[str, dict[str, str]]:
     text = _mask_code_regions(markdown_text, code_replacements)
 
     text = re.sub(r"\$\$([\s\S]+?)\$\$", replace_block, text)
-    text = re.sub(r"(?<!\$)\$(?!\$)([^\$\n]+?)(?<!\$)\$(?!\$)", replace_inline, text)
+
+    # Dollar math requires non-whitespace next to both inner boundaries.
+    # A closing dollar cannot introduce another numeric amount. Together
+    # these rules preserve currency prose without rejecting $2x$ or $5$.
+    # Escaped dollars and double-dollar delimiters are not inline boundaries.
+    text = re.sub(
+        r"(?<![\$\\])\$(?![\s$])([^\$\n]+?)(?<![\s$\\])\$(?![\d$])",
+        replace_inline,
+        text,
+    )
 
     # Restore the code spans so markdown2 still renders them as code.
     for key, value in code_replacements.items():
@@ -135,15 +144,31 @@ def get_mathjax_script() -> str:
 
 
 def fix_image_paths(markdown_text: str, base_path: str) -> str:
-    """Resolve relative Markdown image paths against a base directory."""
+    """Resolve relative Markdown image paths against a base directory.
+
+    Fenced blocks and inline code spans are masked out first. Image syntax
+    inside them is literal sample text, not an image to load, and rewriting it
+    corrupts the code the author is showing: a tutorial demonstrating
+    ``![diagram](diagram.png)`` had its own example rewritten to an absolute
+    ``file://`` URL in the rendered preview. Reuses the same code-region masking
+    that :func:`protect_math` relies on, so both agree on what counts as code.
+    """
 
     def replace_image(match: re.Match[str]) -> str:
         alt = match.group(1)
         src = match.group(2)
-        if src.startswith(("http://", "https://", "file://", "/")):
+        if src.lower().startswith(("http://", "https://", "file://", "/", "data:")):
             return match.group(0)
         abs_path = os.path.abspath(os.path.join(base_path, src))
         abs_url = "file://" + abs_path.replace("\\", "/")
         return f"![{alt}]({abs_url})"
 
-    return re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", replace_image, markdown_text)
+    code_replacements: dict[str, str] = {}
+    text = _mask_code_regions(markdown_text or "", code_replacements)
+    text = re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", replace_image, text)
+
+    # Restore the code spans verbatim.
+    for key, value in code_replacements.items():
+        text = text.replace(key, value)
+
+    return text

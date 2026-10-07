@@ -16,3 +16,44 @@ html, body, #__next {
 .focus-mode-editor .milkdown {
   --crepe-base-font-size: var(--fme-font-size);
 }
+
+/*
+ * Workaround for the Monaco find-widget flicker.
+ * When the find bar is open, hovering over its action buttons (Close / Cancel,
+ * find-in-selection, match arrows) can cause the built-in action-bar tooltip to
+ * stack its label and keybinding onto two lines. The tooltip then grows tall
+ * enough to overlap the button it belongs to, which makes the browser flip the
+ * hover back and forth and the whole widget visibly flicker while cancelling.
+ *
+ * We keep the tooltip on a single row and stop it from capturing pointer events
+ * while the find widget is visible, so it can never sit on top of the buttons.
+ *
+ * NOTE: :has() takes RELATIVE selectors, so the argument must NOT repeat the
+ * subject element. `body:has(.monaco-editor .find-widget.visible)` correctly
+ * matches a <body> that has a descendant .find-widget.visible; `:has(body …)`
+ * would instead require a nested <body> element and never match.
+ *
+ * See: microsoft/monaco-editor#5208, microsoft/monaco-editor#5296.
+ * Approach adapted from PostHog/posthog@0037887.
+ */
+body:has(.monaco-editor .find-widget.visible)
+  .workbench-hover-container,
+body:has(.monaco-editor .find-widget.visible)
+  .workbench-hover-container .hover-row,
+body:has(.monaco-editor .find-widget.visible)
+  .workbench-hover-container .hover-contents,
+body:has(.monaco-editor .find-widget.visible)
+  .workbench-hover-container .action-container,
+body:has(.monaco-editor .find-widget.visible)
+  .workbench-hover-container .actions-container {
+  display: flex !important;
+  flex-flow: row nowrap !important;
+  gap: 6px !important;
+  align-items: center !important;
+  white-space: nowrap !important;
+}
+
+body:has(.monaco-editor .find-widget.visible)
+  .workbench-hover-container {
+  pointer-events: none !important;
+}

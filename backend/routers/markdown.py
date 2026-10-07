@@ -7,10 +7,8 @@ Markdown rendering and conversion endpoints.
 from __future__ import annotations
 
 import os
-import re
 import sys
 import tempfile
-import unicodedata
 import webbrowser
 from pathlib import Path
 
@@ -59,23 +57,23 @@ class OpenPreviewPayload(RenderPayload):
 
 # ── Heading helpers ───────────────────────────────────────────────────────────
 
-# Matches ATX headings: `# Heading` … `###### Heading`
-_ATX_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)(?:\s+#+\s*)?$", re.MULTILINE)
-
-# Characters that should be stripped when building a GitHub-style slug
-_NON_WORD_RE = re.compile(r"[^\w\s-]")
-_WHITESPACE_RE = re.compile(r"\s+")
+from backend.heading_anchor import (
+    extract_heading_text,
+    iter_heading_matches,
+    slugify_heading,
+    unique_heading_slug,
+)
 
 
 def _slugify(text: str) -> str:
-    """Produce a GitHub-compatible heading anchor from heading text."""
-    text = text.lower()
-    # Normalise Unicode so accented chars are preserved but combining marks
-    # that have no direct ASCII equivalent are stripped.
-    text = unicodedata.normalize("NFC", text)
-    text = _NON_WORD_RE.sub("", text)
-    text = _WHITESPACE_RE.sub("-", text.strip())
-    return text
+    """Produce a GitHub-compatible heading anchor from heading text.
+
+    Thin wrapper kept for backwards compatibility; the canonical logic
+    lives in ``backend.heading_anchor.slugify_heading`` (shared with the
+    AI table-of-contents generator so TOC anchors resolve against the
+    rendered outline).
+    """
+    return slugify_heading(text)
 
 
 def _extract_outline(markdown: str) -> list[dict]:
@@ -92,19 +90,13 @@ def _extract_outline(markdown: str) -> list[dict]:
     # Track slugs so duplicates get the ``-1``, ``-2`` … suffix (GitHub rule).
     slug_counts: dict[str, int] = {}
 
-    for match in _ATX_HEADING_RE.finditer(markdown):
+    for match in iter_heading_matches(markdown):
         level = len(match.group(1))
         raw_text = match.group(2).strip()
-        # Strip common inline Markdown so the label is readable plain text.
-        plain = re.sub(
-            r"\*{1,2}|_{1,2}|`|~~|!\[.*?\]\(.*?\)|\[([^\]]*)\]\(.*?\)", r"\1", raw_text
-        )
-        plain = plain.strip()
+        plain = extract_heading_text(raw_text)
 
-        base_slug = _slugify(plain)
-        count = slug_counts.get(base_slug, 0)
-        slug = base_slug if count == 0 else f"{base_slug}-{count}"
-        slug_counts[base_slug] = count + 1
+        base_slug = slugify_heading(raw_text)
+        slug = unique_heading_slug(base_slug, slug_counts)
 
         line_number = markdown[: match.start()].count("\n") + 1
 
@@ -212,9 +204,11 @@ def word_count(payload: RenderPayload):
     stripped = strip_markdown(payload.content)
     words = count_words(stripped)
     chars_with = len(payload.content)
-    chars_without = len(
-        payload.content.replace(" ", "").replace("\n", "").replace("\t", "")
-    )
+    # Splitting on whitespace drops every character Python recognises as
+    # whitespace, rather than only space, newline and tab. A carriage return
+    # from a CRLF file and a non-breaking space pasted out of a web page are
+    # both spaces, and neither is a character of the document.
+    chars_without = len("".join(payload.content.split()))
     return {
         "words": words,
         "chars_with_spaces": chars_with,

@@ -1,7 +1,18 @@
 // setup-monaco.mjs
 // Polyfills and loaders required to load Monaco Editor in Node environment for regression tests.
 
+const navigatorMock = {
+  userAgent: "node.js",
+  maxTouchPoints: 0,
+  language: "en-US",
+};
+
+Object.defineProperty(globalThis, "navigator", {
+  configurable: true,
+  value: navigatorMock,
+});
 globalThis.window = {
+  navigator: navigatorMock,
   addEventListener: () => {},
   removeEventListener: () => {},
   matchMedia: () => ({

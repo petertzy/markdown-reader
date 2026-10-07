@@ -20,6 +20,7 @@ if _ROOT not in sys.path:
 
 import markdown2
 
+from backend.heading_anchor import slugify_heading, unique_heading_slug
 from backend.render_helpers import (
     fix_image_paths,
     get_math_styles,
@@ -30,8 +31,16 @@ from backend.render_helpers import (
 
 _BARE_URL_RE = re.compile(r"https?://[^\s<]+")
 _AUTOLINK_SKIP_TAGS = {"a", "code", "pre", "script", "style"}
+# `script` and `style` are CDATA elements: html.parser hands us their body
+# verbatim in handle_data, with no entity splitting. markdown2 has already
+# escaped `code`/`pre`, which therefore arrive as entity refs and pass through
+# _flush untouched.
+_CDATA_SKIP_TAGS = frozenset({"script", "style"})
 _TRAILING_URL_PUNCTUATION = ".,;:!?)]}\"'"
 _URL_CLOSER_TO_OPENER = {")": "(", "]": "[", "}": "{"}
+
+_HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
+_NO_HEADING_IDS_TAGS = {"pre", "script", "style"}
 
 
 def _trim_trailing_url_punctuation(url: str) -> tuple[str, str]:
@@ -88,11 +97,16 @@ class _BareUrlLinkifier(HTMLParser):
         if not self._buf:
             return
         if self.skip_stack:
-            self.parts.append(
-                "".join(
-                    s if is_entity else html_escape(s) for is_entity, s in self._buf
+            if self.skip_stack[-1] in _CDATA_SKIP_TAGS:
+                # Emit verbatim: escaping here would corrupt the source, e.g.
+                # ".x > .y" would stop being a child selector.
+                self.parts.append("".join(s for _, s in self._buf))
+            else:
+                self.parts.append(
+                    "".join(
+                        s if is_entity else html_escape(s) for is_entity, s in self._buf
+                    )
                 )
-            )
         else:
             self.parts.append(_linkify_text_with_entities(self._buf))
         self._buf = []
@@ -128,6 +142,24 @@ class _BareUrlLinkifier(HTMLParser):
 
     def handle_charref(self, name: str) -> None:
         self._buf.append((True, f"&#{name};"))
+
+    # html.parser's default implementations of the four raw-HTML callbacks are
+    # bare ``pass``, so any token below is parsed and then thrown away instead
+    # of being re-emitted into ``parts``. Tags are handled above; these are the
+    # non-tag forms, and each one has to be rebuilt from its payload or it
+    # silently disappears from the preview and from every HTML/PDF/DOCX export.
+
+    def handle_comment(self, data: str) -> None:
+        self._flush()
+        self.parts.append(f"<!--{data}-->")
+
+    def handle_decl(self, decl: str) -> None:
+        self._flush()
+        self.parts.append(f"<!{decl}>")
+
+    def handle_pi(self, data: str) -> None:
+        self._flush()
+        self.parts.append(f"<?{data}>")
 
 
 def _linkify_text_with_entities(
@@ -169,6 +201,178 @@ def _linkify_text_with_entities(
 
 def linkify_bare_urls(html: str) -> str:
     parser = _BareUrlLinkifier()
+    parser.feed(html)
+    parser.close()
+    return "".join(parser.parts)
+
+
+class _HeadingIdAssigner(HTMLParser):
+    """Inject canonical GitHub-style anchor IDs into rendered headings.
+
+    Rerenders every ``<h1>``–``<h6>`` opening tag with an ``id`` whose slug
+    exactly matches the anchors produced by ``backend.heading_anchor``
+    (and therefore the document outline and the AI table of contents).
+    Duplicate headings get the same ``base``, ``base-1``, ``base-2`` …
+    suffixes in document order, and headings inside ``pre``/``script``/
+    ``style`` blocks are left untouched.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.parts: list[str] = []
+        self._skip_stack: list[str] = []
+        self._heading_tag: str | None = None
+        self._heading_open: str | None = None
+        self._heading_inner: list[str] = []
+        self._heading_text: list[str] = []
+        self._slug_counts: dict[str, int] = {}
+
+    # -- heading lifecycle ------------------------------------------------------
+
+    @staticmethod
+    def _alt_of_image(attrs) -> str | None:
+        """Return an ``<img>``'s alt text, which is the content it shows.
+
+        An ``<img>`` has no text node, so nothing else in a heading can account
+        for it. ``backend.heading_anchor`` keeps an image's alt text when it
+        builds the outline label, so it has to be counted here too or the two
+        disagree on the anchor. html.parser has already decoded the attribute
+        value, so this is exactly what the preview displays.
+        """
+        if not attrs:
+            return None
+        return dict(attrs).get("alt") or None
+
+    def _note_inline_image(self, tag: str, attrs) -> None:
+        if tag.lower() == "img":
+            alt = self._alt_of_image(attrs)
+            if alt:
+                self._heading_text.append(alt)
+
+    def _close_heading(self, tag: str) -> None:
+        slug = slugify_heading("".join(self._heading_text))
+        if slug:
+            unique = unique_heading_slug(slug, self._slug_counts)
+            opening = self._heading_open or f"<{tag}>"
+            if opening.endswith(">"):
+                opening = opening[:-1] + f' id="{unique}">'
+            self.parts.append(opening)
+        elif self._heading_open:
+            self.parts.append(self._heading_open)
+        else:
+            self.parts.append(f"<{tag}>")
+        self.parts.extend(self._heading_inner)
+        self.parts.append(f"</{tag}>")
+        self._heading_tag = None
+        self._heading_open = None
+        self._heading_inner = []
+        self._heading_text = []
+
+    # -- HTMLParser callbacks ---------------------------------------------------
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        tag = tag.lower()
+        tag_text = self.get_starttag_text() or f"<{tag}>"
+        if self._heading_tag is not None:
+            # Inline markup inside a heading (e.g. ``<code>``, ``<a>``) —
+            # keep it verbatim; only text contributes to the slug.
+            self._heading_inner.append(tag_text)
+            self._note_inline_image(tag, attrs)
+            return
+        if self._skip_stack:
+            self.parts.append(tag_text)
+            if tag in _NO_HEADING_IDS_TAGS and tag == self._skip_stack[-1]:
+                self._skip_stack.append(tag)
+            return
+        if tag in _NO_HEADING_IDS_TAGS:
+            self._skip_stack.append(tag)
+            self.parts.append(tag_text)
+            return
+        if tag in _HEADING_TAGS:
+            self._heading_tag = tag
+            self._heading_open = tag_text
+            self._heading_inner = []
+            self._heading_text = []
+            return
+        self.parts.append(tag_text)
+
+    def handle_startendtag(self, tag: str, attrs) -> None:
+        tag_text = self.get_starttag_text() or ""
+        if self._heading_tag is not None:
+            self._heading_inner.append(tag_text)
+            self._note_inline_image(tag, attrs)
+        else:
+            self.parts.append(tag_text)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if self._heading_tag is not None:
+            if tag == self._heading_tag:
+                self._close_heading(tag)
+            else:
+                self._heading_inner.append(f"</{tag}>")
+            return
+        if self._skip_stack:
+            if tag == self._skip_stack[-1]:
+                self._skip_stack.pop()
+            self.parts.append(f"</{tag}>")
+            return
+        self.parts.append(f"</{tag}>")
+
+    def handle_data(self, data: str) -> None:
+        if self._heading_tag is not None:
+            self._heading_inner.append(data)
+            self._heading_text.append(data)
+        else:
+            self.parts.append(data)
+
+    def handle_entityref(self, name: str) -> None:
+        raw = f"&{name};"
+        if self._heading_tag is not None:
+            self._heading_inner.append(raw)
+            self._heading_text.append(raw)
+        else:
+            self.parts.append(raw)
+
+    def handle_charref(self, name: str) -> None:
+        raw = f"&#{name};"
+        if self._heading_tag is not None:
+            self._heading_inner.append(raw)
+            self._heading_text.append(raw)
+        else:
+            self.parts.append(raw)
+
+    def handle_comment(self, data: str) -> None:
+        if self._heading_tag is not None:
+            self._heading_inner.append(f"<!--{data}-->")
+        else:
+            self.parts.append(f"<!--{data}-->")
+
+    def handle_decl(self, decl: str) -> None:
+        raw = f"<!{decl}>"
+        if self._heading_tag is not None:
+            self._heading_inner.append(raw)
+        else:
+            self.parts.append(raw)
+
+    def handle_pi(self, data: str) -> None:
+        # Without this the assigner — which runs after the linkifier — would be
+        # the one to drop a processing instruction the linkifier had just
+        # preserved, so the token would still never reach the output.
+        if self._heading_tag is not None:
+            self._heading_inner.append(f"<?{data}>")
+        else:
+            self.parts.append(f"<?{data}>")
+
+
+def assign_heading_ids(html: str) -> str:
+    """Add ``id`` attributes to rendered headings using canonical anchors.
+
+    The slugs (and duplicate ``-1``/``-2``… suffixes) match
+    ``backend.heading_anchor.slugify_heading`` so that TOC links such as
+    ``[Intro -- Details](#intro----details)`` resolve against the preview.
+    """
+    parser = _HeadingIdAssigner()
     parser.feed(html)
     parser.close()
     return "".join(parser.parts)
@@ -226,6 +430,7 @@ def render_markdown(
         )
         html_content = restore_math(html_content, math_replacements)
         html_content = linkify_bare_urls(html_content)
+        html_content = assign_heading_ids(html_content)
     except Exception:
         import traceback
 

@@ -12,6 +12,7 @@ or:
 from __future__ import annotations
 
 import os
+import secrets
 import sys
 import threading
 import time
@@ -26,16 +27,35 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
-from backend.routers import ai, citations, export, files, markdown
+from backend.routers import ai, citations, export, files, knowledge, markdown
 
 app = FastAPI(
     title="Markdown Reader API",
     description="Local Python backend for Markdown Reader desktop application.",
     version="2.0.0",
 )
+
+_BACKEND_AUTH_TOKEN = os.environ.get("MARKDOWN_READER_BACKEND_TOKEN", "")
+
+
+@app.middleware("http")
+async def require_backend_token(request: Request, call_next):
+    """Require the per-launch sidecar token in packaged desktop builds.
+
+    Development servers retain their existing no-token workflow. Packaged
+    sidecars generate an unpredictable token at launch and expose it only to
+    the Tauri host over the child process stdout pipe.
+    """
+    if _BACKEND_AUTH_TOKEN and not secrets.compare_digest(
+        request.headers.get("X-Markdown-Reader-Token", ""), _BACKEND_AUTH_TOKEN
+    ):
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized"})
+    return await call_next(request)
+
 
 # Allow the Next.js dev server and Tauri webview to communicate with us.
 app.add_middleware(
@@ -59,6 +79,7 @@ app.include_router(markdown.router, prefix="/api/markdown", tags=["markdown"])
 app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
 app.include_router(export.router, prefix="/api/export", tags=["export"])
 app.include_router(citations.router, prefix="/api/citations", tags=["citations"])
+app.include_router(knowledge.router, prefix="/api/knowledge", tags=["knowledge"])
 
 
 @app.get("/api/health")
@@ -75,6 +96,66 @@ def _find_free_port() -> int:
         return s.getsockname()[1]
 
 
+# STILL_ACTIVE is what GetExitCodeProcess reports for a process that has not
+# exited; PROCESS_QUERY_LIMITED_INFORMATION is the narrowest right that still
+# answers the same question.
+_STILL_ACTIVE = 259
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+_ERROR_ACCESS_DENIED = 5
+
+
+def _parent_is_running(pid: int) -> bool:
+    """Whether ``pid`` still names a live process.
+
+    ``os.kill(pid, 0)`` asks that without touching the process on POSIX, but it
+    is not a probe on Windows: every signal outside the two console events is
+    handed to ``TerminateProcess``, so a 0 there kills the very process being
+    inspected (https://docs.python.org/3/library/os.html#os.kill). Read the exit
+    code instead.
+    """
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            # The pid is taken, just not by us.
+            return True
+        return True
+
+    import ctypes
+
+    kernel32 = ctypes.WinDLL("kernel32")
+    # Declared rather than left to ctypes' defaults: a handle is pointer-sized,
+    # so the default c_int return type would truncate it on 64-bit Windows.
+    kernel32.OpenProcess.argtypes = (ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32)
+    kernel32.OpenProcess.restype = ctypes.c_void_p
+    kernel32.GetExitCodeProcess.argtypes = (
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_uint32),
+    )
+    kernel32.GetExitCodeProcess.restype = ctypes.c_int
+    kernel32.CloseHandle.argtypes = (ctypes.c_void_p,)
+    kernel32.CloseHandle.restype = ctypes.c_int
+    kernel32.GetLastError.argtypes = ()
+    kernel32.GetLastError.restype = ctypes.c_uint32
+
+    handle = kernel32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not handle:
+        # An access-denied error still means the pid exists.  Conservatively
+        # leave the sidecar running rather than orphan it while its host lives.
+        return kernel32.GetLastError() == _ERROR_ACCESS_DENIED
+    try:
+        exit_code = ctypes.c_uint32()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return False
+        # A handle can outlive the process it names, so opening one is not
+        # proof of life; STILL_ACTIVE is.
+        return exit_code.value == _STILL_ACTIVE
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _start_parent_watchdog() -> None:
     """Exit the sidecar if the Tauri host process is gone."""
     parent_pid = os.environ.get("MARKDOWN_READER_PARENT_PID")
@@ -89,12 +170,8 @@ def _start_parent_watchdog() -> None:
     def watch_parent() -> None:
         while True:
             time.sleep(2)
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
+            if not _parent_is_running(pid):
                 os._exit(0)
-            except PermissionError:
-                continue
 
     threading.Thread(target=watch_parent, daemon=True).start()
 
@@ -108,7 +185,12 @@ def main() -> None:
     """
     _start_parent_watchdog()
     port = _find_free_port()
+    token = secrets.token_urlsafe(32)
+    os.environ["MARKDOWN_READER_BACKEND_TOKEN"] = token
+    global _BACKEND_AUTH_TOKEN
+    _BACKEND_AUTH_TOKEN = token
     # Flush immediately so the Tauri stdout reader sees it without delay.
+    print(f"BACKEND_TOKEN={token}", flush=True)
     print(f"BACKEND_PORT={port}", flush=True)
     uvicorn.run(app, host="127.0.0.1", port=port, reload=False)
 

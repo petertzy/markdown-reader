@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "markdown-reader"
-version = "2.0.8"
+version = "2.1.0"
 requires-python = ">=3.11,<3.14"
 dependencies = [
     # --- Core markdown / conversion ---
@@ -25,6 +25,9 @@ dependencies = [
     "fastapi>=0.111.0",
     "uvicorn[standard]>=0.29.0",
     "pydantic>=2.7.0",
+    "ziamath>=0.12,<0.14",
+    "latex2mathml>=3.77,<4",
+    "beautifulsoup4>=4.12,<5",
 ]
 
 [project.optional-dependencies]
@@ -75,6 +78,7 @@ indent-style = "space"
 dev = [
     "pre-commit>=4.5.1",
     "pyinstaller>=6.20.0",
+    "pytest>=8.0",
 ]
 # ty is Astral's type checker (https://github.com/astral-sh/ty).
 # Configuration will grow as the project adopts type annotations.

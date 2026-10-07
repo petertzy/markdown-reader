@@ -11,7 +11,7 @@ import sys
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _ROOT not in sys.path:
@@ -64,6 +64,8 @@ class AgentChatPayload(BaseModel):
     document_text: str = ""
     selected_text: str = ""
     chat_history: list[dict[str, Any]] = []
+    use_knowledge_base: bool = False
+    knowledge_top_k: int = Field(default=5, ge=1, le=20)
 
 
 class WorkPayload(BaseModel):
@@ -218,7 +220,14 @@ def get_models(provider: str, base_url_override: str = ""):
             if override.rstrip("/") == str(option["url"]).rstrip("/"):
                 key_slot = logic.get_openai_compatible_storage_key_name(option["key"])
                 break
-    api_key = "" if provider == "local" else logic.get_secure_ai_api_key(key_slot)
+    api_key = ""
+    if provider != "local":
+        api_key = logic.resolve_ai_api_key_for_slot(key_slot)
+        # Mirrors the fallback in `_get_ai_api_key_for_provider`: an
+        # openai-compatible endpoint falls back to the provider-wide slot when
+        # the slot chosen for `base_url_override` holds nothing.
+        if provider == "openai_compatible" and not api_key:
+            api_key = logic.resolve_ai_api_key_for_slot(provider)
     try:
         models = logic.fetch_available_models(
             provider, api_key, base_url_override=base_url_override
@@ -275,6 +284,8 @@ def ai_chat(payload: AgentChatPayload):
             document_text=payload.document_text,
             selected_text=payload.selected_text,
             chat_history=payload.chat_history,
+            use_knowledge_base=payload.use_knowledge_base,
+            knowledge_top_k=payload.knowledge_top_k,
         )
     except logic.TranslationConfigError as exc:
         raise HTTPException(

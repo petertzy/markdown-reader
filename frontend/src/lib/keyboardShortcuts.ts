@@ -47,7 +47,8 @@ export type ShortcutDefinition = {
 export type ShortcutOverrideMap = Partial<Record<ActionId, ShortcutBinding[]>>;
 
 const isMac =
-  typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
+  typeof navigator !== "undefined" &&
+  (/Mac|iPhone|iPad|iPod/i.test(navigator.platform) || /Mac/i.test(navigator.userAgent));
 
 function keyCodeFor(key: string) {
   if (/^[a-z]$/i.test(key)) return `Key${key.toUpperCase()}`;
@@ -78,11 +79,17 @@ export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
     scope: "global",
     bindings: [primary("w", { shift: true })],
   },
-  { id: "edit.undo", label: "Undo", scope: "global", bindings: [primary("z")] },
+  // Undo/redo drive the document editor (useActions maps them to
+  // runMonacoAction), so they are scoped to the editor like every other
+  // `edit.*` / `format.*` command. With `scope: "global"` they also fired while
+  // typing in the AI panel's chat and work-instruction textareas and in the
+  // settings inputs: preventDefault killed the field's native undo, then focus
+  // jumped to Monaco and undid a document edit instead.
+  { id: "edit.undo", label: "Undo", scope: "editor", bindings: [primary("z")] },
   {
     id: "edit.redo",
     label: "Redo",
-    scope: "global",
+    scope: "editor",
     bindings: isMac
       ? [primary("z", { shift: true })]
       : [{ key: "y", ctrl: true }, primary("z", { shift: true })],
@@ -158,6 +165,29 @@ export function shortcutMatchesEvent(binding: ShortcutBinding, event: KeyboardEv
     event.shiftKey === Boolean(binding.shift) &&
     event.altKey === Boolean(binding.alt)
   );
+}
+
+/**
+ * Whether an IME-composing keydown should be ignored for a given binding.
+ *
+ * Genuine IME composition must never fire an app shortcut. On some layouts
+ * (e.g. Windows AltGr) a composing chord is reported with both `ctrlKey` and
+ * `altKey` set, and because our `Ctrl+Alt+…` bindings match on the physical
+ * `code` ({@link shortcutMatchesEvent}), those chords could otherwise hit e.g.
+ * `Ctrl+Alt+T` (insert table). We therefore keep Alt-involving bindings blocked
+ * while a composition is in progress.
+ *
+ * WebKit/Tauri in the packaged app can spuriously report `isComposing === true`
+ * for plain Ctrl/Meta chords (the false-positive the packaged-app fix exists to
+ * work around). Those never involve Alt, so we only trust `isComposing` to
+ * block bindings that require Alt — non-Alt shortcuts still match and continue
+ * to work even when `isComposing` is wrongly set.
+ */
+export function isCompositionBlocked(
+  binding: ShortcutBinding,
+  event: Pick<KeyboardEvent, "isComposing">
+): boolean {
+  return event.isComposing && Boolean(binding.alt);
 }
 
 export function formatShortcut(binding?: ShortcutBinding) {

@@ -60,3 +60,121 @@ def test_exclamation_and_question_marks_still_split():
         "Yes!",
         "Bye.",
     ]
+
+
+def test_closing_quote_stays_with_its_sentence():
+    units = split_text_into_translation_units('He said "Stop." Then ran.')
+    assert units == ['He said "Stop."', "Then ran."]
+
+
+def test_closing_single_quote_stays_with_its_sentence():
+    units = split_text_into_translation_units("She asked 'Why?' He answered.")
+    assert units == ["She asked 'Why?'", "He answered."]
+
+
+def test_exclamation_before_closing_quote_stays_with_sentence():
+    units = split_text_into_translation_units('He yelled "Help!" She came.')
+    assert units == ['He yelled "Help!"', "She came."]
+
+
+def test_closing_bracket_absorbed_into_finished_sentence():
+    # "(Stop.)" is a complete quoted unit; the closing bracket must not
+    # be orphaned onto the next unit.
+    units = split_text_into_translation_units("The guard called (Stop.) Then left.")
+    assert units == ["The guard called (Stop.)", "Then left."]
+
+
+def test_quoted_fragment_with_lowercase_follow_does_not_split():
+    # "after" starts lowercase, so "quote." is not a real sentence end —
+    # the quote must stay inline with the rest of the line.
+    units = split_text_into_translation_units('Single "quote." after.')
+    assert units == ['Single "quote." after.']
+
+
+def test_chinese_sentences_split_without_spaces():
+    # 。！？ are followed directly by the next character in CJK text, so the
+    # "next char must be a space/quote/bracket" rule kept the whole paragraph as
+    # one unit.
+    assert split_text_into_translation_units(
+        "\u4eca\u5929\u5929\u6c14\u5f88\u597d\u3002\u6211\u4eec\u53bb\u516c\u56ed\u5427\u3002\u660e\u5929\u518d\u8bf4\u3002"
+    ) == [
+        "\u4eca\u5929\u5929\u6c14\u5f88\u597d\u3002",
+        "\u6211\u4eec\u53bb\u516c\u56ed\u5427\u3002",
+        "\u660e\u5929\u518d\u8bf4\u3002",
+    ]
+
+
+def test_fullwidth_question_and_exclamation_split():
+    assert split_text_into_translation_units(
+        "\u4f60\u53bb\u5417\uff1f\u6211\u4e0d\u77e5\u9053\uff01\u771f\u7684\u3002"
+    ) == [
+        "\u4f60\u53bb\u5417\uff1f",
+        "\u6211\u4e0d\u77e5\u9053\uff01",
+        "\u771f\u7684\u3002",
+    ]
+
+
+def test_japanese_sentences_split():
+    assert split_text_into_translation_units(
+        "\u3053\u308c\u306f\u672c\u3067\u3059\u3002\u305d\u308c\u306f\u30da\u30f3\u3067\u3059\u3002"
+    ) == [
+        "\u3053\u308c\u306f\u672c\u3067\u3059\u3002",
+        "\u305d\u308c\u306f\u30da\u30f3\u3067\u3059\u3002",
+    ]
+
+
+def test_cjk_closing_quote_stays_with_its_sentence():
+    # 「停。」 is one unit; the closing bracket must not be orphaned onto the
+    # next unit the way ASCII closing quotes are guarded against.
+    assert split_text_into_translation_units(
+        "\u7136\u540e\u4ed6\u8bf4\u300c\u505c\u3002\u300d\u63a5\u7740\u8d70\u4e86\u3002"
+    ) == [
+        "\u7136\u540e\u4ed6\u8bf4\u300c\u505c\u3002\u300d",
+        "\u63a5\u7740\u8d70\u4e86\u3002",
+    ]
+
+
+def test_cjk_closing_parenthesis_stays_with_its_sentence():
+    assert split_text_into_translation_units(
+        "\u770b\u8fd9\u4e2a\uff08\u597d\u3002\uff09\u7136\u540e\u5462\uff1f"
+    ) == [
+        "\u770b\u8fd9\u4e2a\uff08\u597d\u3002\uff09",
+        "\u7136\u540e\u5462\uff1f",
+    ]
+
+
+def test_mixed_cjk_and_ascii_text_splits():
+    assert split_text_into_translation_units(
+        "Hello world. \u4f60\u597d\u3002\u4e16\u754c\u3002"
+    ) == [
+        "Hello world. \u4f60\u597d\u3002",
+        "\u4e16\u754c\u3002",
+    ]
+
+
+def test_single_cjk_sentence_is_unchanged():
+    assert split_text_into_translation_units("\u7ed3\u675f\u3002") == [
+        "\u7ed3\u675f\u3002"
+    ]
+
+
+def test_ascii_sentence_splitting_is_unchanged():
+    # The full-width rule must not relax the ASCII rule. These are the exact
+    # results on main before this change.
+    assert split_text_into_translation_units("One. Two. Three.") == [
+        "One.",
+        "Two.",
+        "Three.",
+    ]
+    assert split_text_into_translation_units("Version 1.2. Next") == [
+        "Version 1.2.",
+        "Next",
+    ]
+    assert split_text_into_translation_units("Dr. Smith went home. Then he slept.") == [
+        "Dr. Smith went home.",
+        "Then he slept.",
+    ]
+    assert split_text_into_translation_units('He said "Stop." Then ran.') == [
+        'He said "Stop."',
+        "Then ran.",
+    ]

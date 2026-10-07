@@ -4,6 +4,10 @@ theme:
 
 nav:
   - Home: index.md        
+  - Project Roles and Responsibilities: ProjectRoles.md
   - Math Rendering Test File: MathRenderingTestFile.md
   - Prepare For Mac User: PrepareForMacUser.md
   - Prepare For Windows User: PrepareForWindowsUser.md
+  - AI Work Panel Feasibility Study: AIWorkPanelFeasibilityStudy.md
+  - Code Signing & Distribution: CodeSigningAndDistribution.md
+  - Hosting Strategy: HostingStrategy.md

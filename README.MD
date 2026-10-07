@@ -7,7 +7,7 @@
   [![Linux x64](https://img.shields.io/badge/Linux-x64-yellow?logo=linux)](#desktop-downloads)
   
   <br />
-  <img width="1105" height="628" alt="Image" src="https://github.com/user-attachments/assets/67ad3306-5a54-44f3-9d8d-386c73d4b814" />
+  <img width="1177" height="646" alt="Image" src="https://github.com/user-attachments/assets/a6716f6e-5bdb-41fb-914b-314e4c4eb394" />
 </div>
 
 ---
@@ -45,7 +45,7 @@ Most modern writing apps force you to choose between **privacy** and **power**. 
 Get the app running locally for development in under a minute:
 
 ```bash
-# Prerequisites: Python 3.11-3.13, Node.js 18+, and uv
+# Prerequisites: Python 3.11-3.13, Node.js 20.9.0+, and uv
 git clone https://github.com/petertzy/markdown-reader.git
 cd markdown-reader
 
@@ -166,6 +166,36 @@ Markdown Reader is split into three main layers to ensure maximum performance an
 1. **Backend (`/backend`)**: A blazing-fast FastAPI application handling rendering, export, and all AI API communications.
 2. **Frontend (`/frontend`)**: A Next.js UI providing the rich editor experience, packaged within a Tauri desktop shell.
 When packaged for desktop use, the Python backend is bundled as a silent Tauri sidecar process, dynamically assigning ports at runtime to avoid conflicts. In development, `./scripts/dev-tauri.sh` uses the same port-handoff path when it needs to avoid a local port conflict.
+
+### Local Backend Security
+
+The packaged desktop sidecar generates a random authentication token for every
+launch. All of its API requests must include that token; it is held in memory
+only and is not written to disk. The standalone development backend remains
+unauthenticated by default for local development. Set
+`MARKDOWN_READER_BACKEND_TOKEN` before starting it to require the same request
+header (`X-Markdown-Reader-Token`). Tauri development mode forwards that token
+from Rust without exposing it to WebView JavaScript. For browser-only
+development, set `NEXT_PUBLIC_BACKEND_TOKEN` to the same value.
+
+### Desktop Content Security Policy
+
+The packaged Tauri WebView uses a default-deny policy and permits network
+connections only to the app origin and the loopback backend. `object-src` is
+disabled and `base-uri` is restricted to the application origin.
+
+`script-src 'unsafe-inline'` remains necessary because a Next.js static export
+embeds its hydration payload as inline scripts; static files cannot receive a
+per-request nonce. `style-src 'unsafe-inline'` remains necessary for React UI
+layout updates and the isolated Markdown preview's inline styles. Monaco loads
+its editor workers from `blob:`, so `worker-src` explicitly allows `blob:`.
+Monaco assets are copied from the installed dependency into `public/monaco`
+before development and production builds and loaded from `/monaco/vs`, without
+contacting a CDN. `wasm-unsafe-eval` is currently retained pending a separate
+packaged-runtime audit; the editor loading failure was caused by the default
+CDN loader, not evidence of a WebAssembly requirement. The policy does not permit the
+broader JavaScript `unsafe-eval` directive. Remote `http:` and `https:` image
+sources remain available only for images referenced by Markdown previews.
 
 ---
 

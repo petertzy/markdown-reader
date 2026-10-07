@@ -7,6 +7,8 @@ import mimetypes
 import os
 import re
 
+from backend.pdf_math import render_pdf_math
+
 
 def _inline_local_images(html_content: str, base_dir: str | None = None) -> str:
     def _try_inline(src: str) -> str | None:
@@ -46,6 +48,32 @@ def _normalize_image_tags(html_content: str) -> str:
     return re.sub(r"<img\b[^>]*>", _strip_size_attributes, html_content, flags=re.I)
 
 
+_PDF_PRINT_STYLE = """  <style>
+    @page { size: A4; margin: 20mm 15mm; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; line-height: 1.6; overflow-wrap: break-word; }
+    img { max-width: 100% !important; width: auto !important; height: auto !important; page-break-inside: avoid; }
+    pre { white-space: pre-wrap; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 12px; }
+    pre code { white-space: pre-wrap !important; overflow-wrap: anywhere; word-break: break-word; }
+    pre, code, table { page-break-inside: avoid; }
+  </style>"""
+
+
+def _with_print_style(html_content: str) -> str:
+    """Return ``html_content`` with the PDF print stylesheet applied.
+
+    weasyprint receives these rules through the wrapper document built in
+    :func:`export_markdown_to_pdf`. The renderer's own stylesheet sets
+    ``white-space: pre`` on ``pre code``, so any engine handed the renderer's
+    markup without them cannot break a long code line -- MuPDF answers that by
+    shrinking the whole document until the line fits the text column. Inject the
+    rules into ``<head>`` so both engines agree.
+    """
+    head_end = html_content.lower().find("</head>")
+    if head_end == -1:
+        return f"{_PDF_PRINT_STYLE}\n{html_content}"
+    return f"{html_content[:head_end]}{_PDF_PRINT_STYLE}\n{html_content[head_end:]}"
+
+
 def export_markdown_to_pdf(
     html_content: str, output_path: str, base_url: str | None = None
 ) -> None:
@@ -53,18 +81,12 @@ def export_markdown_to_pdf(
     normalized_html = _inline_local_images(
         _normalize_image_tags(html_content), base_dir
     )
+    normalized_html = render_pdf_math(normalized_html)
     full_html = f"""<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <style>
-    @page {{ size: A4; margin: 20mm 15mm; }}
-    body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; line-height: 1.6; overflow-wrap: break-word; }}
-    img {{ max-width: 100% !important; width: auto !important; height: auto !important; page-break-inside: avoid; }}
-    pre {{ white-space: pre-wrap; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 12px; }}
-    pre code {{ white-space: pre-wrap !important; overflow-wrap: anywhere; word-break: break-word; }}
-    pre, code, table {{ page-break-inside: avoid; }}
-  </style>
+{_PDF_PRINT_STYLE}
 </head>
 <body>
 {normalized_html}
@@ -89,8 +111,10 @@ def _export_pdf_with_pymupdf(html_content: str, output_path: str) -> None:
     page_height = 842
     margin = 50
     doc = fitz.open()
-    page = doc.new_page(width=page_width, height=page_height)
-    rect = fitz.Rect(margin, margin, page_width - margin, page_height - margin)
-    page.insert_htmlbox(rect, html_content)
-    doc.save(output_path)
-    doc.close()
+    try:
+        page = doc.new_page(width=page_width, height=page_height)
+        rect = fitz.Rect(margin, margin, page_width - margin, page_height - margin)
+        page.insert_htmlbox(rect, _with_print_style(html_content))
+        doc.save(output_path)
+    finally:
+        doc.close()

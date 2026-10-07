@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sys
 import threading
 import time
-import unicodedata
 from pathlib import Path
 from typing import Any
 
 import requests
+
+from backend.heading_anchor import (
+    slugify_heading,
+    unique_heading_slug,
+)
 
 try:
     import keyring
@@ -23,6 +28,7 @@ except Exception:
 
 
 AI_CREDENTIAL_SERVICE = "MarkdownReader.AI"
+logger = logging.getLogger(__name__)
 LOCAL_AI_DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1"
 LOCAL_AI_BASE_URL_OPTIONS = {
     "lm_studio": "http://127.0.0.1:1234/v1",
@@ -35,12 +41,12 @@ LOCAL_AI_BASE_URL_LABELS = {
     "custom": "Custom",
 }
 OPENAI_COMPATIBLE_BASE_URL_OPTIONS = {
-    "navidia": "https://integrate.api.nvidia.com/v1",
+    "nvidia": "https://integrate.api.nvidia.com/v1",
     "groq": "https://api.groq.com/openai/v1",
 }
-OPENAI_COMPATIBLE_BASE_URL_LABELS = {"navidia": "Navidia", "groq": "Groq"}
+OPENAI_COMPATIBLE_BASE_URL_LABELS = {"nvidia": "NVIDIA", "groq": "Groq"}
 OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION = {
-    "navidia": [
+    "nvidia": [
         "mistralai/mistral-large-3-675b-instruct-2512",
         "mistralai/mistral-medium-3-instruct",
         "mistralai/mistral-small-3.1-24b-instruct-2503",
@@ -60,7 +66,7 @@ AI_PROVIDER_PRIORITY = (
 )
 AI_PROVIDER_BASE_URLS = {
     "local": LOCAL_AI_DEFAULT_BASE_URL,
-    "openai_compatible": OPENAI_COMPATIBLE_BASE_URL_OPTIONS["navidia"],
+    "openai_compatible": OPENAI_COMPATIBLE_BASE_URL_OPTIONS["nvidia"],
     "openrouter": "https://openrouter.ai/api/v1",
     "openai": "https://api.openai.com/v1",
     "anthropic": "https://api.anthropic.com/v1",
@@ -218,17 +224,21 @@ def get_local_ai_base_url_options() -> list[dict[str, str]]:
 
 def get_openai_compatible_base_url_choice() -> str:
     choice = (
-        os.getenv("OPENAI_COMPATIBLE_BASE_URL_CHOICE")
-        or _load_app_settings().get("openai_compatible_base_url_choice")
-        or "navidia"
-    ).strip()
-    return choice if choice in OPENAI_COMPATIBLE_BASE_URL_OPTIONS else "navidia"
+        str(
+            os.getenv("OPENAI_COMPATIBLE_BASE_URL_CHOICE")
+            or _load_app_settings().get("openai_compatible_base_url_choice")
+            or "nvidia"
+        )
+        .strip()
+        .lower()
+    )
+    return choice if choice in OPENAI_COMPATIBLE_BASE_URL_OPTIONS else "nvidia"
 
 
 def set_openai_compatible_base_url_choice(choice_key: str) -> str:
-    choice = (
-        choice_key if choice_key in OPENAI_COMPATIBLE_BASE_URL_OPTIONS else "navidia"
-    )
+    choice = choice_key.strip().lower()
+    if choice not in OPENAI_COMPATIBLE_BASE_URL_OPTIONS:
+        choice = "nvidia"
     os.environ["OPENAI_COMPATIBLE_BASE_URL_CHOICE"] = choice
     os.environ["OPENAI_COMPATIBLE_BASE_URL"] = OPENAI_COMPATIBLE_BASE_URL_OPTIONS[
         choice
@@ -370,7 +380,7 @@ def get_provider_default_models(
         for key, option_url in OPENAI_COMPATIBLE_BASE_URL_OPTIONS.items():
             if url == option_url.rstrip("/"):
                 return list(OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION[key])
-        return list(OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION["navidia"])
+        return list(OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION["nvidia"])
     return list(AI_PROVIDER_DEFAULT_MODELS[provider])
 
 
@@ -385,6 +395,21 @@ def get_secure_ai_api_key(provider: str) -> str:
         return keyring.get_password(AI_CREDENTIAL_SERVICE, provider) or ""
     except KeyringError:
         return ""
+
+
+def resolve_ai_api_key_for_slot(key_slot: str) -> str:
+    """Resolve the API key a key slot should authenticate with.
+
+    The environment variable wins over the secure store, so a key supplied
+    through the environment applies even on a machine that has a keyring
+    backend installed but no credential stored for this slot. Every caller that
+    needs a slot's key goes through here, because the two orders that were once
+    spelled out at two call sites disagreed.
+    """
+    return (
+        os.getenv(_get_key_slot_env_var(key_slot), "").strip()
+        or get_secure_ai_api_key(key_slot).strip()
+    )
 
 
 def is_ai_api_key_configured(
@@ -484,13 +509,10 @@ def _get_ai_api_key_for_provider(provider: str) -> tuple[str, str, str]:
         key_slot = get_openai_compatible_storage_key_name(choice)
         env_var = get_openai_compatible_env_var(choice)
 
-    api_key = os.getenv(env_var, "").strip() or get_secure_ai_api_key(key_slot).strip()
+    api_key = resolve_ai_api_key_for_slot(key_slot)
     if provider == "openai_compatible" and not api_key:
         fallback_env_var = get_ai_provider_env_var(provider)
-        api_key = (
-            os.getenv(fallback_env_var, "").strip()
-            or get_secure_ai_api_key(provider).strip()
-        )
+        api_key = resolve_ai_api_key_for_slot(provider)
         env_var = fallback_env_var
     return api_key, key_slot, env_var
 
@@ -728,13 +750,22 @@ def _request_chat_from_provider(
     document_text: str = "",
     selected_text: str = "",
     chat_history: list[dict[str, Any]] | None = None,
+    knowledge_context: str = "",
 ) -> str:
     system_prompt = (
         "You are Markdown Reader's AI assistant. Help with writing, editing, "
         "Markdown, document understanding, and general questions. Be concise and "
         "useful. When document or selected text is provided, use it as context."
     )
+    if knowledge_context.strip():
+        system_prompt += (
+            " When directory knowledge base context is provided from personal notes, "
+            "ground your response in those notes, cite the relevant note files/sections, "
+            "and prioritize information from them."
+        )
     context_parts = []
+    if knowledge_context.strip():
+        context_parts.append(knowledge_context.strip())
     if selected_text.strip():
         context_parts.append("Selected text:\n" + selected_text.strip())
     if document_text.strip():
@@ -838,13 +869,44 @@ def save_ai_chat_histories(histories: list[dict[str, Any]]) -> None:
         json.dump(histories, file_obj, indent=2)
 
 
+# An opening or closing code fence: three or more backticks/tildes, optionally
+# indented up to three spaces (CommonMark). Used to tell real Markdown lines from
+# verbatim code.
+_CODE_FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
+
+
 def _apply_markdown_formatting_rules(markdown_text: str) -> str:
     normalized = (markdown_text or "").replace("\r\n", "\n")
     lines = []
+    fence: str | None = None
     for raw_line in normalized.split("\n"):
+        # Inside a fenced block the line is verbatim code, so none of the
+        # normalisation below may touch it. These rules are line-shaped and read
+        # a leading "#", "-" or "1." as list/heading syntax, but that is a
+        # comment or an operator inside the block: a shebang became
+        # "# !/usr/bin/env bash" and the float 1.5 became "1. 5".
+        fence_match = _CODE_FENCE_RE.match(raw_line)
+        if fence_match:
+            marker = fence_match.group(1)
+            if fence is None:
+                fence = marker[0] * 3
+            elif (
+                marker[0] == fence[0]
+                and len(marker) >= len(fence)
+                and not fence_match.group(2).strip()
+            ):
+                fence = None
+            lines.append(raw_line.rstrip())
+            continue
+        if fence is not None:
+            lines.append(raw_line.rstrip())
+            continue
         line = raw_line.rstrip()
         line = re.sub(r"^(#{1,6})([^\s#])", r"\1 \2", line)
-        line = re.sub(r"^(\s*)([-*+])(\S)", r"\1\2 \3", line)
+        # The next char must not be another list marker: a run such as "---"
+        # or "***" is a thematic break (and "---" also delimits YAML
+        # frontmatter), not a tight list item, so it must stay verbatim.
+        line = re.sub(r"^(\s*)([-*+])(?![-*+])([^\s])", r"\1\2 \3", line)
         line = re.sub(r"^(\s*\d+\.)(\S)", r"\1 \2", line)
         lines.append(line)
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
@@ -871,13 +933,39 @@ def _format_and_fix_code_blocks(markdown_text: str) -> str:
 
 
 def _slugify_heading_text(text: str) -> str:
-    # Match the GitHub-compatible anchors used by the rendered document
-    # outline (backend/routers/markdown.py._slugify) so TOC links actually
-    # resolve: unicode word characters are kept, not discarded.
-    text = unicodedata.normalize("NFC", text or "").lower()
-    text = re.sub(r"[`*_~\[\](){}]", "", text).strip()
-    text = re.sub(r"[^\w\s-]", "", text)
-    return re.sub(r"-+", "-", re.sub(r"\s+", "-", text)).strip("-")
+    # Delegate to the shared canonical slugger so TOC anchors always match
+    # the rendered document outline (backend/routers/markdown.py): unicode
+    # word characters are kept, consecutive spaces/hyphens behave exactly
+    # like GitHub's anchors, and inline markup is stripped the same way.
+    return slugify_heading(text)
+
+
+_FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+
+
+def _iter_heading_lines(markdown_text: str):
+    """Yield only the lines that are real ATX headings.
+
+    A ``#`` line inside a fenced code block is code, not a heading, so scanning
+    line-by-line is not enough: a shell comment or a Python comment would be
+    collected as a section title. Track the fence state so those are skipped.
+    """
+    fence: str | None = None
+    for line in (markdown_text or "").replace("\r\n", "\n").split("\n"):
+        if fence is None:
+            match = _FENCE_RE.match(line)
+            if match:
+                fence = match.group(1)[0] * 3
+                continue
+        else:
+            # A closing fence uses the same character and is at least as long
+            # as the opener; anything else is part of the code block.
+            closing = _FENCE_RE.match(line)
+            if closing and closing.group(1)[0] == fence[0]:
+                if len(closing.group(1)) >= len(fence):
+                    fence = None
+            continue
+        yield line
 
 
 def _generate_markdown_toc(markdown_text: str) -> str:
@@ -885,7 +973,7 @@ def _generate_markdown_toc(markdown_text: str) -> str:
     # Track slugs so duplicate headings get the ``-1``, ``-2`` … suffix that
     # GitHub applies when rendering anchors (same rule as ``_extract_outline``).
     slug_counts: dict[str, int] = {}
-    for line in (markdown_text or "").replace("\r\n", "\n").split("\n"):
+    for line in _iter_heading_lines(markdown_text):
         match = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
         if not match:
             continue
@@ -894,9 +982,7 @@ def _generate_markdown_toc(markdown_text: str) -> str:
         anchor = _slugify_heading_text(title)
         if not anchor:
             continue
-        count = slug_counts.get(anchor, 0)
-        unique_anchor = anchor if count == 0 else f"{anchor}-{count}"
-        slug_counts[anchor] = count + 1
+        unique_anchor = unique_heading_slug(anchor, slug_counts)
         toc_lines.append(f"{'  ' * max(0, level - 1)}- [{title}](#{unique_anchor})")
     return "## Table of Contents\n\n" + "\n".join(toc_lines) + "\n" if toc_lines else ""
 
@@ -917,18 +1003,27 @@ def _generate_lightweight_summary(markdown_text: str) -> str:
         return ""
     normalized = markdown_text.replace("\r\n", "\n")
     headings = []
-    for line in normalized.split("\n"):
+    for line in _iter_heading_lines(normalized):
         match = re.match(r"^#{1,3}\s+(.+?)\s*$", line)
         if match:
             headings.append(match.group(1).strip())
         if len(headings) >= 5:
             break
     lead = ""
-    for paragraph in re.split(r"\n\s*\n", normalized):
+    # Remove complete fenced blocks before looking for a lead paragraph. A
+    # fenced block may contain blank lines, so splitting the original text
+    # into paragraphs first can otherwise expose a later code paragraph.
+    outside_fences = "\n".join(_iter_heading_lines(normalized))
+    for paragraph in re.split(r"\n\s*\n", outside_fences):
         paragraph = paragraph.strip()
-        if paragraph and not paragraph.startswith("#"):
-            lead = re.sub(r"\s+", " ", paragraph)
-            break
+        # Skip headings, and skip fenced code blocks: quoting ``npm install`` as
+        # the document's opening sentence is worse than having no lead at all.
+        if not paragraph or paragraph.startswith("#"):
+            continue
+        if paragraph.startswith("```") or paragraph.startswith("~~~"):
+            continue
+        lead = re.sub(r"\s+", " ", paragraph)
+        break
     lines = ["## Summary"]
     if lead:
         lines.extend(["", f"- {lead[:240]}{'...' if len(lead) > 240 else ''}"])
@@ -1033,7 +1128,20 @@ def build_ai_automation_fallback(
     if (
         any(
             keyword in lowered
-            for keyword in ("format code", "code block", "correct syntax", "fix code")
+            for keyword in (
+                "format code",
+                "code block",
+                "correct syntax",
+                "fix code",
+                # The shipped "Format and Fix Code Blocks" template prompts with
+                # "Format Markdown code fences and fix common fence syntax
+                # issues." — none of the keywords above appear in it, so
+                # /fix-code fell through to the plain formatter below and ran
+                # the wrong tool on the selection. "code fence" and "fence
+                # syntax" are what that prompt actually says.
+                "code fence",
+                "fence syntax",
+            )
         )
         and target.strip()
     ):
@@ -1076,6 +1184,8 @@ def request_ai_agent_response(
     document_text: str = "",
     selected_text: str = "",
     chat_history: list[dict[str, Any]] | None = None,
+    use_knowledge_base: bool = False,
+    knowledge_top_k: int = 5,
 ) -> dict[str, Any]:
     fallback = build_ai_automation_fallback(message, document_text, selected_text)
     if fallback:
@@ -1088,6 +1198,42 @@ def request_ai_agent_response(
             provider_name=provider,
             env_var=env_var,
         )
+
+    knowledge_context = ""
+    used_sources: list[dict[str, Any]] = []
+    if use_knowledge_base:
+        try:
+            from backend import knowledge_logic
+
+            # The persisted setting is authoritative as well as the per-request
+            # preference, so a caller cannot bypass the user's OFF toggle.
+            if knowledge_logic.get_knowledge_base_enabled():
+                # Search knowledge base using user query and any active selection
+                search_query = message.strip()
+                if selected_text.strip():
+                    search_query += " " + selected_text.strip()
+                chunks = knowledge_logic.query_knowledge_base(
+                    search_query, top_k=knowledge_top_k
+                )
+                if chunks:
+                    knowledge_context = (
+                        knowledge_logic.build_knowledge_context_for_prompt(chunks)
+                    )
+                    seen_paths = set()
+                    for c in chunks:
+                        rel_p = c.get("rel_path") or c.get("file_path", "")
+                        if rel_p not in seen_paths:
+                            seen_paths.add(rel_p)
+                            used_sources.append(
+                                {
+                                    "rel_path": rel_p,
+                                    "title": c.get("title", rel_p),
+                                    "section": c.get("section", ""),
+                                }
+                            )
+        except Exception as k_err:
+            logger.warning("Knowledge base retrieval failed: %s", k_err)
+
     assistant_message = _request_chat_from_provider(
         provider,
         api_key,
@@ -1096,6 +1242,7 @@ def request_ai_agent_response(
         document_text=document_text,
         selected_text=selected_text,
         chat_history=chat_history,
+        knowledge_context=knowledge_context,
     )
     return {
         "assistant_message": assistant_message,
@@ -1105,6 +1252,7 @@ def request_ai_agent_response(
             "reason": "chat_response",
         },
         "used_provider": provider,
+        "used_sources": used_sources,
     }
 
 
@@ -1134,6 +1282,16 @@ def translate_markdown_with_ai(
 
 
 _SENTENCE_END_CHARS = ".!?。！？"
+# Full-width terminators. CJK text does not put a space after them, so they
+# cannot share the "next char must be a space/quote/bracket" rule used for the
+# ASCII set below — otherwise a whole paragraph became one translation unit.
+_CJK_SENTENCE_END_CHARS = frozenset("。！？")
+# Closing punctuation that belongs to the sentence it terminates; a
+# quoted/bracketed sentence keeps its closing quote/bracket in the same
+# translation unit (`He said "Stop." Then` -> `He said "Stop."`).
+# The CJK forms are here for the same reason: `…」` is part of the sentence it
+# closes, and must not be orphaned onto the next unit.
+_SENTENCE_CLOSING_CHARS = frozenset("\"')]」』）】》〉〙〗〛｝］")
 
 # Abbreviations whose period should not terminate the sentence, e.g. ``Dr.``.
 _PERIOD_NOT_SENTENCE_END = frozenset(
@@ -1421,18 +1579,18 @@ def split_text_into_translation_units(content: str) -> list[str]:
             units.append(line)
             continue
 
-        for char_index, char in enumerate(line):
+        char_index = 0
+        while char_index < len(line):
+            char = line[char_index]
             buffer.append(char)
             next_char = line[char_index + 1] if char_index + 1 < len(line) else ""
-            if char in _SENTENCE_END_CHARS and next_char in {
-                "",
-                " ",
-                "\t",
-                '"',
-                "'",
-                ")",
-                "]",
-            }:
+            if char in _SENTENCE_END_CHARS and (
+                # A full-width terminator ends the sentence whatever follows:
+                # CJK text has no space after 。！？, so requiring one made the
+                # whole paragraph a single unit.
+                char in _CJK_SENTENCE_END_CHARS
+                or next_char in {"", " ", "\t", '"', "'", ")", "]"}
+            ):
                 ends_sentence = True
                 if char == ".":
                     # "Dr." / "e.g." / "U.S." do not end a sentence.
@@ -1445,7 +1603,19 @@ def split_text_into_translation_units(content: str) -> list[str]:
                         if following is not None and not following.isupper():
                             ends_sentence = False
                 if ends_sentence:
+                    # A quoted sentence may end with a closing quote or
+                    # bracket (`He said "Stop." Then ran.`). Absorb it into
+                    # the finished unit before flushing, otherwise the
+                    # closing `"` becomes the first character of the next
+                    # unit (`" Then ran.`).
+                    while (
+                        char_index + 1 < len(line)
+                        and line[char_index + 1] in _SENTENCE_CLOSING_CHARS
+                    ):
+                        char_index += 1
+                        buffer.append(line[char_index])
                     flush_buffer()
+            char_index += 1
         if line_index < len(lines) - 1 and buffer:
             buffer.append(" ")
 
