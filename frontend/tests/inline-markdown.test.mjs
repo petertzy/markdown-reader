@@ -174,6 +174,11 @@ test("a bare URL stops before emphasis or code that follows it", () => {
     { type: "code", value: "x=1" },
     { type: "text", value: " now" },
   ]);
+  // A single asterisk is valid URL punctuation, not an emphasis marker this
+  // tokenizer recognizes, so it must remain part of the link.
+  assert.deepEqual(hrefs("See https://a.io/search?q=one*two"), [
+    "https://a.io/search?q=one*two",
+  ]);
 });
 
 test("an authored link keeps balanced parentheses inside its URL", () => {
