@@ -278,6 +278,58 @@ class TestKnowledgeLogic(unittest.TestCase):
         self.assertEqual([chunk["section"] for chunk in chunks], ["Doc", "Doc > Next"])
         self.assertIn("# still inside", chunks[0]["content"])
 
+    def _large_fenced_document(self, opener: str, closer: str) -> str:
+        # A section large enough that the paragraph-splitting chunker must
+        # divide it (its own paragraph characters alone comfortably exceed
+        # ``target_chunk_size``), whose code block contains blank lines
+        # between statements.
+        code_lines = []
+        for i in range(90):
+            code_lines.append(f"line {i}: sample code")
+            code_lines.append("")
+        return f"# Section\n\n{opener}\n" + "\n".join(code_lines) + f"\n{closer}\n"
+
+    def test_large_fenced_code_block_is_not_split_at_internal_blank_lines(self):
+        # A blank line inside a fenced block is code, not a paragraph break.
+        # Splitting at those blank lines used to straddle the fence across
+        # chunks, leaving one chunk with an orphaned ``` opener and the next
+        # with a stray closer -- invalid Markdown fed to the AI prompt.
+        content = self._large_fenced_document("```python", "```")
+        chunks = knowledge_logic.chunk_markdown_document(
+            content, str(self.note1_path), "fences.md"
+        )
+        self.assertGreater(len(chunks), 0)
+
+        # Every chunk keeps balanced fence markers.
+        for chunk in chunks:
+            self.assertEqual(chunk["content"].count("```") % 2, 0, chunk["content"])
+
+        # The whole block survives in a single chunk.
+        whole = [
+            chunk
+            for chunk in chunks
+            if "line 0: sample code" in chunk["content"]
+            and "line 89: sample code" in chunk["content"]
+        ]
+        self.assertEqual(len(whole), 1)
+
+    def test_large_tilde_fenced_code_block_is_kept_whole(self):
+        content = self._large_fenced_document("~~~", "~~~")
+        chunks = knowledge_logic.chunk_markdown_document(
+            content, str(self.note1_path), "tildes.md"
+        )
+        self.assertGreater(len(chunks), 0)
+        for chunk in chunks:
+            self.assertEqual(chunk["content"].count("~~~") % 2, 0, chunk["content"])
+
+    def test_large_prose_section_is_still_split_into_multiple_chunks(self):
+        paragraph = "A full line of enough prose to fill a section. " * 8
+        content = "# Section\n\n" + "\n\n".join(paragraph for _ in range(6)) + "\n"
+        chunks = knowledge_logic.chunk_markdown_document(
+            content, str(self.note1_path), "prose.md"
+        )
+        self.assertGreater(len(chunks), 1)
+
     def test_find_note_files_excludes_ignored_directories(self):
         found = knowledge_logic.find_note_files(self.notes_dir)
         paths = [p.name for p in found]
