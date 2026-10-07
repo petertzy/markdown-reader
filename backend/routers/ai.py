@@ -10,6 +10,7 @@ import os
 import sys
 from typing import Any
 
+import requests
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -296,6 +297,16 @@ def ai_chat(payload: AgentChatPayload):
                 "env_var": getattr(exc, "env_var", None),
             },
         )
+    except requests.exceptions.RequestException as exc:
+        # Chat talks to the provider without the retry/ProviderRequestError
+        # wrapper the other AI endpoints use, so an upstream 429/5xx or a
+        # refused connection used to escape as a bare "Internal Server Error".
+        # Surface it the same way /work and /translate surface theirs.
+        status_code = exc.response.status_code if exc.response is not None else 502
+        raise HTTPException(
+            status_code=status_code,
+            detail=f"AI provider request failed: {exc}",
+        ) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
     return result
