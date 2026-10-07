@@ -84,6 +84,14 @@ brew install glib pango cairo libffi
 is unavailable, Markdown Reader falls back to PyMuPDF so PDF export can still
 complete, but WeasyPrint generally provides better layout fidelity.
 
+For a fuller walkthrough of the macOS dependencies, including shell configuration, see [docs/PrepareForMacUser.md](./docs/PrepareForMacUser.md).
+
+### Windows PDF Export Dependencies
+
+On Windows, WeasyPrint requires native system libraries (Cairo, Pango) that are not available by default. Install them via MSYS2 by following the steps in [docs/PrepareForWindowsUser.md](./docs/PrepareForWindowsUser.md).
+
+If WeasyPrint is unavailable, PDF export falls back to PyMuPDF with simpler layout, the same as on macOS.
+
 > **Note for Contributors:** After cloning, run `uv sync --extra dev` and `uv run pre-commit install` to set up linting hooks.
 
 ### Build release artifacts locally

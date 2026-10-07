@@ -293,6 +293,33 @@ def _markdown_fence(
     return marker, length
 
 
+def _split_paragraphs(markdown: str) -> list[str]:
+    """Split *markdown* on blank lines while keeping fenced blocks whole.
+
+    A blank line between prose paragraphs separates them, but a blank line
+    inside a fenced code block is part of the code. Splitting there would
+    straddle the fence across chunks and leave one chunk with an orphaned
+    opener and the next with a stray closer. The same ``_markdown_fence``
+    rules used by the section scan apply here, so the two always agree.
+    """
+    paragraphs: list[str] = []
+    current: list[str] = []
+    active_fence: tuple[str, int] | None = None
+    for line in markdown.split("\n"):
+        fence = _markdown_fence(line, active_fence)
+        if fence:
+            active_fence = None if active_fence else fence
+        if not line.strip() and active_fence is None:
+            if current:
+                paragraphs.append("\n".join(current))
+                current = []
+        else:
+            current.append(line)
+    if current:
+        paragraphs.append("\n".join(current))
+    return paragraphs
+
+
 def extract_note_title(content: str, fallback_filename: str) -> str:
     """Extract a descriptive note title from frontmatter, first # heading, or filename."""
     # 1. Check YAML frontmatter: title: "..."
@@ -412,8 +439,9 @@ def chunk_markdown_document(
             chunk_index += 1
             continue
 
-        # Split larger section by paragraphs
-        paragraphs = re.split(r"\n\s*\n", sec_text)
+        # Split larger section by paragraphs. Blank lines inside a fenced
+        # code block are code, not paragraph boundaries.
+        paragraphs = _split_paragraphs(sec_text)
         current_chunk_parts: list[str] = []
         current_len = 0
 
