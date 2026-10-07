@@ -152,7 +152,13 @@ class _DocxHtmlParser(HTMLParser):
                 # exact paragraph: another block (such as a heading) may have
                 # appeared before the first <p>.
                 item[2] = True
-            else:
+            elif tag == "p":
+                # Only <p> opens a paragraph. The <blockquote> tag is followed
+                # by <p> for every block it wraps, and creating a paragraph at
+                # the quote itself stranded an empty paragraph (holding only
+                # the inter-tag whitespace) before the quoted text. When a
+                # quote is the first block of a list item, the reuse check
+                # above still reserves the item's paragraph.
                 self.current_paragraph = self.document.add_paragraph(
                     style=item[0] if item is not None else None
                 )

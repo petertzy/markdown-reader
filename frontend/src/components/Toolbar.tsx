@@ -6,12 +6,16 @@
  * Top action bar: file open/save, export, view toggles, settings.
  */
 
+import { useEffect, useState } from "react";
 import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
 } from "react";
 
 import { PANELS, type PanelId } from "@/types/panels";
+
+const MIN_FONT_SIZE = 8;
+const MAX_FONT_SIZE = 72;
 
 type Props = {
   onOpenFile: () => void;
@@ -49,6 +53,27 @@ export default function Toolbar({
   const backendBusy = backendStatus === "starting";
   const backendFailed = backendStatus === "error";
   const backendDisabled = backendBusy || backendFailed;
+
+  const [fontSizeInput, setFontSizeInput] = useState(String(fontSize));
+
+  useEffect(() => {
+    setFontSizeInput(String(fontSize));
+  }, [fontSize]);
+
+  const isValidFontSize = (value: number) =>
+    Number.isInteger(value) && value >= MIN_FONT_SIZE && value <= MAX_FONT_SIZE;
+
+  const commitFontSize = () => {
+    const value = Number(fontSizeInput);
+
+    if (isValidFontSize(value)) {
+      onFontSizeChange(value);
+      setFontSizeInput(String(value));
+    } else {
+      setFontSizeInput(String(fontSize));
+    }
+  };
+
   const keepEditorFocused = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
   };
@@ -91,9 +116,41 @@ export default function Toolbar({
 
       {/* Font size */}
       <span className="text-gray-500 dark:text-gray-400 text-xs">Font:</span>
-      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onFontSizeChange(Math.max(10, fontSize - 1))} className={btnCls}>A-</button>
-      <span className="text-xs text-gray-600 dark:text-gray-300 w-5 text-center">{fontSize}</span>
-      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onFontSizeChange(Math.min(32, fontSize + 1))} className={btnCls}>A+</button>
+      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onFontSizeChange(Math.max(MIN_FONT_SIZE, fontSize - 1))} className={btnCls}>A-</button>
+
+      <input
+        type="number"
+        min={MIN_FONT_SIZE}
+        max={MAX_FONT_SIZE}
+        step={1}
+        inputMode="numeric"
+        aria-label="Editor font size"
+        title={`Font size (${MIN_FONT_SIZE}-${MAX_FONT_SIZE})`}
+        value={fontSizeInput}
+        onChange={(e) => {
+          const input = e.target.value;
+          setFontSizeInput(input);
+
+          const value = Number(input);
+          if (isValidFontSize(value)) onFontSizeChange(value);
+        }}
+        onFocus={(e) => e.target.select()}
+        onBlur={commitFontSize}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            commitFontSize();
+            e.currentTarget.blur();
+          }
+
+          if (e.key === "Escape") {
+            setFontSizeInput(String(fontSize));
+            e.currentTarget.blur();
+          }
+        }}
+        className="w-12 text-center text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#252526] text-gray-700 dark:text-gray-300"
+      />
+
+      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onFontSizeChange(Math.min(MAX_FONT_SIZE, fontSize + 1))} className={btnCls}>A+</button>
 
       <div className="flex-1" />
 
