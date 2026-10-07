@@ -68,7 +68,7 @@ export function useEditor() {
   const [recentFiles, setRecentFiles] = useState<string[]>([]);
   const [wordCount, setWordCount] = useState<WordCountResult | null>(null);
   const [darkMode, setDarkMode] = useState(false);
-  const [fontSize, setFontSize] = useState(14);
+  const [fontSize, setFontSize] = useState(24);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Renders and word counts are HTTP requests that can finish out of order, so
   // each channel only accepts the response belonging to its newest request.
