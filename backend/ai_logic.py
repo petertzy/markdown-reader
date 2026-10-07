@@ -905,9 +905,13 @@ def _apply_markdown_formatting_rules(markdown_text: str) -> str:
         line = re.sub(r"^(#{1,6})([^\s#])", r"\1 \2", line)
         # The next char must not be another list marker: a run such as "---"
         # or "***" is a thematic break (and "---" also delimits YAML
-        # frontmatter), not a tight list item, so it must stay verbatim.
-        line = re.sub(r"^(\s*)([-*+])(?![-*+])([^\s])", r"\1\2 \3", line)
-        line = re.sub(r"^(\s*\d+\.)(\S)", r"\1 \2", line)
+        # frontmatter), not a tight list item, so it must stay verbatim. A
+        # digit after a bullet marker or an ordered-list dot is a number, not
+        # a list: "1.5" and "-1.5" are prose, and rewriting them to "1. 5" /
+        # "- 1.5" mangles the text. Fenced code got this guard first (a float
+        # inside a block became "1. 5"); prose needs the same protection.
+        line = re.sub(r"^(\s*)([-*+])(?![-*+\d])([^\s])", r"\1\2 \3", line)
+        line = re.sub(r"^(\s*\d+\.)(?!\d)(\S)", r"\1 \2", line)
         lines.append(line)
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
 
