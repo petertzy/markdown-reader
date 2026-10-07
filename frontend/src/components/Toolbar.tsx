@@ -53,20 +53,23 @@ export default function Toolbar({
 
   const [fontSizeInput, setFontSizeInput] = useState(String(fontSize));
 
-useEffect(() => {
-  setFontSizeInput(String(fontSize));
-}, [fontSize]);
-
-const commitFontSize = () => {
-  const value = Number(fontSizeInput);
-
-  if (Number.isInteger(value) && value >= 10 && value <= 32) {
-    onFontSizeChange(value);
-    setFontSizeInput(String(value));
-  } else {
+  useEffect(() => {
     setFontSizeInput(String(fontSize));
-  }
-};
+  }, [fontSize]);
+
+  const isValidFontSize = (value: number) =>
+    Number.isInteger(value) && value >= 10 && value <= 32;
+
+  const commitFontSize = () => {
+    const value = Number(fontSizeInput);
+
+    if (isValidFontSize(value)) {
+      onFontSizeChange(value);
+      setFontSizeInput(String(value));
+    } else {
+      setFontSizeInput(String(fontSize));
+    }
+  };
 
   const keepEditorFocused = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -111,15 +114,21 @@ const commitFontSize = () => {
       {/* Font size */}
       <span className="text-gray-500 dark:text-gray-400 text-xs">Font:</span>
       <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onFontSizeChange(Math.max(10, fontSize - 1))} className={btnCls}>A-</button>
-      {/* <span className="text-xs text-gray-600 dark:text-gray-300 w-5 text-center">{fontSize}</span> */}
 
       <input
-        type="text"
+        type="number"
+        min={10}
+        max={32}
+        step={1}
         inputMode="numeric"
+        aria-label="Editor font size"
         value={fontSizeInput}
         onChange={(e) => {
-          const value = e.target.value.replace(/\D/g, "");
-          setFontSizeInput(value);
+          const input = e.target.value;
+          setFontSizeInput(input);
+
+          const value = Number(input);
+          if (isValidFontSize(value)) onFontSizeChange(value);
         }}
         onFocus={(e) => e.target.select()}
         onBlur={commitFontSize}
