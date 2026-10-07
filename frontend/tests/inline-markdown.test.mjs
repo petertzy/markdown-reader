@@ -157,3 +157,47 @@ test("successive scans of the same text agree", () => {
   assert.deepEqual(tokenizeInlineMarkdown(""), []);
   assert.deepEqual(tokenizeInlineMarkdown(text), first);
 });
+
+test("a bare URL stops before emphasis or code that follows it", () => {
+  // The old `[^\s]+` class swallowed the opening marker, so "https://a.io**now"
+  // became the href and the leftover "**" leaked back into the prose. The URL
+  // must end at the marker so the strong/code span is parsed on its own.
+  assert.deepEqual(tokenizeInlineMarkdown("See https://a.io**now** then"), [
+    { type: "text", value: "See " },
+    { type: "link", label: "https://a.io", href: "https://a.io" },
+    { type: "strong", value: "now" },
+    { type: "text", value: " then" },
+  ]);
+  assert.deepEqual(tokenizeInlineMarkdown("Run https://a.io`x=1` now"), [
+    { type: "text", value: "Run " },
+    { type: "link", label: "https://a.io", href: "https://a.io" },
+    { type: "code", value: "x=1" },
+    { type: "text", value: " now" },
+  ]);
+  // A single asterisk is valid URL punctuation, not an emphasis marker this
+  // tokenizer recognizes, so it must remain part of the link.
+  assert.deepEqual(hrefs("See https://a.io/search?q=one*two"), [
+    "https://a.io/search?q=one*two",
+  ]);
+});
+
+test("an authored link keeps balanced parentheses inside its URL", () => {
+  // A "(film)"-style path is part of the URL; only the paren that closes the
+  // markdown link may terminate it. Before the fix the path was cut at the
+  // first ")" and that closing paren leaked into the prose.
+  assert.deepEqual(hrefs("[Foo](https://en.wikipedia.org/wiki/Foo_(film))"), [
+    "https://en.wikipedia.org/wiki/Foo_(film)",
+  ]);
+  assert.deepEqual(
+    tokenizeInlineMarkdown("Ref [Foo](https://en.wikipedia.org/wiki/Foo_(film)) ok"),
+    [
+      { type: "text", value: "Ref " },
+      { type: "link", label: "Foo", href: "https://en.wikipedia.org/wiki/Foo_(film)" },
+      { type: "text", value: " ok" },
+    ]
+  );
+  // A URL without parens is untouched, and a stray ")" that closes a bracket
+  // the URL opened itself still belongs to the href.
+  assert.deepEqual(hrefs("[RFC](https://example.com) here"), ["https://example.com"]);
+  assert.deepEqual(hrefs("[A](https://a.io/a(b)c) end"), ["https://a.io/a(b)c"]);
+});
