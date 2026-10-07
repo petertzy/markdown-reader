@@ -1342,6 +1342,7 @@ docs = [
 dev = [
     { name = "pre-commit" },
     { name = "pyinstaller" },
+    { name = "pytest" },
 ]
 
 [package.metadata]
@@ -1379,6 +1380,7 @@ provides-extras = ["docs", "dev"]
 dev = [
     { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "pyinstaller", specifier = ">=6.20.0" },
+    { name = "pytest", specifier = ">=8.0" },
 ]
 
 [[package]]

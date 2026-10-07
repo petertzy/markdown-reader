@@ -246,5 +246,203 @@ class TestCitationSyntaxSurvivesExport(unittest.TestCase):
             self.assertIn("[@smith2020]", full_text)
 
 
+class TestCitationAuthorFormatting(unittest.TestCase):
+    """Brace-protected author names must survive parsing intact.
+
+    Titles already unwrap the one outer layer of BibTeX brace protection while
+    keeping inner case-protection braces. Author names were split on every
+    ``" and "`` and never unwrapped, so an organisation was shown with literal
+    braces and, when its own name contained the word, cut into two fictitious
+    authors: ``{Smith and Sons Ltd}`` came out as ``Smith, Sons Ltd``.
+    """
+
+    def setUp(self):
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        self.bib_path = Path(self.tmp_dir.name) / "library.bib"
+        settings_path = Path(self.tmp_dir.name) / "settings.json"
+        patcher = mock.patch.object(
+            citation_logic, "APP_SETTINGS_FILE_PATH", settings_path
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self.tmp_dir.cleanup)
+
+    def _parse_author(self, author_literal: str) -> str:
+        """Parse a one-entry .bib through the real upload path and return author."""
+        bib = f"@article{{x, title = {{T}}, author = {author_literal}}}"
+        self.bib_path.write_text(bib, encoding="utf-8")
+        return citation_logic.parse_bib_file(str(self.bib_path))[0]["author"]
+
+    def test_plain_names_are_unchanged(self):
+        self.assertEqual(
+            self._parse_author("{Doe, Jane and Roe, Richard}"),
+            "Jane Doe, Richard Roe",
+        )
+        self.assertEqual(self._parse_author("{Smith, John}"), "John Smith")
+        self.assertEqual(
+            self._parse_author("{van Beethoven, Ludwig}"), "Ludwig van Beethoven"
+        )
+        self.assertEqual(self._parse_author("{  Doe , Jane  }"), "Jane Doe")
+        self.assertEqual(self._parse_author("{}"), "")
+
+    def test_three_plain_names_still_split(self):
+        self.assertEqual(
+            self._parse_author("{Doe, Jane and Roe, Richard and Poe, Ann}"),
+            "Jane Doe, Richard Roe, Ann Poe",
+        )
+
+    def test_protected_group_detection_requires_balanced_braces(self):
+        # {Deep} {Learning} is two adjacent protected words, not one wrapper
+        # around a list, so it must not be unwrapped even once a comma appears.
+        self.assertFalse(citation_logic._is_protected_author_list("{Deep} {Learning}"))
+        self.assertFalse(
+            citation_logic._is_protected_author_list("{Deep} {Learning, Doe}")
+        )
+        self.assertFalse(
+            citation_logic._is_protected_author_list("{Deep} {Learning}, Doe")
+        )
+        self.assertFalse(citation_logic._is_protected_author_list("{Doe, Jane}"))
+        self.assertFalse(citation_logic._is_protected_author_list("{Corp and Sons}"))
+
+    def test_and_is_only_a_separator_between_spaces(self):
+        # "and" occurs inside plenty of surnames. Splitting on the bare word
+        # would cut "Sandoval" in half.
+        self.assertEqual(self._parse_author("{Sandoval, Ana}"), "Ana Sandoval")
+        self.assertEqual(self._parse_author("{Alexander, Andre}"), "Andre Alexander")
+
+    def test_empty_names_are_dropped(self):
+        # A trailing " and " leaves an empty final name, which must not become
+        # a stray separator in the formatted result.
+        self.assertEqual(self._parse_author("{Doe, Jane and }"), "Jane Doe")
+        self.assertEqual(self._parse_author("{{Corp} and }"), "Corp")
+
+    def test_corporate_author_loses_its_protection_braces(self):
+        self.assertEqual(
+            self._parse_author("{{World Health Organization}}"),
+            "World Health Organization",
+        )
+
+    def test_corporate_author_containing_and_is_one_author(self):
+        # "Smith and Sons Ltd" is a single organisation. Splitting it invented a
+        # second author and a fabricated comma.
+        self.assertEqual(
+            self._parse_author("{{Smith and Sons Ltd}}"), "Smith and Sons Ltd"
+        )
+
+    def test_repeated_and_inside_braces_is_still_one_author(self):
+        self.assertEqual(self._parse_author("{{A and B and C}}"), "A and B and C")
+
+    def test_braced_organisation_does_not_hide_a_real_second_author(self):
+        self.assertEqual(
+            self._parse_author("{{Smith and Sons Ltd} and {Doe, Jane}}"),
+            "Smith and Sons Ltd, Jane Doe",
+        )
+
+    def test_author_list_wrapped_as_a_whole_is_still_split(self):
+        # The outer pair only protects the list; the names inside are separate.
+        self.assertEqual(
+            self._parse_author("{{Doe, Jane and Roe, Richard}}"),
+            "Jane Doe, Richard Roe",
+        )
+        self.assertEqual(
+            self._parse_author("{{Doe, Jane and Roe, Richard and Poe, Ann}}"),
+            "Jane Doe, Richard Roe, Ann Poe",
+        )
+
+    def test_case_protection_braces_inside_a_name_are_kept(self):
+        # {Deep} {Learning} forces capitalisation and is meaningful, so only the
+        # wrapping layer may be dropped.
+        self.assertEqual(
+            self._parse_author("{{Deep} {Learning} and {Doe, Jane}}"),
+            "{Deep} {Learning}, Jane Doe",
+        )
+
+    def test_noble_particle_braces_are_unwrapped_around_the_name(self):
+        self.assertEqual(
+            self._parse_author("{{van der Berg}, Jan and {de la Cruz}, Maria}"),
+            "Jan van der Berg, Maria de la Cruz",
+        )
+
+    def test_noble_particle_keeps_an_inner_case_protection_brace(self):
+        self.assertEqual(
+            self._parse_author("{{van der {Berg}}, Jan}"), "Jan van der {Berg}"
+        )
+
+    def test_nested_braces_do_not_unbalance_the_split(self):
+        self.assertEqual(
+            self._parse_author("{{Outer {Smith and Sons} Ltd} and {Doe, Jane}}"),
+            "Outer {Smith and Sons} Ltd, Jane Doe",
+        )
+
+    def test_corporate_author_with_a_comma_is_not_reordered(self):
+        # The inner braces mark this as a literal corporate author. A comma in
+        # that literal is not a ``Last, First`` separator.
+        self.assertEqual(self._parse_author("{{Google, Inc.}}"), "Google, Inc.")
+        self.assertEqual(
+            self._parse_author("{{Smith, Sons & Co., Ltd.}}"),
+            "Smith, Sons & Co., Ltd.",
+        )
+
+    def test_a_comma_inside_braces_does_not_split_the_name(self):
+        # `{Smith, Jr.}, John` is `Last, First` with a braced suffix. Splitting
+        # on the first comma regardless of depth cut inside the braces and
+        # produced `Jr.}, John {Smith`, leaking the group's own braces.
+        self.assertEqual(self._parse_author("{{Smith, Jr.}, John}"), "John Smith, Jr.")
+        self.assertEqual(
+            self._parse_author("{van Beethoven, Ludwig}"), "Ludwig van Beethoven"
+        )
+        self.assertEqual(
+            citation_logic._split_on_top_level_comma("{Smith, Jr.}, John"),
+            ("{Smith, Jr.}", " John"),
+        )
+        # Through the real upload path the parser takes one brace layer off, so
+        # the field arrives as `author = {{Smith, Jr.}, John}`.
+        self.assertEqual(
+            citation_logic._format_authors("{Smith, Jr.}, John"), "John Smith, Jr."
+        )
+
+    def test_and_separates_authors_across_a_line_break(self):
+        # Long .bib fields wrap, so `and` can arrive on the next line. Requiring
+        # a literal " and " folded both names into one and left the word inside
+        # the result.
+        self.assertEqual(
+            self._parse_author("{Doe, Jane and\nRoe, Richard}"), "Jane Doe, Richard Roe"
+        )
+        self.assertEqual(
+            self._parse_author("{Doe, Jane and\tRoe, Richard}"), "Jane Doe, Richard Roe"
+        )
+        # Still one word, whatever the line break does.
+        self.assertEqual(self._parse_author("{Sandoval, Ana}"), "Ana Sandoval")
+        self.assertEqual(self._parse_author("{Brand, X and Doe, Y}"), "X Brand, Y Doe")
+
+    def test_and_needs_whitespace_on_both_sides(self):
+        # A stray comma or an unspaced "and" in a hand-written .bib is not a
+        # separator. Cutting there invents a second author and strands the comma
+        # on the first one, which is the corruption this parser exists to stop.
+        self.assertEqual(
+            citation_logic._split_author_names("Doe, J,and Roe, R"),
+            ["Doe, J,and Roe, R"],
+        )
+        self.assertEqual(
+            citation_logic._split_author_names("{Doe, J}and Roe, R"),
+            ["{Doe, J}and Roe, R"],
+        )
+        self.assertEqual(
+            citation_logic._split_author_names("Android Inc."), ["Android Inc."]
+        )
+
+    def test_search_matches_a_corporate_author_by_its_full_name(self):
+        content = (
+            "@article{who2020, author = {{World Health Organization}},"
+            " title = {Report}, year = {2020}}\n"
+        )
+        citation_logic.load_citation_library_content(
+            "who.bib", b64encode(content.encode()).decode()
+        )
+
+        self.assertEqual(len(citation_logic.search_citations("world health")), 1)
+        self.assertEqual(len(citation_logic.search_citations("organization")), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
