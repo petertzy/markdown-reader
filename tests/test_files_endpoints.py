@@ -49,12 +49,12 @@ def test_extension_filter_ignores_empty_segments():
         shutil.rmtree(td, ignore_errors=True)
 
 
-def test_extension_filter_keeps_no_extentionless_file_for_any_segment_form():
-    # "md," / "md, " / ",md" all name the same extension and never match
-    # the extensionless file.
+def test_extension_filter_keeps_no_extensionless_file_for_any_segment_form():
+    # Empty raw segments and segments that normalise to empty after dropping
+    # optional leading dots must never match the extensionless file.
     td = _dir_with_files()
     try:
-        for raw in ("md,", "md, ", ",md", " md "):
+        for raw in ("md,", "md, ", ",md", " md ", "md,.", "md,.."):
             names = _list_names(td, raw)
             assert "noext" not in names, raw
             assert "a.md" in names, raw
