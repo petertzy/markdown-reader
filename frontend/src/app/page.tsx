@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useEditor } from "@/hooks/useEditor";
 import { useAIActions } from "@/hooks/useAIActions";
 import { useFileIO } from "@/hooks/useFileIO";
@@ -14,7 +14,7 @@ import MenuBar from "@/components/MenuBar";
 import EditorWorkspace from "@/components/EditorWorkspace";
 import PreviewPane from "@/components/PreviewPane";
 import SplitPane from "@/components/SplitPane";
-import FocusModePane from "@/components/FocusModePane";
+import FocusModePane, { type FocusEditorHandle } from "@/components/FocusModePane";
 import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
 import StatusBar from "@/components/StatusBar";
@@ -31,6 +31,8 @@ export default function HomePage() {
     reset: resetEditor,
   } = editorWorkspace;
   const [focusMode, setFocusMode] = useState(false);
+  // Focus Mode undo/redo handle (issue #341) — published by FocusModePane.
+  const focusEditorRef = useRef<FocusEditorHandle | null>(null);
   const [showPreview] = useState(true);
   const { activePanel, togglePanel, setShowAIPanel } = usePanels();
   const [aiPanelInitialTab, setAiPanelInitialTab] = useState<AIPanelTab | undefined>();
@@ -56,6 +58,7 @@ export default function HomePage() {
     backendStatus,
     monacoRef,
     monacoReady,
+    focusEditorRef,
     setShowAIPanel,
     setAiPanelInitialTab,
     setSplit,
@@ -86,7 +89,8 @@ export default function HomePage() {
       <div className="flex flex-1 overflow-hidden">
         {focusMode ? <FocusModePane key={`${editor.activeTabId}-${revision}`} value={editor.activeTab.content}
           onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
-          slashCommands={slash.filteredCommands} onSelect={(command) => { void executeSlashCommand(command); }} /> :
+          slashCommands={slash.filteredCommands} onSelect={(command) => { void executeSlashCommand(command); }}
+          editorRef={focusEditorRef} /> :
           <SplitPane split={split} onSplitChange={setSplit}
             left={<EditorWorkspace tabId={editor.activeTab.id} value={editor.activeTab.content}
               onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
