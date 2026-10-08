@@ -1096,9 +1096,7 @@ def build_ai_automation_fallback(
                 "used_provider": "local-fallback",
             }
     if "summary" in lowered or "summarize" in lowered or "总结" in lowered:
-        summary = _generate_lightweight_summary(
-            document if document.strip() else target
-        )
+        summary = _generate_lightweight_summary(target)
         if not selection.strip() and summary:
             return {
                 "assistant_message": summary,
