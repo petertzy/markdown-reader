@@ -82,3 +82,10 @@ def test_toc_skips_setext_inside_code_fence():
     toc = _generate_markdown_toc(md)
     assert "[code]" not in toc
     assert "- [Real](#real)" in toc
+
+
+def test_toc_does_not_close_a_backtick_fence_with_an_info_string():
+    md = "```\n```python\nHidden\n=====\n```\n# Real\n"
+    toc = _generate_markdown_toc(md)
+    assert "[Hidden]" not in toc
+    assert "- [Real](#real)" in toc

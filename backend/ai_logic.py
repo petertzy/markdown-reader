@@ -993,12 +993,13 @@ def _iter_toc_headings(markdown_text: str):
                 closing
                 and closing.group(1)[0] == fence[0]
                 and len(closing.group(1)) >= len(fence)
+                and not line[closing.end() :].strip()
             ):
                 fence = None
             continue
         fence_match = _FENCE_RE.match(line)
         if fence_match:
-            fence = fence_match.group(1)[0] * 3
+            fence = fence_match.group(1)
             continue
 
         atx = _ATX_HEADING_LINE_RE.match(line)
