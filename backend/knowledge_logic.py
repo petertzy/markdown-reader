@@ -367,7 +367,7 @@ def chunk_markdown_document(
 
     Preserves heading context for each chunk (e.g. "Section > Subsection").
     """
-    text = content.strip()
+    text = content.strip("\n").rstrip()
     if not text:
         return []
 
@@ -377,7 +377,7 @@ def chunk_markdown_document(
     body = text
     frontmatter_split = _split_frontmatter(body)
     if frontmatter_split is not None:
-        body = frontmatter_split[1].strip()
+        body = frontmatter_split[1].strip("\n").rstrip()
 
     lines = body.splitlines()
     sections: list[tuple[str, list[str]]] = []
@@ -420,7 +420,7 @@ def chunk_markdown_document(
     chunk_index = 0
 
     for section_name, sec_lines in sections:
-        sec_text = "\n".join(sec_lines).strip()
+        sec_text = "\n".join(sec_lines).strip("\n").rstrip()
         if not sec_text:
             continue
 
@@ -446,7 +446,7 @@ def chunk_markdown_document(
         current_len = 0
 
         for para in paragraphs:
-            para = para.strip()
+            para = para.strip("\n").rstrip()
             if not para:
                 continue
 
@@ -897,7 +897,7 @@ def build_knowledge_context_for_prompt(
         title = ch.get("title", rel_path)
         section = ch.get("section", "")
         sec_header = f" > {section}" if section and section != "Overview" else ""
-        content = ch.get("content", "").strip()
+        content = ch.get("content", "").strip("\n")
 
         block = f"--- [Source {i}: {rel_path} ({title}{sec_header})] ---\n{content}\n"
         if total_len + len(block) > max_chars and i > 1:

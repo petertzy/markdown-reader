@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import base64
 import os
 import re
 from html import unescape
 from html.parser import HTMLParser
 from io import BytesIO
 from typing import Any
+from urllib.parse import unquote_to_bytes
 
 import requests
 from docx import Document
@@ -23,6 +25,17 @@ def _resolve_image_source(src: str, base_dir: str | None) -> tuple[str, bytes | 
     src = src.strip()
     if src.startswith("file://"):
         src = src[7:]
+    if src.lower().startswith("data:"):
+        # Inline images ("data:image/png;base64,...") have no path to open.
+        # Feed the decoded payload straight to add_picture, or the raw base64
+        # blob would be exported as the paragraph's literal text.
+        try:
+            header, _, payload = src.partition(",")
+            if header.lower().endswith(";base64"):
+                return src, base64.b64decode(payload)
+            return src, unquote_to_bytes(payload)
+        except Exception:
+            return src, None
     if re.match(r"^https?://", src, re.IGNORECASE):
         try:
             response = requests.get(src, timeout=15, allow_redirects=True)
