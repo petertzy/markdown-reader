@@ -7,6 +7,7 @@ Markdown rendering and conversion endpoints.
 from __future__ import annotations
 
 import os
+import re
 import sys
 import tempfile
 import webbrowser
@@ -76,6 +77,47 @@ def _slugify(text: str) -> str:
     return slugify_heading(text)
 
 
+def _iter_setext_outline_matches(markdown: str):
+    """Yield ``(text, level, line_number)`` for CommonMark setext headings.
+
+    A line of ``=`` makes a level-1 heading, a line of two or more ``-``
+    makes a level-2 heading — exactly what the preview renderer anchors.
+    Backtick-fenced code blocks are skipped (the renderer fences only with
+    backticks), an ATX heading line never doubles as setext text, and an
+    underline separated from its text by a blank line is a thematic break,
+    not a heading.
+    """
+    lines = (markdown or "").splitlines()
+    fence: int | None = None
+    for idx in range(len(lines) - 1):
+        line = lines[idx]
+        if not line.strip():
+            continue
+
+        fence_m = re.match(r"^[ \t]*(`{3,})", line)
+        if fence_m:
+            if fence is None:
+                fence = len(fence_m.group(1))
+            elif len(fence_m.group(1)) >= fence:
+                fence = None
+            continue
+        if fence is not None:
+            continue
+
+        # The text line must be plain paragraph text: not an ATX heading and
+        # not itself a thematic break / setext underline.
+        if re.match(r"^#{1,6}\s+", line):
+            continue
+        if re.match(r"^\s*(?:-{3,}|=+)\s*$", line):
+            continue
+
+        underline = lines[idx + 1]
+        if re.match(r"^=+\s*$", underline):
+            yield line.strip(), 1, idx + 1
+        elif re.match(r"^-{2,}\s*$", underline):
+            yield line.strip(), 2, idx + 1
+
+
 def _extract_outline(markdown: str) -> list[dict]:
     """Return a flat list of heading nodes extracted from *markdown*.
 
@@ -90,15 +132,27 @@ def _extract_outline(markdown: str) -> list[dict]:
     # Track slugs so duplicates get the ``-1``, ``-2`` … suffix (GitHub rule).
     slug_counts: dict[str, int] = {}
 
+    # Collect ATX ("#") headings and setext ("Title\n====") headings together
+    # and emit them in source order so the outline matches the preview.
+    found: list[tuple[int, int, str]] = []
+
     for match in iter_heading_matches(markdown):
-        level = len(match.group(1))
-        raw_text = match.group(2).strip()
+        found.append(
+            (
+                markdown[: match.start()].count("\n") + 1,
+                len(match.group(1)),
+                match.group(2).strip(),
+            )
+        )
+
+    for text, level, line_number in _iter_setext_outline_matches(markdown):
+        found.append((line_number, level, text))
+
+    for line_number, level, raw_text in sorted(found):
         plain = extract_heading_text(raw_text)
 
         base_slug = slugify_heading(raw_text)
         slug = unique_heading_slug(base_slug, slug_counts)
-
-        line_number = markdown[: match.start()].count("\n") + 1
 
         outline.append(
             {

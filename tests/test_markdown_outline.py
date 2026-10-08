@@ -338,3 +338,44 @@ def test_a_heading_id_without_images_is_untouched_by_alt_handling():
         ("<h2>Alt without an image: alt</h2>", "alt-without-an-image-alt"),
     ):
         assert f'id="{expected}"' in assign_heading_ids(html), html
+
+
+# ── setext headings ─────────────────────────────────────────────────────────
+#
+# The preview anchors setext headings ("Title\n=====" becomes <h1 id="title">,
+# "Sub\n-----" becomes <h2 id="sub">) but the outline endpoint only scanned
+# ATX ("#") headings, so whole sections silently vanished from the outline
+# and its table-of-contents links while still being anchored in the preview.
+# The two producers have to agree again.
+
+
+def test_setext_heading_level_one_in_outline():
+    nodes = {
+        node["text"]: node for node in _extract_outline("Title\n=====\n\n## More\n")
+    }
+    assert nodes["Title"]["level"] == 1
+    assert nodes["Title"]["anchor"] == "title"
+    assert nodes["Title"]["line"] == 1
+    assert "More" in nodes
+
+
+def test_setext_heading_level_two_in_outline():
+    nodes = {node["text"]: node for node in _extract_outline("Sub\n----\n")}
+    assert nodes["Sub"]["level"] == 2
+    assert nodes["Sub"]["anchor"] == "sub"
+    assert nodes["Sub"]["line"] == 1
+
+
+def test_setext_outline_matches_the_rendered_anchor_ids():
+    md = "Title\n=====\n\n# Intro\n\nSub\n----\n\n## More\n"
+    assert _outline_anchors(md) == _rendered_ids(md)
+    assert _outline_anchors(md) == ["title", "intro", "sub", "more"]
+
+
+def test_setext_underline_after_a_blank_line_is_a_thematic_break():
+    assert _extract_outline("Para\n\n----\n") == []
+
+
+def test_setext_scan_skips_backtick_fenced_code():
+    md = "```\ncode\n=====\n```\n# Real\n"
+    assert [node["text"] for node in _extract_outline(md)] == ["Real"]
