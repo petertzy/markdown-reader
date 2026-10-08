@@ -379,3 +379,9 @@ def test_setext_underline_after_a_blank_line_is_a_thematic_break():
 def test_setext_scan_skips_backtick_fenced_code():
     md = "```\ncode\n=====\n```\n# Real\n"
     assert [node["text"] for node in _extract_outline(md)] == ["Real"]
+
+
+def test_setext_scan_does_not_close_a_fence_with_an_info_string():
+    md = "```\n```python\nHidden\n=====\n```\n# Real\n"
+    assert [node["text"] for node in _extract_outline(md)] == ["Real"]
+    assert _outline_anchors(md) == _rendered_ids(md) == ["real"]

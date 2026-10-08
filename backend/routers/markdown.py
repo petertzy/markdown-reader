@@ -98,7 +98,7 @@ def _iter_setext_outline_matches(markdown: str):
         if fence_m:
             if fence is None:
                 fence = len(fence_m.group(1))
-            elif len(fence_m.group(1)) >= fence:
+            elif len(fence_m.group(1)) >= fence and re.match(r"^[ \t]*`+[ \t]*$", line):
                 fence = None
             continue
         if fence is not None:
