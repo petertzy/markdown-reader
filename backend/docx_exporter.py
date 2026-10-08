@@ -25,13 +25,13 @@ def _resolve_image_source(src: str, base_dir: str | None) -> tuple[str, bytes | 
     src = src.strip()
     if src.startswith("file://"):
         src = src[7:]
-    if src.startswith("data:"):
+    if src.lower().startswith("data:"):
         # Inline images ("data:image/png;base64,...") have no path to open.
         # Feed the decoded payload straight to add_picture, or the raw base64
         # blob would be exported as the paragraph's literal text.
         try:
             header, _, payload = src.partition(",")
-            if ";base64" in header:
+            if header.lower().endswith(";base64"):
                 return src, base64.b64decode(payload)
             return src, unquote_to_bytes(payload)
         except Exception:

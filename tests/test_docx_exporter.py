@@ -1,6 +1,8 @@
+import base64
 import re
 import tempfile
 import unittest
+from urllib.parse import quote_from_bytes
 from zipfile import ZipFile
 
 from docx import Document
@@ -99,7 +101,7 @@ class TestDocxExporter(unittest.TestCase):
             output_path = f"{tmp_dir}/data-uri.docx"
 
             export_html_to_docx(
-                render_markdown(f"![pixel](data:image/png;base64,{png})"),
+                render_markdown(f"![pixel](data:image/png;BASE64,{png})"),
                 output_path,
             )
 
@@ -113,6 +115,21 @@ class TestDocxExporter(unittest.TestCase):
                 0,
                 "the data-URI image should be embedded as a picture",
             )
+
+    def test_data_uri_image_with_url_encoded_payload_is_embedded(self):
+        png = (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR"
+            "42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        )
+        data_uri = "DATA:image/png," + quote_from_bytes(base64.b64decode(png))
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = f"{tmp_dir}/url-encoded-data-uri.docx"
+
+            export_html_to_docx(f'<img src="{data_uri}">', output_path)
+
+            document = Document(output_path)
+            self.assertEqual(len(document.inline_shapes), 1)
+            self.assertNotIn("data:", _document_text(document).lower())
 
     def test_export_preserves_escaped_html_entities(self):
         # Escaped HTML like "&amp;" must be exported as the real character
