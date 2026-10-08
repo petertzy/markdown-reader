@@ -367,7 +367,7 @@ def chunk_markdown_document(
 
     Preserves heading context for each chunk (e.g. "Section > Subsection").
     """
-    text = content.strip()
+    text = content.strip("\n").rstrip()
     if not text:
         return []
 
@@ -377,7 +377,7 @@ def chunk_markdown_document(
     body = text
     frontmatter_split = _split_frontmatter(body)
     if frontmatter_split is not None:
-        body = frontmatter_split[1].strip()
+        body = frontmatter_split[1].strip("\n").rstrip()
 
     lines = body.splitlines()
     sections: list[tuple[str, list[str]]] = []

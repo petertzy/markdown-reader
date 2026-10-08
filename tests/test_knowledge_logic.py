@@ -806,3 +806,23 @@ def test_chunking_a_large_section_keeps_indent_of_the_first_code_line():
     texts = [c["content"] for c in chunks if "def first" in c["content"]]
     assert texts
     assert any(t.startswith("    def first():") for t in texts)
+
+
+def test_overview_chunk_keeps_leading_indent_of_an_initial_code_block():
+    chunks = knowledge_logic.chunk_markdown_document(
+        "    def setup():\n        return True\n",
+        "/tmp/notes/setup.md",
+        "setup.md",
+    )
+    assert chunks[0]["section"] == "Overview"
+    assert chunks[0]["content"].startswith("    def setup():")
+
+
+def test_frontmatter_body_keeps_leading_indent_of_an_initial_code_block():
+    chunks = knowledge_logic.chunk_markdown_document(
+        "---\ntitle: Setup\n---\n\n    def setup():\n        return True\n",
+        "/tmp/notes/setup.md",
+        "setup.md",
+    )
+    assert chunks[0]["section"] == "Overview"
+    assert chunks[0]["content"].startswith("    def setup():")
