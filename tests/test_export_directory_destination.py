@@ -96,24 +96,28 @@ class TestMakeOutputPathRefusesDirectories(unittest.TestCase):
             victim = os.path.join(tmp_dir, "not-created-yet.pdf")
             self.assertEqual(_make_output_path(victim, ".pdf"), victim)
 
-    def test_a_trailing_slash_is_refused_before_the_directory_exists(self):
-        # A trailing slash is a directory's own syntax, but isdir() only
+    def test_a_trailing_separator_is_refused_before_the_directory_exists(self):
+        # A trailing path separator is directory syntax, but isdir() only
         # reports a directory that already exists -- so an exports folder that
         # has not had its first export yet (".../Exports/" with no "Exports"
         # dir) slipped past the guard. The endpoint then created the directory
         # itself and wrote onto it, which is exactly the mistake the guard was
         # added for.
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            victim = os.path.join(tmp_dir, "Exports")
-            self.assertFalse(os.path.isdir(victim))
+        for separator in ("/", "\\"):
+            with (
+                self.subTest(separator=separator),
+                tempfile.TemporaryDirectory() as tmp_dir,
+            ):
+                victim = os.path.join(tmp_dir, "Exports")
+                self.assertFalse(os.path.isdir(victim))
 
-            with self.assertRaises(HTTPException) as caught:
-                _make_output_path(victim + "/", ".html")
+                with self.assertRaises(HTTPException) as caught:
+                    _make_output_path(victim + separator, ".html")
 
-            self.assertEqual(getattr(caught.exception, "status_code", None), 400)
-            self.assertFalse(
-                os.path.isdir(victim), "the guard must not create the directory"
-            )
+                self.assertEqual(getattr(caught.exception, "status_code", None), 400)
+                self.assertFalse(
+                    os.path.isdir(victim), "the guard must not create the directory"
+                )
 
 
 class TestExportRefusesDirectoryDestination(unittest.TestCase):
@@ -171,28 +175,29 @@ class TestExportRefusesDirectoryDestination(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn("directory", body)
 
-    def test_trailing_slash_destination_is_refused_and_not_created(self):
+    def test_trailing_separator_destination_is_refused_and_not_created(self):
         for endpoint in EXPORT_ENDPOINTS:
-            with self.subTest(endpoint=endpoint):
-                tmp_dir = tempfile.mkdtemp()
-                self.addCleanup(shutil.rmtree, tmp_dir, True)
-                victim = os.path.join(tmp_dir, f"Exports.{endpoint}")
-                self.assertFalse(os.path.isdir(victim))
+            for separator in ("/", "\\"):
+                with self.subTest(endpoint=endpoint, separator=separator):
+                    tmp_dir = tempfile.mkdtemp()
+                    self.addCleanup(shutil.rmtree, tmp_dir, True)
+                    victim = os.path.join(tmp_dir, f"Exports.{endpoint}")
+                    self.assertFalse(os.path.isdir(victim))
 
-                with TestClient(app, raise_server_exceptions=False) as client:
-                    res = client.post(
-                        f"/api/export/{endpoint}",
-                        json={
-                            "content": SAMPLE_MARKDOWN,
-                            "output_path": victim + "/",
-                        },
+                    with TestClient(app, raise_server_exceptions=False) as client:
+                        res = client.post(
+                            f"/api/export/{endpoint}",
+                            json={
+                                "content": SAMPLE_MARKDOWN,
+                                "output_path": victim + separator,
+                            },
+                        )
+
+                    self.assertEqual(res.status_code, 400, res.text[:120])
+                    self.assertFalse(
+                        os.path.isdir(victim),
+                        f"/{endpoint} created the directory it was pointed at",
                     )
-
-                self.assertEqual(res.status_code, 400, res.text[:120])
-                self.assertFalse(
-                    os.path.isdir(victim),
-                    f"/{endpoint} created the directory it was pointed at",
-                )
 
 
 class TestOrdinaryExportStillWorks(unittest.TestCase):
