@@ -38,9 +38,13 @@ function isAbbreviationPeriod(text, periodIndex) {
   if (!token) return false;
   return (
     PERIOD_NOT_SENTENCE_END.has(token) ||
-    (token.length === 1 && /[a-z]/.test(token)) ||
+    (token.length === 1 && /^\p{L}$/u.test(token)) ||
     /^(?:[a-z]\.)+[a-z]?$/.test(token)
   );
+}
+
+function isUpperCaseLetter(char) {
+  return char === char.toUpperCase() && char !== char.toLowerCase();
 }
 
 // First non-space / non-closing-quote char from `index` on, or null.
@@ -64,7 +68,8 @@ export function splitTextIntoTranslationUnits(content) {
     buffer = "";
   };
 
-  const lines = text.split(/\r?\n/);
+  // Match Python's str.splitlines(), including legacy and Unicode line breaks.
+  const lines = text.split(/\r\n|[\n\v\f\r\x1C-\x1E\x85\u2028\u2029]/);
   lines.forEach((line, lineIndex) => {
     const stripped = line.trim();
     if (stripped.startsWith("```")) {
@@ -87,7 +92,8 @@ export function splitTextIntoTranslationUnits(content) {
       flush();
       return;
     }
-    if (/^(#{1,6}\s|>\s|[-*+]\s|\d+\.\s)/.test(stripped)) {
+    if (stripped.startsWith("#") || stripped.startsWith(">") || stripped.startsWith("-") ||
+        stripped.startsWith("*") || stripped.startsWith("+") || /^\d+\.\s/.test(stripped)) {
       flush();
       units.push(line);
       return;
@@ -108,7 +114,7 @@ export function splitTextIntoTranslationUnits(content) {
         } else {
           // "Version 1.2. Next" — only split when the next word is capitalized.
           const following = firstCharAfter(line, index + 1);
-          if (following !== null && following !== following.toUpperCase()) {
+          if (following !== null && !isUpperCaseLetter(following)) {
             endsSentence = false;
           }
         }

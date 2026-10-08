@@ -88,6 +88,18 @@ test("a version number followed by lowercase does not split", () => {
   ]);
 });
 
+test("a period followed by a number does not create a sentence boundary", () => {
+  assert.deepEqual(splitTextIntoTranslationUnits("Section 1. 2 follows"), [
+    "Section 1. 2 follows",
+  ]);
+});
+
+test("a non-ASCII single-letter initial stays with the next word", () => {
+  assert.deepEqual(splitTextIntoTranslationUnits("É. Dupont arrived."), [
+    "É. Dupont arrived.",
+  ]);
+});
+
 test("CJK sentences split without spaces", () => {
   assert.deepEqual(
     splitTextIntoTranslationUnits("今天天气很好。我们去公园吧。明天再说。"),
@@ -107,5 +119,21 @@ test("headings and list items are their own units", () => {
     "# Title",
     "- item one",
     "- item two",
+  ]);
+});
+
+test("backend-style Markdown markers do not require a following space", () => {
+  assert.deepEqual(splitTextIntoTranslationUnits("#heading\n-item\n+item\n*item"), [
+    "#heading",
+    "-item",
+    "+item",
+    "*item",
+  ]);
+});
+
+test("Unicode line separators match the backend line handling", () => {
+  assert.deepEqual(splitTextIntoTranslationUnits("First.\u2028Second."), [
+    "First.",
+    "Second.",
   ]);
 });
