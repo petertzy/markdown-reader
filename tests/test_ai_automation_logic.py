@@ -248,6 +248,28 @@ class TestAIAutomationLogic(unittest.TestCase):
         self.assertEqual(result["proposed_action"]["type"], "replace_document")
         self.assertIn("## Summary", result["assistant_message"])
 
+    def test_summary_with_selection_uses_selection_not_whole_document(self):
+        document_text = (
+            "# Whole document\n\nIntro to the whole document.\n\n"
+            "## Section A\n\nBody of section A.\n"
+        )
+        selected_text = "# Chosen passage\n\nOnly this selected passage matters.\n"
+        result = build_ai_automation_fallback(
+            "generate summary",
+            document_text=document_text,
+            selected_text=selected_text,
+        )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["proposed_action"]["type"], "replace_selection")
+        summary = result["proposed_action"]["content"]
+        # The summary describes the passage the user selected, not the whole
+        # document it was selected from (which is what the replace_selection
+        # action would then paste back over the selection).
+        self.assertIn("Only this selected passage matters", summary)
+        self.assertNotIn("Whole document", summary)
+        self.assertNotIn("Section A", summary)
+
     def test_slash_toc_command_uses_toc_fallback(self):
         result = build_ai_automation_fallback(
             "/toc",
