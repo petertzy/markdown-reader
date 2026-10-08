@@ -349,6 +349,45 @@ class TestDocxExporterLists(unittest.TestCase):
         )
 
 
+class TestDocxExporterBlockquotes(unittest.TestCase):
+    """A blockquote must not leave a stray whitespace-only paragraph behind.
+
+    ``> quoted text`` renders as ``<blockquote>\\n  <p>quoted text</p>
+    \\n</blockquote>``. The opening ``<blockquote>`` tag used to create an
+    empty paragraph of its own, which then received the inter-tag whitespace
+    as a visible run: every exported quote was preceded by a blank paragraph
+    (which even picked up a stray bullet inside a loose list).
+    """
+
+    def test_plain_blockquote_has_no_stray_paragraph(self):
+        self.assertEqual(
+            _export_paragraphs("> quoted text\n"),
+            [("Normal", "quoted text")],
+        )
+
+    def test_blockquote_with_two_paragraphs(self):
+        self.assertEqual(
+            _export_paragraphs("> first\n>\n> second\n"),
+            [("Normal", "first"), ("Normal", "second")],
+        )
+
+    def test_blockquote_inside_a_loose_list_adds_no_stray_bullet(self):
+        self.assertEqual(
+            _export_paragraphs("- alpha\n\n  > quoted\n\n- beta\n"),
+            [
+                ("List Bullet", "alpha"),
+                ("List Bullet", "quoted"),
+                ("List Bullet", "beta"),
+            ],
+        )
+
+    def test_heading_inside_a_blockquote_is_not_preceded_by_whitespace(self):
+        self.assertEqual(
+            _export_paragraphs("> # Heading\n>\n> body\n"),
+            [("Heading 1", "Heading"), ("Normal", "body")],
+        )
+
+
 class TestDocxExporterLinkWhitespace(unittest.TestCase):
     """Hyperlink text keeps the same whitespace treatment as plain runs.
 

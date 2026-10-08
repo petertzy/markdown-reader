@@ -393,5 +393,40 @@ class TestFormattingRulesPreserveThematicBreaks(unittest.TestCase):
                 self.assertEqual(_apply_markdown_formatting_rules(src), want)
 
 
+class TestFormattingRulesLeaveNumbersAlone(unittest.TestCase):
+    """/format must not split a decimal or negative number into a list.
+
+    The ordered-list rule reads ``1.`` as a list marker and the bullet rule
+    reads ``-`` as one, but at the start of a prose line ``1.5``, ``2024.5``
+    and ``-1.5`` are numbers, not lists. Fenced code already received this
+    protection (it was where a float first became ``1. 5``); prose outside
+    fences needs the same guard.
+    """
+
+    def test_decimal_numbers_in_prose_are_unchanged(self):
+        for src in (
+            "1.5x zoom is available.\n",
+            "1.5ml dose.\n",
+            "2024.5 release notes.\n",
+            "12.3 version is here.\n",
+        ):
+            with self.subTest(src=src):
+                self.assertEqual(_apply_markdown_formatting_rules(src), src, src)
+
+    def test_negative_numbers_in_prose_are_unchanged(self):
+        for src in (
+            "-1.5 is cold.\n",
+            "-52 anomalies were found.\n",
+            "-0.5 offset applied.\n",
+        ):
+            with self.subTest(src=src):
+                self.assertEqual(_apply_markdown_formatting_rules(src), src, src)
+
+    def test_whole_number_ordered_list_is_still_normalised(self):
+        # The 1.5 guard must not blunt the actual list rule: the next
+        # character is a letter, so this is a tight ordered-list item.
+        self.assertEqual(_apply_markdown_formatting_rules("1.item\n"), "1. item\n")
+
+
 if __name__ == "__main__":
     unittest.main()

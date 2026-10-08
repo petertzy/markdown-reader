@@ -138,23 +138,24 @@ class TestPdfExporter(unittest.TestCase):
     def _fake_pymupdf(self, captured: dict, doc=None) -> types.ModuleType:
         """A stand-in for ``fitz`` that records the HTML handed to MuPDF."""
 
-        class FakePage:
-            def insert_htmlbox(self, _rect, html):
-                captured["html"] = html
-
-        class FakeDoc:
-            def new_page(self, **_kwargs):
-                return FakePage()
-
+        class FakeDocument:
             def save(self, output_path):
                 captured["output_path"] = output_path
 
             def close(self):
                 captured["closed"] = True
 
+        class FakeStory:
+            def __init__(self, *, html):
+                captured["html"] = html
+
+            def write_with_links(self, _rectfn):
+                return doc or FakeDocument()
+
         fake_fitz = types.ModuleType("fitz")
-        fake_fitz.open = lambda *args, **kwargs: doc or FakeDoc()
+        fake_fitz.Story = FakeStory
         fake_fitz.Rect = lambda *args: args
+        fake_fitz.Identity = None
         return fake_fitz
 
     def test_pymupdf_engine_applies_the_pdf_print_stylesheet(self):
@@ -198,9 +199,6 @@ class TestPdfExporter(unittest.TestCase):
         from backend.pdf_exporter import _export_pdf_with_pymupdf
 
         class FailingDoc:
-            def new_page(self, **_kwargs):
-                return types.SimpleNamespace(insert_htmlbox=lambda *args: None)
-
             def save(self, _output_path):
                 raise OSError("no space left on device")
 
@@ -258,6 +256,40 @@ class TestPdfExporter(unittest.TestCase):
         "inline code span": "`" + "inline_token_" * 14 + "`\n",
         "long unbroken word": "supercalifragilistic" * 6 + "\n",
     }
+
+    def test_long_document_paginates_instead_of_shrinking(self):
+        """The fallback engine must paginate, not down-scale, long documents.
+
+        `insert_htmlbox` layed every document out on a single page, so a
+        multi-thousand-word report came back as one page of tiny text. The
+        Story writer opens a fresh A4 page whenever the current one fills up.
+        """
+        original_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "weasyprint":
+                raise OSError("cannot load library 'libgobject-2.0-0'")
+            return original_import(name, *args, **kwargs)
+
+        markdown = "# Long Report\n\n" + "\n\n".join(
+            f"Paragraph {index}: " + ("lorem ipsum dolor sit amet " * 12).strip()
+            for index in range(40)
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = f"{tmp_dir}/long.pdf"
+            try:
+                builtins.__import__ = fake_import
+                export_markdown_to_pdf(render_markdown(markdown), output_path)
+            finally:
+                builtins.__import__ = original_import
+
+            with fitz.open(output_path) as document:
+                self.assertGreater(
+                    len(document), 1, "long content must span multiple pages"
+                )
+                full_text = "".join(page.get_text() for page in document)
+                for index in range(40):
+                    self.assertIn(f"Paragraph {index}", full_text)
 
     def test_pymupdf_fallback_does_not_shrink_the_document(self):
         """No unbreakable block may rescale the whole fallback PDF.

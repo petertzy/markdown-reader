@@ -110,11 +110,20 @@ def _export_pdf_with_pymupdf(html_content: str, output_path: str) -> None:
     page_width = 595
     page_height = 842
     margin = 50
-    doc = fitz.open()
-    try:
-        page = doc.new_page(width=page_width, height=page_height)
+
+    def _page_box(_rect_number: int, _filled: fitz.Rect):
+        # Story.write_with_links calls this once per page. Every call opens a
+        # fresh A4 page at the same margins, so content that does not fit on
+        # the current page flows onto the next one instead of being scaled
+        # down to squeeze into a single page.
+        mediabox = fitz.Rect(0, 0, page_width, page_height)
         rect = fitz.Rect(margin, margin, page_width - margin, page_height - margin)
-        page.insert_htmlbox(rect, _with_print_style(html_content))
-        doc.save(output_path)
+        return mediabox, rect, fitz.Identity
+
+    document = fitz.Story(html=_with_print_style(html_content)).write_with_links(
+        _page_box
+    )
+    try:
+        document.save(output_path)
     finally:
-        doc.close()
+        document.close()
