@@ -7,6 +7,7 @@ import type { useEditor } from "@/hooks/useEditor";
 import type { useFileIO } from "@/hooks/useFileIO";
 import type { EditorFormattingController } from "@/hooks/editor/useEditorFormatting";
 import type { MenuGroup } from "@/components/MenuBar";
+import type { FocusEditorHandle } from "@/components/FocusModePane";
 import { Markdown } from "@/lib/api";
 import {
   resolveShortcutDefinitions,
@@ -23,6 +24,12 @@ export type UseActionsOptions = {
   formatting: EditorFormattingController;
   backendStatus: "starting" | "ready" | "error";
   monacoRef: MutableRefObject<MonacoEditor.IStandaloneCodeEditor | null>;
+  /**
+   * Handle published by FocusModePane while Focus Mode is mounted (issue #341).
+   * While non-null, `edit.undo`/`edit.redo` drive the Milkdown history instead
+   * of the Monaco instance, which is null in Focus Mode.
+   */
+  focusEditorRef?: MutableRefObject<FocusEditorHandle | null>;
   setShowAIPanel: Dispatch<SetStateAction<boolean>>;
   setSplit: Dispatch<SetStateAction<number>>;
 };
@@ -33,6 +40,7 @@ export function useActions({
   formatting,
   backendStatus,
   monacoRef,
+  focusEditorRef,
   setShowAIPanel,
   setSplit,
 }: UseActionsOptions) {
@@ -76,8 +84,22 @@ export function useActions({
       "file.exportHtml": () => { void handleExport("html"); },
       "file.exportPdf": () => { void handleExport("pdf"); },
       "file.exportDocx": () => { void handleExport("docx"); },
-      "edit.undo": () => runMonacoAction("undo"),
-      "edit.redo": () => runMonacoAction("redo"),
+      // Focus Mode (issue #341): while FocusModePane is mounted, monacoRef is
+      // null and runMonacoAction would silently no-op — route to Milkdown.
+      "edit.undo": () => {
+        if (focusEditorRef?.current) {
+          focusEditorRef.current.undo();
+          return;
+        }
+        runMonacoAction("undo");
+      },
+      "edit.redo": () => {
+        if (focusEditorRef?.current) {
+          focusEditorRef.current.redo();
+          return;
+        }
+        runMonacoAction("redo");
+      },
       "edit.search": () => runMonacoAction("actions.find"),
       "edit.replace": () => runMonacoAction("editor.action.startFindReplaceAction"),
       "format.bold": () => wrapSelection("bold", "**"),
@@ -98,6 +120,7 @@ export function useActions({
     [
       applyHeading,
       editor,
+      focusEditorRef,
       handleOpenFile,
       handleExport,
       handleOpenBrowserPreview,
