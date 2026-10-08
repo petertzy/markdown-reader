@@ -15,14 +15,26 @@ import { clipboard } from '@milkdown/kit/plugin/clipboard'
 import { cursor } from '@milkdown/kit/plugin/cursor'
 import { indent } from '@milkdown/kit/plugin/indent'
 import { block } from '@milkdown/kit/plugin/block'
-import { history } from '@milkdown/kit/plugin/history'
-import { editorViewCtx } from '@milkdown/kit/core'
+import { history, undoCommand, redoCommand } from '@milkdown/kit/plugin/history'
+import { commandsCtx, editorViewCtx } from '@milkdown/kit/core'
 import { math } from '@milkdown/plugin-math'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
 import '@/lib/focusModePaneDark.css'
 import { SlashCommand } from '@/hooks/useSlashCommands'
-import React from 'react';
+import React, { useEffect } from 'react';
+
+/**
+ * Imperative undo/redo handle for the Focus Mode (Milkdown) editor.
+ *
+ * The homepage routes the `edit.undo` / `edit.redo` actions here while
+ * Focus Mode is active, because `monacoRef` is null in that mode and the
+ * Monaco-backed `runMonacoAction` would silently no-op (issue #341).
+ */
+export type FocusEditorHandle = {
+  undo: () => void,
+  redo: () => void,
+};
 
 type Props = {
   value: string,
@@ -30,10 +42,16 @@ type Props = {
   darkMode: boolean,
   fontSize: number,
   slashCommands: SlashCommand[],
-  onSelect: (cmd: SlashCommand) => void
+  onSelect: (cmd: SlashCommand) => void,
+  /** Shared handle the homepage uses to reach this editor's undo/redo. */
+  editorRef?: React.MutableRefObject<FocusEditorHandle | null>,
 };
 
-function CrepeEditor({ value, onChange, darkMode, fontSize, slashCommands, onSelect }: Props) {
+function CrepeEditor({ value, onChange, darkMode, fontSize, slashCommands, onSelect, editorRef }: Props) {
+  // Identity of the handle we published, so a stale instance's unmount cleanup
+  // (e.g. tab-switch remount via the `key` prop) never nulls a newer instance's handle.
+  const ownHandleRef = React.useRef<FocusEditorHandle | null>(null);
+
   useEditor((root) => {
     const removeSlash = () => {
       crepe.editor.action((ctx) => {
@@ -90,8 +108,35 @@ function CrepeEditor({ value, onChange, darkMode, fontSize, slashCommands, onSel
             }
           })
         })
+
+    // Publish undo/redo to the shared handle (issue #341): the app-level
+    // `edit.undo` / `edit.redo` actions must reach the Milkdown history while
+    // Focus Mode is active instead of the (nulled) Monaco instance. Focus the
+    // view first for parity with runMonacoAction's `mono.focus()`.
+    if (editorRef) {
+      const handle: FocusEditorHandle = {
+        undo: () => crepe.editor.action((ctx) => {
+          ctx.get(editorViewCtx).focus()
+          return ctx.get(commandsCtx).call(undoCommand.key)
+        }),
+        redo: () => crepe.editor.action((ctx) => {
+          ctx.get(editorViewCtx).focus()
+          return ctx.get(commandsCtx).call(redoCommand.key)
+        }),
+      }
+      ownHandleRef.current = handle
+      editorRef.current = handle
+    }
     return crepe
   })
+
+  // Clear the shared handle when the pane unmounts (e.g. leaving Focus Mode)
+  // so callers fall back to Monaco instead of driving a destroyed editor.
+  useEffect(() => () => {
+    if (editorRef && editorRef.current === ownHandleRef.current) {
+      editorRef.current = null
+    }
+  }, [editorRef]);
 
   return (
     <div className={`
