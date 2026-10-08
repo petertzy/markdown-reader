@@ -4,6 +4,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "
 import type { editor as MonacoEditor } from "monaco-editor";
 import { AI } from "@/lib/api";
 import { applyWorkResultIfFresh } from "@/lib/work-result-guard.mjs";
+import { applyWorkEdit } from "@/lib/apply-work-edit.mjs";
 
 type UseAIActionsOptions = {
   documentId: string;
@@ -114,7 +115,11 @@ export function useAIActions({
         requestSnapshot,
         currentDocumentRef.current,
         data.modified_content,
-        onDocumentChange
+        // Route the replacement through Monaco as one undoable edit when the
+        // editor is mounted, so Undo/Redo step over the whole AI result. The
+        // editor change callback keeps state and preview in sync; the fallback
+        // preserves the old behaviour when no editor/model is available.
+        (content) => applyWorkEdit(editorRef.current, onDocumentChange, content)
       );
       if (!applied) {
         alert(
@@ -127,7 +132,7 @@ export function useAIActions({
     } finally {
       setIsWorking(false);
     }
-  }, [documentId, documentText, onDocumentChange]);
+  }, [documentId, documentText, editorRef, onDocumentChange]);
 
   return {
     selectedText,
