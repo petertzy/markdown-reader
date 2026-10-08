@@ -408,7 +408,11 @@ def list_files(
 
     allowed_exts: set[str] | None = None
     if extensions:
-        allowed_exts = {e.strip().lower().lstrip(".") for e in extensions.split(",")}
+        allowed_exts = {
+            extension
+            for segment in extensions.split(",")
+            if (extension := segment.strip().lower().lstrip("."))
+        }
 
     entries: list[dict] = []
     try:
