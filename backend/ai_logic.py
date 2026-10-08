@@ -972,17 +972,66 @@ def _iter_heading_lines(markdown_text: str):
         yield line
 
 
+_ATX_HEADING_LINE_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+
+
+def _iter_toc_headings(markdown_text: str):
+    """Yield ``(level, title)`` for every heading the preview anchors.
+
+    Covers ATX (``# Heading``) and CommonMark setext headings (a text line over
+    a run of ``=`` or two or more ``-``). Fenced blocks are skipped so a ``#``
+    or a dash run inside code is not reported as a section, and a setext
+    underline separated from its text by a blank line is a thematic break, not
+    a heading. The rules match the renderer so the anchors resolve.
+    """
+    lines = (markdown_text or "").replace("\r\n", "\n").split("\n")
+    fence: str | None = None
+    for index, line in enumerate(lines):
+        if fence is not None:
+            closing = _FENCE_RE.match(line)
+            if (
+                closing
+                and closing.group(1)[0] == fence[0]
+                and len(closing.group(1)) >= len(fence)
+                and not line[closing.end() :].strip()
+            ):
+                fence = None
+            continue
+        fence_match = _FENCE_RE.match(line)
+        if fence_match:
+            fence = fence_match.group(1)
+            continue
+
+        atx = _ATX_HEADING_LINE_RE.match(line)
+        if atx:
+            yield len(atx.group(1)), atx.group(2).strip()
+            continue
+
+        # Setext: this line is the heading text when the next line is an
+        # underline. A blank line, an ATX heading, or another underline/thematic
+        # break never starts one.
+        if index + 1 >= len(lines):
+            continue
+        text = line.strip()
+        if (
+            not text
+            or _ATX_HEADING_LINE_RE.match(line)
+            or re.match(r"^\s*(?:-{3,}|=+)\s*$", line)
+        ):
+            continue
+        underline = lines[index + 1]
+        if re.match(r"^=+\s*$", underline):
+            yield 1, text
+        elif re.match(r"^-{2,}\s*$", underline):
+            yield 2, text
+
+
 def _generate_markdown_toc(markdown_text: str) -> str:
     toc_lines = []
     # Track slugs so duplicate headings get the ``-1``, ``-2`` … suffix that
     # GitHub applies when rendering anchors (same rule as ``_extract_outline``).
     slug_counts: dict[str, int] = {}
-    for line in _iter_heading_lines(markdown_text):
-        match = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
-        if not match:
-            continue
-        level = len(match.group(1))
-        title = match.group(2).strip()
+    for level, title in _iter_toc_headings(markdown_text):
         anchor = _slugify_heading_text(title)
         if not anchor:
             continue
