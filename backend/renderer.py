@@ -423,6 +423,11 @@ def render_markdown(
                 "code-friendly",
                 "tables",
                 "break-on-newline",
+                # GFM strikethrough. ``heading_anchor.extract_heading_text`` and
+                # ``word_count.strip_markdown`` already treat ``~~text~~`` as
+                # markup, so without this extra the preview was the one place a
+                # strikethrough stayed literal.
+                "strike",
                 # Keep links usable when exported HTML is shared as a file.
                 # markdown2 adds rel="noopener" alongside target="_blank".
                 "target-blank-links",

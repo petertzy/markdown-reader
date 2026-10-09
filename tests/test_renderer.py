@@ -416,6 +416,37 @@ class TestHeadingAnchors(unittest.TestCase):
         )
 
 
+class TestStrikethroughRendering(unittest.TestCase):
+    """GFM strikethrough must render, the way the rest of the app treats it.
+
+    ``heading_anchor.extract_heading_text`` and ``word_count.strip_markdown``
+    both strip ``~~...~~`` when they read a document, so the preview was the
+    only place a strikethrough stayed literal -- and text that is markup in the
+    anchor and the word count should not be markup only there.
+    """
+
+    def test_strikethrough_renders(self):
+        self.assertIn("<s>gone</s>", render_markdown("~~gone~~"))
+
+    def test_single_tilde_is_left_literal(self):
+        self.assertIn("~not strike~", render_markdown("~not strike~"))
+
+    def test_strikethrough_inside_a_code_span_is_kept_verbatim(self):
+        self.assertIn("<code>~~literal~~</code>", render_markdown("`~~literal~~`"))
+
+    def test_struck_heading_keeps_its_visible_text_anchor(self):
+        from backend.routers.markdown import _extract_outline
+
+        md = "# ~~old~~ new\n"
+        html = render_markdown(md)
+        self.assertIn('<h1 id="old-new">', html)
+        self.assertIn("<s>old</s> new", html)
+        self.assertEqual([node["anchor"] for node in _extract_outline(md)], ["old-new"])
+        self.assertEqual(
+            re.findall(r"\]\(#([^)]+)\)", _generate_markdown_toc(md)), ["old-new"]
+        )
+
+
 class TestImagePathsSkipCodeRegions(unittest.TestCase):
     """Relative image resolution must not rewrite image syntax shown as code.
 
