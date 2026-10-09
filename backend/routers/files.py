@@ -168,7 +168,11 @@ def read_file(path: str = Query(..., description="Absolute path to the file")):
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail=f"File not found: {path}")
     try:
-        with open(path, encoding="utf-8", errors="replace") as f:
+        # "utf-8-sig" strips a leading UTF-8 BOM (common for files saved on
+        # Windows) and otherwise reads exactly like "utf-8". Without it the
+        # invisible U+FEFF ends up in front of line 1 and hides the first
+        # heading from the outline.
+        with open(path, encoding="utf-8-sig", errors="replace") as f:
             content = f.read()
         return {"path": path, "content": content}
     except OSError as exc:
@@ -316,13 +320,13 @@ def _convert_local_file_to_markdown(path: str, filename: str | None = None) -> s
     # ── Native converters (no extra dependencies beyond what is already
     #    required by the application) ─────────────────────────────────────
     if ext in {".md", ".markdown", ".txt"}:
-        with open(path, encoding="utf-8", errors="replace") as file_obj:
+        with open(path, encoding="utf-8-sig", errors="replace") as file_obj:
             return file_obj.read()
 
     if ext in {".html", ".htm"}:
         from backend.converters import convert_html_to_markdown
 
-        with open(path, encoding="utf-8", errors="replace") as file_obj:
+        with open(path, encoding="utf-8-sig", errors="replace") as file_obj:
             return convert_html_to_markdown(file_obj.read())
 
     if ext == ".pdf":

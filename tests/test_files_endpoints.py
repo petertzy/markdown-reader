@@ -60,3 +60,54 @@ def test_extension_filter_keeps_no_extensionless_file_for_any_segment_form():
             assert "a.md" in names, raw
     finally:
         shutil.rmtree(td, ignore_errors=True)
+
+
+# ── UTF-8 BOM handling ──────────────────────────────────────────────────────
+
+
+def _write_bom_file(directory: str, name: str, body: bytes) -> str:
+    path = os.path.join(directory, name)
+    with open(path, "wb") as file_obj:
+        file_obj.write(b"\xef\xbb\xbf" + body)
+    return path
+
+
+def test_read_endpoint_strips_a_utf8_bom():
+    # Windows editors prepend a UTF-8 BOM. If it survives the read it becomes an
+    # invisible first character, so "# Title" is no longer recognised as a
+    # heading and the outline loses the document's title.
+    td = tempfile.mkdtemp()
+    try:
+        path = _write_bom_file(td, "note.md", b"# Title\n\nBody.\n")
+        with TestClient(app) as client:
+            response = client.get("/api/files/read", params={"path": path})
+        assert response.status_code == 200, response.text
+        assert response.json()["content"] == "# Title\n\nBody.\n"
+    finally:
+        shutil.rmtree(td, ignore_errors=True)
+
+
+def test_convert_local_markdown_strips_a_utf8_bom():
+    from backend.routers.files import _convert_local_file_to_markdown
+
+    td = tempfile.mkdtemp()
+    try:
+        path = _write_bom_file(td, "note.md", b"# Title\n\nBody.\n")
+        assert _convert_local_file_to_markdown(path, "note.md") == "# Title\n\nBody.\n"
+    finally:
+        shutil.rmtree(td, ignore_errors=True)
+
+
+def test_convert_local_html_strips_a_utf8_bom():
+    from backend.routers.files import _convert_local_file_to_markdown
+
+    td = tempfile.mkdtemp()
+    try:
+        path = _write_bom_file(
+            td, "page.html", b"<html><body><h1>Title</h1></body></html>"
+        )
+        converted = _convert_local_file_to_markdown(path, "page.html")
+        assert "\ufeff" not in converted
+        assert "Title" in converted
+    finally:
+        shutil.rmtree(td, ignore_errors=True)
