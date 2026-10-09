@@ -344,9 +344,10 @@ def extract_note_title(content: str, fallback_filename: str) -> str:
             continue
         if active_fence:
             continue
-        stripped = line.strip()
-        if stripped.startswith("# "):
-            title = stripped[2:].strip()
+        # A '#' that starts the line is a heading; an indented '#' (four
+        # spaces) is an indented code block, exactly as the renderer treats it.
+        if line.startswith("# "):
+            title = line[2:].strip()
             if title:
                 return title
 
@@ -387,7 +388,6 @@ def chunk_markdown_document(
 
     active_fence: tuple[str, int] | None = None
     for line in lines:
-        stripped = line.strip()
         fence = _markdown_fence(line, active_fence)
         if fence:
             # A fence marker is content, never a section boundary, and the lines
@@ -398,7 +398,9 @@ def chunk_markdown_document(
         if active_fence:
             current_lines.append(line)
             continue
-        heading_match = re.match(r"^(#{1,6})\s+(.+)$", stripped)
+        # Match the raw line, not its stripped form: a '#' that is indented by
+        # four spaces opens an indented code block, not a heading.
+        heading_match = re.match(r"^(#{1,6})\s+(.+)$", line)
         if heading_match:
             if current_lines:
                 sections.append((current_section, current_lines))
