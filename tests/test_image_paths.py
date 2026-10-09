@@ -51,5 +51,32 @@ class TestDataUriImagesSurviveResolution(unittest.TestCase):
         )
 
 
+class TestIndentedFenceCodeIsLeftAlone(unittest.TestCase):
+    """A fenced code block may be indented.
+
+    ``_mask_code_regions`` only recognised fences at column zero, so an
+    indented block was not masked and the image sample inside it was rewritten
+    to an absolute ``file://`` URL -- exactly the corruption the masking exists
+    to prevent.
+    """
+
+    BASE = "/Users/me/docs"
+
+    def test_relative_image_in_an_indented_fence_is_not_rewritten(self):
+        for text in (
+            "   ```\n   ![a](img.png)\n   ```\n",
+            " ```\n![a](img.png)\n   ```\n",  # the closing indent need not match
+            "- item\n\n    ```\n    ![a](img.png)\n    ```\n",
+        ):
+            self.assertEqual(fix_image_paths(text, self.BASE), text)
+
+    def test_relative_image_outside_the_fence_is_still_resolved(self):
+        text = "   ```\n   ![a](img.png)\n   ```\n\n![b](b.png)\n"
+        self.assertEqual(
+            fix_image_paths(text, self.BASE),
+            f"   ```\n   ![a](img.png)\n   ```\n\n![b](file://{self.BASE}/b.png)\n",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

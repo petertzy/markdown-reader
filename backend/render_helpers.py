@@ -41,9 +41,14 @@ def _mask_code_regions(markdown_text: str, replacements: dict[str, str]) -> str:
     text = markdown_text or ""
     factory = _PlaceholderFactory("CODEPLACEHOLDER", text, replacements)
 
-    # Fenced code blocks: ``` ... ``` or ~~~ ... ~~~, spanning lines.
+    # Fenced code blocks: ``` ... ``` or ~~~ ... ~~~, spanning lines. The
+    # fence may be indented -- up to three spaces at the top level, and four or
+    # more inside a list item -- so an unindented pattern missed those blocks
+    # and rewrote the ``![...](...)`` samples and ``$...$`` spans inside them as
+    # if they were live markup. The closing fence need not repeat the opener's
+    # indentation.
     text = re.sub(
-        r"(?ms)^(`{3,}|~{3,})[^\n]*\n.*?^\1[^\n]*\n?$",
+        r"(?ms)^[ \t]*(`{3,}|~{3,})[^\n]*\n.*?^[ \t]*\1[^\n]*\n?$",
         lambda m: factory(m.group(0)),
         text,
     )
