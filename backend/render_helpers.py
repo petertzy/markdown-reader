@@ -154,14 +154,31 @@ def fix_image_paths(markdown_text: str, base_path: str) -> str:
     that :func:`protect_math` relies on, so both agree on what counts as code.
     """
 
+    def is_absolute(src: str) -> bool:
+        return src.lower().startswith(("http://", "https://", "file://", "/", "data:"))
+
+    def resolve(src: str) -> str:
+        abs_path = os.path.abspath(os.path.join(base_path, src))
+        return "file://" + abs_path.replace("\\", "/")
+
     def replace_image(match: re.Match[str]) -> str:
         alt = match.group(1)
         src = match.group(2)
-        if src.lower().startswith(("http://", "https://", "file://", "/", "data:")):
+        # A destination wrapped in <...> may contain spaces and may be followed
+        # by a title. Resolve the path inside the brackets and keep the brackets
+        # (and title) around it: dropping them produced ``file:///dir/<my
+        # file.png>``, where markdown2 read the angle brackets as literal path
+        # characters and the image failed to load.
+        if src.startswith("<"):
+            end = src.find(">")
+            if end != -1:
+                destination = src[1:end]
+                if is_absolute(destination):
+                    return match.group(0)
+                return f"![{alt}](<{resolve(destination)}>{src[end + 1 :]})"
+        if is_absolute(src):
             return match.group(0)
-        abs_path = os.path.abspath(os.path.join(base_path, src))
-        abs_url = "file://" + abs_path.replace("\\", "/")
-        return f"![{alt}]({abs_url})"
+        return f"![{alt}]({resolve(src)})"
 
     code_replacements: dict[str, str] = {}
     text = _mask_code_regions(markdown_text or "", code_replacements)
