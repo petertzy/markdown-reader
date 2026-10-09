@@ -47,9 +47,11 @@ _AUTOLINK_RE = re.compile(
 # An inline `<img>` contributes its ``alt`` text to the anchor, exactly like
 # the renderer's ``_note_inline_image`` does for the preview's heading ids.
 # The value may be double-quoted, single-quoted or unquoted (valid HTML), so
-# every branch is captured and read below.
+# every branch is captured and read below. ``alt`` must be preceded by
+# whitespace so a different attribute such as ``data-alt`` is not mistaken
+# for the real one (the renderer uses the parsed attribute name).
 _INLINE_IMAGE_TAG_RE = re.compile(
-    r"""<img\b[^>]*?\balt\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*))[^>]*>""",
+    r"""<img\b[^>]*?(?<=\s)alt\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*))[^>]*>""",
     re.IGNORECASE | re.DOTALL,
 )
 
