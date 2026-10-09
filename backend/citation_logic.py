@@ -234,10 +234,24 @@ def _format_author_names(raw_author: str) -> list[str]:
             # conventional ``Last, First`` personal name.
             formatted.append(_clean_bibtex_value(part))
         elif _has_top_level_comma(part):
-            last, first = _split_on_top_level_comma(part)
-            formatted.append(
-                f"{_clean_bibtex_value(first)} {_clean_bibtex_value(last)}".strip()
-            )
+            last, rest = _split_on_top_level_comma(part)
+            suffix = ""
+            if _has_top_level_comma(rest):
+                # BibTeX's three-part ``von Last, Jr, First`` form: the second
+                # comma separates the name suffix from the first name, so the
+                # suffix trails the formatted name (``John Smith, Jr.``).
+                # Splitting on only the first comma left it in front
+                # (``Jr., John Smith``). Only treat the middle part as a suffix
+                # when it is non-empty, so a stray comma still formats plainly.
+                middle, remainder = _split_on_top_level_comma(rest)
+                if _clean_bibtex_value(middle):
+                    suffix, rest = middle, remainder
+            formatted_name = (
+                f"{_clean_bibtex_value(rest)} {_clean_bibtex_value(last)}"
+            ).strip()
+            if suffix:
+                formatted_name = f"{formatted_name}, {_clean_bibtex_value(suffix)}"
+            formatted.append(formatted_name)
         else:
             formatted.append(_clean_bibtex_value(part))
     return formatted
