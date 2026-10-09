@@ -259,6 +259,35 @@ class TestKnowledgeLogic(unittest.TestCase):
             "the fenced body must still be indexed as content",
         )
 
+    def test_chunking_ignores_indented_code_comments(self):
+        # A four-space indented line is an indented code block, not a heading
+        # (the renderer only anchors a '#' that starts the line). The comment
+        # must not become a section and must stay in the indexed content.
+        content = (
+            "# Setup\n\n"
+            "    # install the deps\n"
+            "    pip install -r requirements.txt\n\n"
+            "More text.\n"
+        )
+        chunks = knowledge_logic.chunk_markdown_document(
+            content, str(self.note1_path), "setup.md"
+        )
+        sections = [chunk["section"] for chunk in chunks]
+        self.assertNotIn("install the deps", sections)
+        self.assertIn("Setup", sections)
+        self.assertTrue(
+            any("# install the deps" in chunk["content"] for chunk in chunks),
+            "the indented code line must still be indexed as content",
+        )
+
+    def test_extract_note_title_ignores_indented_code_comments(self):
+        # The only '#' in the note is a comment inside an indented code block,
+        # so the note has no heading title and falls back to the filename.
+        content = "    # install the deps\n    pip install -r requirements.txt\n"
+        self.assertEqual(
+            knowledge_logic.extract_note_title(content, "setup.md"), "setup"
+        )
+
     def test_chunking_treats_an_unclosed_fence_as_code_to_end_of_document(self):
         # Matches CommonMark: an unterminated fence runs to the end of the file.
         content = "# Real Heading\n\n```\n# inside\n"
