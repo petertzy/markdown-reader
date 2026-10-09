@@ -131,6 +131,69 @@ class TestDocxExporter(unittest.TestCase):
             self.assertEqual(len(document.inline_shapes), 1)
             self.assertNotIn("data:", _document_text(document).lower())
 
+    def test_percent_encoded_local_image_path_is_embedded(self):
+        # Markdown image destinations are URLs, so a space arrives as "%20".
+        # The exporter must decode it before opening the file, or the picture is
+        # replaced by its "[path]" fallback text.
+        png = (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR"
+            "42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with open(f"{tmp_dir}/My Pic.png", "wb") as file_obj:
+                file_obj.write(base64.b64decode(png))
+            output_path = f"{tmp_dir}/encoded-image.docx"
+
+            export_html_to_docx(
+                render_markdown("![pic](My%20Pic.png)"),
+                output_path,
+                base_dir=tmp_dir,
+            )
+
+            document = Document(output_path)
+            self.assertEqual(len(document.inline_shapes), 1)
+            self.assertNotIn("[My%20Pic.png]", _document_text(document))
+
+    def test_percent_encoded_file_uri_image_path_is_embedded(self):
+        png = (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR"
+            "42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            image_path = f"{tmp_dir}/My Pic.png"
+            with open(image_path, "wb") as file_obj:
+                file_obj.write(base64.b64decode(png))
+            output_path = f"{tmp_dir}/file-uri-image.docx"
+
+            encoded_src = "file://" + image_path.replace(" ", "%20")
+            export_html_to_docx(
+                f'<img src="{encoded_src}">',
+                output_path,
+                base_dir=tmp_dir,
+            )
+
+            document = Document(output_path)
+            self.assertEqual(len(document.inline_shapes), 1)
+
+    def test_plain_local_image_path_still_resolves(self):
+        png = (
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR"
+            "42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with open(f"{tmp_dir}/plain.png", "wb") as file_obj:
+                file_obj.write(base64.b64decode(png))
+            output_path = f"{tmp_dir}/plain-image.docx"
+
+            export_html_to_docx(
+                render_markdown("![pic](plain.png)"),
+                output_path,
+                base_dir=tmp_dir,
+            )
+
+            document = Document(output_path)
+            self.assertEqual(len(document.inline_shapes), 1)
+
     def test_export_preserves_escaped_html_entities(self):
         # Escaped HTML like "&amp;" must be exported as the real character
         # ("&") rather than being silently dropped or written as raw markup.

@@ -7,7 +7,7 @@ from html import unescape
 from html.parser import HTMLParser
 from io import BytesIO
 from typing import Any
-from urllib.parse import unquote_to_bytes
+from urllib.parse import unquote, unquote_to_bytes
 
 import requests
 from docx import Document
@@ -43,9 +43,18 @@ def _resolve_image_source(src: str, base_dir: str | None) -> tuple[str, bytes | 
             return src, response.content
         except Exception:
             return src, None
-    candidates = [src]
-    if base_dir and not os.path.isabs(src):
-        candidates.insert(0, os.path.abspath(os.path.join(base_dir, src)))
+    # A Markdown image destination is a URL, so a space in the filename reaches
+    # us percent-encoded ("My%20Pic.png"). Decode it before touching the disk,
+    # or the picture is reported missing and replaced by its "[path]" fallback.
+    # The raw form stays as a fallback for a filename that holds a literal
+    # percent sequence.
+    decoded = unquote(src)
+    local_paths = [decoded] if decoded == src else [decoded, src]
+    candidates = []
+    for local_path in local_paths:
+        if base_dir and not os.path.isabs(local_path):
+            candidates.append(os.path.abspath(os.path.join(base_dir, local_path)))
+        candidates.append(local_path)
     for candidate in candidates:
         try:
             with open(candidate, "rb") as file_obj:
