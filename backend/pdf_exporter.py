@@ -6,6 +6,7 @@ import io
 import mimetypes
 import os
 import re
+from urllib.parse import unquote
 
 from backend.pdf_math import render_pdf_math
 
@@ -15,6 +16,10 @@ def _inline_local_images(html_content: str, base_dir: str | None = None) -> str:
         if src.startswith(("http://", "https://", "data:")):
             return None
         file_path = src[7:] if src.startswith("file://") else src
+        # Markdown image destinations are URLs, so a space in a filename reaches
+        # us as "%20". Decode before touching the disk or the image is reported
+        # missing and silently dropped from the PDF.
+        file_path = unquote(file_path)
         if not os.path.isabs(file_path):
             if not base_dir:
                 return None

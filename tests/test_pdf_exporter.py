@@ -1,4 +1,5 @@
 import builtins
+import os
 import sys
 import tempfile
 import types
@@ -315,3 +316,32 @@ class TestPdfExporter(unittest.TestCase):
                         f"{label} rescaled the fallback PDF to {size / reference:.1%}"
                     ),
                 )
+
+    def test_percent_encoded_local_image_source_is_inlined(self):
+        # Markdown image destinations are URLs, so a space is percent-encoded.
+        # The PDF exporter has to decode it before opening the file, or the
+        # picture is silently left out of the generated PDF.
+        from backend.pdf_exporter import _inline_local_images
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            image_path = os.path.join(tmp_dir, "my chart.png")
+            with open(image_path, "wb") as file_obj:
+                file_obj.write(b"\x89PNG\r\n\x1a\n")
+
+            encoded_src = image_path.replace(" ", "%20")
+            inlined = _inline_local_images(f'<img src="file://{encoded_src}">', tmp_dir)
+
+            self.assertIn("data:image/png;base64,", inlined)
+            self.assertNotIn("my%20chart.png", inlined)
+
+    def test_plain_local_image_source_is_still_inlined(self):
+        from backend.pdf_exporter import _inline_local_images
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            image_path = os.path.join(tmp_dir, "plain.png")
+            with open(image_path, "wb") as file_obj:
+                file_obj.write(b"\x89PNG\r\n\x1a\n")
+
+            inlined = _inline_local_images(f'<img src="file://{image_path}">', tmp_dir)
+
+            self.assertIn("data:image/png;base64,", inlined)
