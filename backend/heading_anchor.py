@@ -46,8 +46,10 @@ _AUTOLINK_RE = re.compile(
 
 # An inline `<img>` contributes its ``alt`` text to the anchor, exactly like
 # the renderer's ``_note_inline_image`` does for the preview's heading ids.
+# The value may be double-quoted, single-quoted or unquoted (valid HTML), so
+# every branch is captured and read below.
 _INLINE_IMAGE_TAG_RE = re.compile(
-    r"""<img\b[^>]*?\balt\s*=\s*(?:"([^"]*)"|'([^']*)'|[^\s>]*)[^>]*>""",
+    r"""<img\b[^>]*?\balt\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*))[^>]*>""",
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -76,7 +78,9 @@ def extract_heading_text(raw_text: str) -> str:
     """
     text = raw_text or ""
     text = _AUTOLINK_RE.sub(r"\1", text)
-    text = _INLINE_IMAGE_TAG_RE.sub(lambda m: m.group(1) or m.group(2) or "", text)
+    text = _INLINE_IMAGE_TAG_RE.sub(
+        lambda m: m.group(1) or m.group(2) or m.group(3) or "", text
+    )
     text = _HTML_RAW_TOKEN_RE.sub("", text)
     plain = html_unescape(_INLINE_MARKUP_RE.sub(r"\1\2", text))
     return plain.strip()
