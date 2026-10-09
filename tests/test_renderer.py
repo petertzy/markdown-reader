@@ -173,6 +173,15 @@ class TestRenderMarkdown(unittest.TestCase):
         self.assertIn('<span class="math-inline">', body)
         self.assertIn("<p>Area is", body)
 
+    def test_lone_inline_math_keeps_its_paragraph(self):
+        # A paragraph whose only content is inline math must keep its <p>
+        # wrapper; only display math unwraps the paragraph.
+        html = render_markdown("$x$")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertIn('<p><span class="math-inline">', body)
+        self.assertIn("</span></p>", body)
+
     def test_digit_leading_math_and_currency_remain_separate(self):
         for expression in ("2x + 1", "5", "2x", "x^2 + y^2 = z^2"):
             with self.subTest(expression=expression):
