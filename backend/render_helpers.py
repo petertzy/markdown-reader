@@ -105,8 +105,13 @@ def protect_math(markdown_text: str) -> tuple[str, dict[str, str]]:
 def restore_math(html_content: str, replacements: dict[str, str]) -> str:
     """Restore MathJax-compatible HTML placeholders."""
     for key, value in replacements.items():
-        html_content = html_content.replace(key, value)
+        # Display math arrives wrapped in a paragraph of its own
+        # ("<p>KEY</p>"). Replace that whole paragraph first, otherwise the
+        # loose replacement below turns it into "<p><div ...></div></p>" -- a
+        # block <div> inside a <p> is invalid HTML and leaves a stray empty
+        # paragraph behind.
         html_content = html_content.replace(f"<p>{key}</p>", value)
+        html_content = html_content.replace(key, value)
     return html_content
 
 
