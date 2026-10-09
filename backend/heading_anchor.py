@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from html import unescape as html_unescape
+from html.parser import HTMLParser
 
 # Matches ATX headings: `# Heading` … `###### Heading` (trailing closing
 # hashes such as `# Heading #` are allowed, as in CommonMark). The separator
@@ -46,14 +47,38 @@ _AUTOLINK_RE = re.compile(
 
 # An inline `<img>` contributes its ``alt`` text to the anchor, exactly like
 # the renderer's ``_note_inline_image`` does for the preview's heading ids.
-# The value may be double-quoted, single-quoted or unquoted (valid HTML), so
-# every branch is captured and read below. ``alt`` must be preceded by
-# whitespace so a different attribute such as ``data-alt`` is not mistaken
-# for the real one (the renderer uses the parsed attribute name).
+# Attribute values may be double-quoted, single-quoted or unquoted (all valid
+# HTML). Match one whole tag, including a ``>`` in a quoted value, then use the
+# same HTML attribute parsing rules as the renderer rather than trying to
+# identify an ``alt`` attribute with a regular expression.
 _INLINE_IMAGE_TAG_RE = re.compile(
-    r"""<img\b[^>]*?(?<=\s)alt\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*))[^>]*>""",
+    r"""<img\b(?:[^>"']+|"[^"]*"|'[^']*')*>""",
     re.IGNORECASE | re.DOTALL,
 )
+
+
+class _InlineImageAltParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.alt = ""
+
+    def _record_image(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() == "img":
+            self.alt = dict(attrs).get("alt") or ""
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._record_image(tag, attrs)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._record_image(tag, attrs)
+
+
+def _inline_image_alt(tag: str) -> str:
+    parser = _InlineImageAltParser()
+    parser.feed(tag)
+    parser.close()
+    return parser.alt
+
 
 # Every other angle-bracket form -- a tag such as ``<b>`` or ``<sup>``, an HTML
 # comment, a doctype, a processing instruction -- is removed while its interior
@@ -80,9 +105,7 @@ def extract_heading_text(raw_text: str) -> str:
     """
     text = raw_text or ""
     text = _AUTOLINK_RE.sub(r"\1", text)
-    text = _INLINE_IMAGE_TAG_RE.sub(
-        lambda m: m.group(1) or m.group(2) or m.group(3) or "", text
-    )
+    text = _INLINE_IMAGE_TAG_RE.sub(lambda m: _inline_image_alt(m.group()), text)
     text = _HTML_RAW_TOKEN_RE.sub("", text)
     plain = html_unescape(_INLINE_MARKUP_RE.sub(r"\1\2", text))
     return plain.strip()
