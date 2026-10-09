@@ -646,6 +646,47 @@ export const AI = {
       },
       LONG_REQUEST_TIMEOUT_MS
     ),
+
+  startProjectTranslation: (payload: {
+    root: string;
+    source_language: string;
+    target_language: string;
+    output_dir?: string;
+  }) =>
+    apiFetch<ProjectTranslationTask>("/api/ai/translate/project", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  projectTranslationStatus: (taskId: string) =>
+    apiFetch<ProjectTranslationTask>(`/api/ai/translate/project/${taskId}`),
+
+  cancelProjectTranslation: (taskId: string) =>
+    apiFetch<ProjectTranslationTask>(`/api/ai/translate/project/${taskId}/cancel`, {
+      method: "POST",
+    }),
+};
+
+export type ProjectTranslationFile = {
+  rel_path: string;
+  status: string;
+  error: string | null;
+};
+
+export type ProjectTranslationTask = {
+  id: string;
+  status: string;
+  root: string;
+  output_dir: string;
+  source_language: string;
+  target_language: string;
+  total: number;
+  completed: number;
+  translated: number;
+  unchanged: number;
+  failed: number;
+  cancelled: number;
+  files: ProjectTranslationFile[];
 };
 
 // ── Export API ────────────────────────────────────────────────────────────────
