@@ -17,10 +17,22 @@ def strip_markdown(text: str) -> str:
     text = re.sub(r"```[\s\S]*?```", " ", text)
     text = re.sub(r"~~~[\s\S]*?~~~", " ", text)
     text = re.sub(r"`[^`]*`", " ", text)
+    # Autolinks ("<https://...>", "<user@example.com>") render as clickable links
+    # whose visible text is the URL/address itself, so they keep their word. The
+    # generic tag rule below would otherwise drop them.
+    text = re.sub(
+        r"<([a-zA-Z][a-zA-Z0-9+.-]*:[^<>\s]*|[\w.+-]+@[\w.-]+\.[\w.]+)>",
+        r"\1",
+        text,
+    )
     text = re.sub(r"<[^>]+>", " ", text)
     text = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", text)
+    text = re.sub(r"!\[[^\]]*\]\[[^\]]*\]", " ", text)
     text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
     text = re.sub(r"\[([^\]]*)\]\[[^\]]*\]", r"\1", text)
+    # A link-reference definition ("[label]: url") is metadata the rendered
+    # document never shows, so it holds no words.
+    text = re.sub(r"^ {0,3}\[[^\]]+\]:\s+\S+.*$", "", text, flags=re.MULTILINE)
     text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
     text = re.sub(r"\*{1,3}|_{1,3}", "", text)
     text = re.sub(r"~~", "", text)
