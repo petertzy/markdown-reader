@@ -15,17 +15,25 @@ def _inline_local_images(html_content: str, base_dir: str | None = None) -> str:
     def _try_inline(src: str) -> str | None:
         if src.startswith(("http://", "https://", "data:")):
             return None
-        file_path = src[7:] if src.startswith("file://") else src
+        raw_path = src[7:] if src.startswith("file://") else src
         # Markdown image destinations are URLs, so a space in a filename reaches
-        # us as "%20". Decode before touching the disk or the image is reported
-        # missing and silently dropped from the PDF.
-        file_path = unquote(file_path)
-        if not os.path.isabs(file_path):
-            if not base_dir:
-                return None
-            file_path = os.path.join(base_dir, file_path)
-        file_path = os.path.abspath(file_path)
-        if not os.path.isfile(file_path):
+        # us as "%20". Try the literal path first -- a real filename may contain
+        # a "%XX"-looking sequence -- then the percent-decoded one, or the
+        # picture is reported missing and silently dropped from the PDF.
+        candidates = [raw_path]
+        decoded = unquote(raw_path)
+        if decoded != raw_path:
+            candidates.append(decoded)
+        for candidate in candidates:
+            file_path = candidate
+            if not os.path.isabs(file_path):
+                if not base_dir:
+                    continue
+                file_path = os.path.join(base_dir, file_path)
+            file_path = os.path.abspath(file_path)
+            if os.path.isfile(file_path):
+                break
+        else:
             return None
         mime_type, _ = mimetypes.guess_type(file_path)
         if not mime_type or not mime_type.startswith("image/"):

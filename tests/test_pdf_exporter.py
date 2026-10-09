@@ -345,3 +345,18 @@ class TestPdfExporter(unittest.TestCase):
             inlined = _inline_local_images(f'<img src="file://{image_path}">', tmp_dir)
 
             self.assertIn("data:image/png;base64,", inlined)
+
+    def test_literal_percent_filename_is_still_inlined(self):
+        # A real filename may contain a "%XX"-looking sequence. Resolve the
+        # literal path before falling back to percent-decoding it, so such an
+        # image is not dropped.
+        from backend.pdf_exporter import _inline_local_images
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            image_path = os.path.join(tmp_dir, "50%25off.png")
+            with open(image_path, "wb") as file_obj:
+                file_obj.write(b"\x89PNG\r\n\x1a\n")
+
+            inlined = _inline_local_images(f'<img src="file://{image_path}">', tmp_dir)
+
+            self.assertIn("data:image/png;base64,", inlined)
