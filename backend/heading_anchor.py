@@ -112,8 +112,13 @@ def unique_heading_slug(base: str, counts: dict[str, int]) -> str:
 
 
 # Match the backtick fences supported by the renderer's fenced-code-blocks extra.
+# A closing fence may be indented independently of the opener and be *at least*
+# as long as it (CommonMark). Pinning the backreference to the whole opening run
+# -- indentation included -- only closed on an identical line, so a block closed
+# by a longer or differently indented fence stayed unmasked and its "#" lines
+# leaked into the outline and the AI table of contents.
 _FENCED_CODE_RE = re.compile(
-    r"(^[ \t]*`{3,})[ \t]*[\w+-]*[ \t]*\n.*?^\1[ \t]*(?:\n|$)",
+    r"^[ \t]*(`{3,})[ \t]*[\w+-]*[ \t]*\n.*?^[ \t]*\1`*[ \t]*(?:\n|$)",
     re.MULTILINE | re.DOTALL,
 )
 

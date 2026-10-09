@@ -385,3 +385,41 @@ def test_setext_scan_does_not_close_a_fence_with_an_info_string():
     md = "```\n```python\nHidden\n=====\n```\n# Real\n"
     assert [node["text"] for node in _extract_outline(md)] == ["Real"]
     assert _outline_anchors(md) == _rendered_ids(md) == ["real"]
+
+
+# ── ATX headings inside fenced code ─────────────────────────────────────────
+#
+# A "#" line inside a backtick fence is code, not a heading. The scanner's
+# closing backreference was pinned to the whole opening run -- indentation
+# included -- so it only closed on an identical line. A block closed by a
+# *longer* fence (the usual way to show a triple-backtick snippet) or by a
+# differently indented fence stayed unmasked: its code lines leaked into the
+# outline and the AI table of contents as phantom sections while the preview
+# kept them inside <pre><code>. The outline, the TOC and the rendered ids must
+# agree again.
+
+
+def test_outline_skips_heading_inside_a_fence_closed_by_a_longer_fence():
+    md = "# Real\n\n```\n# fake\n`````\n\n## Second\n"
+    assert _outline_anchors(md) == ["real", "second"]
+    assert _outline_anchors(md) == _rendered_ids(md) == _toc_anchors(md)
+
+
+def test_outline_skips_heading_inside_an_indented_fence():
+    md = "# Real\n\n   ```\n   # fake\n   ```\n\n## Second\n"
+    assert _outline_anchors(md) == ["real", "second"]
+    assert _outline_anchors(md) == _rendered_ids(md) == _toc_anchors(md)
+
+
+def test_outline_skips_heading_inside_a_fence_with_a_different_closing_indent():
+    # The closing fence need not repeat the opener's indentation.
+    md = "# Real\n\n```\n# fake\n   ```\n\n## Second\n"
+    assert _outline_anchors(md) == ["real", "second"]
+    assert _outline_anchors(md) == _rendered_ids(md) == _toc_anchors(md)
+
+
+def test_outline_keeps_headings_after_a_skipped_fence_and_tracks_lines():
+    md = "# Real\n\n```\n# fake\n`````\n\n## After\n"
+    nodes = _extract_outline(md)
+    assert [node["text"] for node in nodes] == ["Real", "After"]
+    assert [node["line"] for node in nodes] == [1, 7]
