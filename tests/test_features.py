@@ -107,6 +107,15 @@ class TestStripMarkdown(unittest.TestCase):
         # no words, exactly as before the autolink rule.
         self.assertEqual(_count_words(_strip_markdown("<p>Some <b>text</b></p>")), 2)
 
+    def test_non_autolink_angle_brackets_are_still_removed(self):
+        # The renderer autolinks only http/https/ftp URLs and bare email
+        # addresses. Other angle-bracketed text ("<tel:555>", "<foo:bar>") stays
+        # an invisible HTML element, so it must not add words.
+        for md in ("Call <tel:555> now", "see <foo:bar> baz"):
+            with self.subTest(markdown=md):
+                self.assertNotIn("<a ", _render_markdown(md))
+                self.assertEqual(_count_words(_strip_markdown(md)), 2)
+
     def test_reference_definition_adds_no_words(self):
         # "[d]: https://..." defines a link for the renderer but is never shown
         # in the document, so it must not be counted as words.

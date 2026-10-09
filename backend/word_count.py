@@ -17,11 +17,14 @@ def strip_markdown(text: str) -> str:
     text = re.sub(r"```[\s\S]*?```", " ", text)
     text = re.sub(r"~~~[\s\S]*?~~~", " ", text)
     text = re.sub(r"`[^`]*`", " ", text)
-    # Autolinks ("<https://...>", "<user@example.com>") render as clickable links
-    # whose visible text is the URL/address itself, so they keep their word. The
-    # generic tag rule below would otherwise drop them.
+    # Autolinks ("<https://...>", "<ftp://...>", "<bob@example.com>",
+    # "<mailto:bob@example.com>") render as clickable links whose visible text
+    # is the URL/address itself, so they keep their word. The renderer only
+    # autolinks http/https/ftp schemes and bare email addresses, so any other
+    # angle-bracketed text stays an invisible HTML element and is dropped by
+    # the generic tag rule below.
     text = re.sub(
-        r"<([a-zA-Z][a-zA-Z0-9+.-]*:[^<>\s]*|[\w.+-]+@[\w.-]+\.[\w.]+)>",
+        r"<((?:https?|ftp):[^<>\s]*|(?:mailto:)?[\w.+-]+@[\w.-]+\.[a-zA-Z]+)>",
         r"\1",
         text,
     )
