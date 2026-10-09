@@ -131,6 +131,16 @@ class TestFencedHeadingsInGeneratedTOC(unittest.TestCase):
         self.assertNotIn("code", summary)
         self.assertIn("Only", summary)
 
+    def test_summary_does_not_close_a_fence_with_an_info_string(self):
+        # The renderer only closes a fence on a bare run of backticks: a
+        # ```python line keeps the block open, so the heading below it is
+        # code and must not be reported as a section of the document.
+        summary = _generate_lightweight_summary(
+            "```\ncode\n```python\n# Hidden\nmore\n```\n\n# Real\n"
+        )
+        self.assertNotIn("Hidden", summary)
+        self.assertIn("Real", summary)
+
 
 class TestAIAutomationLogic(unittest.TestCase):
     def test_templates_are_available(self):

@@ -963,11 +963,17 @@ def _iter_heading_lines(markdown_text: str):
                 continue
         else:
             # A closing fence uses the same character and is at least as long
-            # as the opener; anything else is part of the code block.
+            # as the opener; anything else is part of the code block. A line
+            # like ```python is an info string, not a closing fence, so the
+            # renderer keeps the block open and the lines below it stay code.
             closing = _FENCE_RE.match(line)
-            if closing and closing.group(1)[0] == fence[0]:
-                if len(closing.group(1)) >= len(fence):
-                    fence = None
+            if (
+                closing
+                and closing.group(1)[0] == fence[0]
+                and len(closing.group(1)) >= len(fence)
+                and not line[closing.end() :].strip()
+            ):
+                fence = None
             continue
         yield line
 
