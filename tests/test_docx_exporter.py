@@ -6,6 +6,7 @@ from urllib.parse import quote_from_bytes
 from zipfile import ZipFile
 
 from docx import Document
+from docx.oxml.ns import qn
 
 from backend.docx_exporter import export_html_to_docx
 from backend.renderer import render_markdown
@@ -459,3 +460,40 @@ class TestDocxExporterLinkWhitespace(unittest.TestCase):
             self._hyperlink_t_elements("[docs](https://example.com)"),
             ["<w:t>docs</w:t>"],
         )
+
+
+class TestDocxExporterThematicBreaks(unittest.TestCase):
+    """A thematic break must export as a horizontal rule, not vanish.
+
+    ``render_markdown`` emits ``<hr />`` for ``---``. The parser used to
+    ignore the tag, so every rule was silently dropped from the Word export.
+    """
+
+    def _rule_paragraphs(self, markdown):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = f"{tmp_dir}/rule.docx"
+
+            export_html_to_docx(render_markdown(markdown), output_path)
+
+            document = Document(output_path)
+            rules = []
+            for paragraph in document.paragraphs:
+                properties = paragraph._p.find(qn("w:pPr"))
+                if properties is not None and properties.find(qn("w:pBdr")) is not None:
+                    rules.append(paragraph)
+        return document, rules
+
+    def test_thematic_break_draws_a_horizontal_rule(self):
+        document, rules = self._rule_paragraphs("Above\n\n---\n\nBelow")
+
+        self.assertEqual(len(rules), 1, "the rule should be drawn once")
+        self.assertEqual(rules[0].text, "", "the rule paragraph itself is empty")
+        self.assertEqual(
+            [paragraph.text for paragraph in document.paragraphs if paragraph.text],
+            ["Above", "Below"],
+        )
+
+    def test_rule_is_not_drawn_without_a_thematic_break(self):
+        _, rules = self._rule_paragraphs("Just a paragraph.")
+
+        self.assertEqual(rules, [])
