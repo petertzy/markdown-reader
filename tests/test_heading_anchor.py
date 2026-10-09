@@ -105,5 +105,65 @@ class TestHeadingAnchorConvergence(unittest.TestCase):
         self.assertEqual(_toc_hrefs(md), ["5-10-and-3"])
 
 
+class TestHeadingAnchorLinkParity(unittest.TestCase):
+    """The heading extractor mirrors the renderer's link handling.
+
+    markdown2 autolinks only http/https/ftp URLs and email addresses, resolves
+    reference-style links/images to their label, and shows a ``mailto:`` link as
+    the bare address. Inline-only stripping (``[text](url)``) missed all three,
+    so heading anchors and generated TOC links did not match the preview.
+    """
+
+    def test_non_renderer_autolink_schemes_contribute_no_text(self):
+        # "<tel:555>"/"<foo:bar>" are not autolinks; the renderer leaves them as
+        # invisible HTML elements, so they add no visible heading text.
+        self.assertEqual(extract_heading_text("Call <tel:555> now"), "Call  now")
+        self.assertEqual(slugify_heading("Call <tel:555> now"), "call-now")
+        self.assertEqual(slugify_heading("see <foo:bar> baz"), "see-baz")
+
+    def test_mailto_scheme_is_not_part_of_the_link_text(self):
+        # The preview shows "bob@example.com" for "<mailto:bob@example.com>".
+        self.assertEqual(
+            extract_heading_text("Mail <mailto:bob@example.com>"),
+            "Mail bob@example.com",
+        )
+        self.assertEqual(
+            slugify_heading("Mail <mailto:bob@example.com>"), "mail-bobexamplecom"
+        )
+
+    def test_reference_links_and_images_keep_their_label(self):
+        self.assertEqual(extract_heading_text("See [RFC 2119][rfc]"), "See RFC 2119")
+        self.assertEqual(slugify_heading("See [RFC 2119][rfc]"), "see-rfc-2119")
+        self.assertEqual(extract_heading_text("Logo ![Big Co][logo]"), "Logo Big Co")
+        self.assertEqual(slugify_heading("Logo ![Big Co][logo]"), "logo-big-co")
+
+    def test_reference_link_headings_keep_anchors_aligned(self):
+        md = (
+            "# See [RFC 2119][rfc]\n\n"
+            "## Logo ![Big Co][logo]\n\n"
+            "[rfc]: https://example.com/rfc\n"
+            "[logo]: x.png"
+        )
+        html = render_markdown(md)
+        self.assertIn('<h1 id="see-rfc-2119">', html)
+        self.assertIn('<h2 id="logo-big-co">', html)
+        self.assertEqual(
+            [node["anchor"] for node in _extract_outline(md)],
+            ["see-rfc-2119", "logo-big-co"],
+        )
+        self.assertEqual(_toc_hrefs(md), ["see-rfc-2119", "logo-big-co"])
+
+    def test_non_renderer_autolink_heading_keeps_anchors_aligned(self):
+        md = "# Call <tel:555> now\n\n## Mail <mailto:bob@example.com>"
+        html = render_markdown(md)
+        self.assertIn('<h1 id="call-now">', html)
+        self.assertIn('<h2 id="mail-bobexamplecom">', html)
+        self.assertEqual(
+            [node["anchor"] for node in _extract_outline(md)],
+            ["call-now", "mail-bobexamplecom"],
+        )
+        self.assertEqual(_toc_hrefs(md), ["call-now", "mail-bobexamplecom"])
+
+
 if __name__ == "__main__":
     unittest.main()

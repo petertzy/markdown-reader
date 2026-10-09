@@ -34,14 +34,20 @@ _WHITESPACE_RE = re.compile(r"\s+")
 # text, group 2 for a link's label. The remaining branches match no group and so
 # are dropped by the `\1\2` replacement.
 _INLINE_MARKUP_RE = re.compile(
-    r"\*{1,2}|_{1,2}|`|~~|!\[([^\]]*)\]\(.*?\)|\[([^\]]*)\]\(.*?\)"
+    r"\*{1,2}|_{1,2}|`|~~"
+    r"|!\[([^\]]*)\](?:\(.*?\)|\[[^\]]*\])"
+    r"|\[([^\]]*)\](?:\(.*?\)|\[[^\]]*\])"
 )
 
 # Angle-bracket autolinks (`<https://example.com>`, `<foo@example.com>`) are
 # rendered as real links; the brackets are dropped but the link text kept so
-# the anchor matches the link markdown2 actually produces for the heading.
+# the anchor matches the link markdown2 actually produces. Only the schemes the
+# renderer autolinks count -- http/https/ftp URLs and email addresses, with an
+# optional ``mailto:`` that is not part of the visible text. Any other
+# angle-bracket text (``<tel:555>``, ``<foo:bar>``) stays an invisible HTML
+# element and contributes nothing.
 _AUTOLINK_RE = re.compile(
-    r"<([a-zA-Z][a-zA-Z0-9+.-]*:[^<>]*|[\w.+-]+@[\w.-]+\.[\w.]+)>"
+    r"<(?:mailto:)?((?:https?|ftp):[^<>\s]*|[\w.+-]+@[\w.-]+\.[a-zA-Z]+)>"
 )
 
 # An inline `<img>` contributes its ``alt`` text to the anchor, exactly like
