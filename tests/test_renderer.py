@@ -293,6 +293,63 @@ class TestRawHtmlTokensSurviveRendering(unittest.TestCase):
         # it, and the anchor is still built from the visible text only.
         self.assertIn('<h1 id="title">Title <!-- note --></h1>', html)
 
+    def test_unterminated_comment_keeps_the_rest_of_the_line(self):
+        # An author mid-typing a comment leaves "<!--" unclosed. markdown2 treats
+        # it as ordinary text, so the preview must keep it too instead of
+        # erasing the tail of the document (as html.parser's unclosed-comment
+        # reading did).
+        html = render_markdown("Intro <!-- typed mid-sentence")
+
+        self.assertIn("Intro", html)
+        self.assertIn("&lt;!-- typed mid-sentence", html)
+
+    def test_unterminated_comment_does_not_swallow_the_next_paragraph(self):
+        html = render_markdown("Intro <!-- note\n\nMore text after")
+
+        self.assertIn("<p>Intro", html)
+        self.assertIn("&lt;!-- note", html)
+        self.assertIn("More text after", html)
+        # The comment must not eat a later paragraph's closing tag and flush it
+        # back into the document as visible "&lt;/p&gt;" text.
+        self.assertNotIn("&lt;/p&gt;", html)
+
+    def test_every_unterminated_comment_opener_is_escaped(self):
+        # A line can hold more than one unfinished comment while it is being
+        # typed. If only the first opener were escaped, the next one would still
+        # send html.parser into comment mode and leak the closing tag.
+        html = render_markdown("A <!-- x B <!-- y")
+
+        self.assertIn("&lt;!-- x B &lt;!-- y", html)
+        self.assertNotIn("&lt;/p&gt;", html)
+
+    def test_incomplete_comment_inside_script_is_not_escaped(self):
+        # A "<!" sequence inside a <script> body is raw text (CDATA); the
+        # unfinished-comment handling must leave it alone.
+        html = render_markdown('<script>const s = "<!--";</script>')
+
+        self.assertIn('const s = "<!--"', html)
+
+    def test_incomplete_comment_inside_style_is_not_escaped(self):
+        html = render_markdown('<style>a::before { content: "<!--"; }</style>')
+
+        self.assertIn('content: "<!--"', html)
+
+    def test_incomplete_comment_inside_an_attribute_is_not_escaped(self):
+        html = render_markdown('<a href="x" title="<!--">link</a>')
+
+        self.assertIn('title="<!--"', html)
+        self.assertNotIn("&lt;!--", html)
+
+    def test_linkifier_keeps_trailing_text_at_end_of_input(self):
+        # _BareUrlLinkifier buffers text until a tag arrives; without a final
+        # flush the tail that has no closing tag after it is silently dropped.
+        from backend.renderer import linkify_bare_urls
+
+        self.assertEqual(
+            linkify_bare_urls("<p>Text at the end"),
+            "<p>Text at the end",
+        )
+
 
 class TestHeadingAnchors(unittest.TestCase):
     """Rendered headings carry canonical anchors matching the outline and TOC."""
