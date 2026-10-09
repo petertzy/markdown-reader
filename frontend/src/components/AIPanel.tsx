@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
 import { useAIChat, type TranslationPair, type TranslationProgress } from "@/hooks/useAIChat";
-import { AI, getDefaultAISettings, type AISettings, Knowledge, type KnowledgeStatus } from "@/lib/api";
+import { AI, getDefaultAISettings, type AISettings, Knowledge, type KnowledgeStatus, type ProjectTranslationTask } from "@/lib/api";
 import { tokenizeInlineMarkdown } from "@/lib/inline-markdown.mjs";
 
 export type AIPanelTab = "chat" | "translate" | "settings" | "work";
@@ -179,6 +179,10 @@ export default function AIPanel({
   const [translatedPreview, setTranslatedPreview] = useState<string | null>(null);
   const [translationPairs, setTranslationPairs] = useState<TranslationPair[]>([]);
   const [translationProgress, setTranslationProgress] = useState<TranslationProgress | null>(null);
+  const [projectRoot, setProjectRoot] = useState("");
+  const [projectTask, setProjectTask] = useState<ProjectTranslationTask | null>(null);
+  const [projectError, setProjectError] = useState<string | null>(null);
+  const [projectStarting, setProjectStarting] = useState(false);
   const [settings, setSettings] = useState<AISettings>(() => getDefaultAISettings());
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -574,6 +578,74 @@ export default function AIPanel({
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
+  const projectTaskId = projectTask?.id ?? null;
+  const projectStatus = projectTask?.status ?? null;
+  const projectRunning = projectStatus === "running" || projectStatus === "pending";
+
+  useEffect(() => {
+    if (!projectTaskId || !projectRunning) return;
+    let stopped = false;
+    const timer = window.setInterval(() => {
+      void AI.projectTranslationStatus(projectTaskId)
+        .then((next) => {
+          if (!stopped) setProjectTask(next);
+        })
+        .catch((err: unknown) => {
+          if (!stopped) {
+            setProjectError(err instanceof Error ? err.message : String(err));
+          }
+        });
+    }, 800);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [projectRunning, projectTaskId]);
+
+  const handleTranslateProject = async () => {
+    const root = projectRoot.trim();
+    if (!root || projectRunning) return;
+    setProjectError(null);
+    setProjectStarting(true);
+    try {
+      if (provider === "local") {
+        await AI.setProvider(provider);
+        await AI.setLocalAIBaseUrlChoice(localBaseUrlChoice, localBaseUrl);
+      }
+      const task = await AI.startProjectTranslation({
+        root,
+        source_language: sourceLang === "Auto Detect" ? "auto" : sourceLang,
+        target_language: targetLang,
+      });
+      setProjectTask(task);
+    } catch (err) {
+      setProjectError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProjectStarting(false);
+    }
+  };
+
+  const handleBrowseProject = async () => {
+    setProjectError(null);
+    try {
+      const { open } = await import("@tauri-apps/plugin-dialog");
+      const selected = await open({ directory: true, multiple: false });
+      const selectedPath = selected ? (Array.isArray(selected) ? selected[0] : selected) : null;
+      if (selectedPath) setProjectRoot(selectedPath);
+    } catch {
+      setProjectError("Folder browsing is available in the desktop app. Paste a folder path instead.");
+    }
+  };
+
+  const handleCancelProject = async () => {
+    if (!projectTask) return;
+    try {
+      setProjectTask(await AI.cancelProjectTranslation(projectTask.id));
+    } catch (err) {
+      setProjectError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const handleTranslate = async () => {
     const content = translateScope === "selection" && selectedText ? selectedText : documentText;
     if (!content.trim()) return;
@@ -931,6 +1003,85 @@ export default function AIPanel({
           >
             {loading ? "Translating…" : "Translate"}
           </button>
+
+          <div className="flex flex-col gap-1.5 rounded border border-gray-200 dark:border-gray-700 p-2">
+            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">Project folder</div>
+            <p className="text-[11px] leading-snug text-gray-500 dark:text-gray-400">
+              Translates every Markdown file into <span className="font-mono">.markdown-reader/translations</span>. Source files stay unchanged.
+            </p>
+            <div className="flex gap-1">
+              <input
+                type="text"
+                value={projectRoot}
+                onChange={(event) => setProjectRoot(event.target.value)}
+                placeholder={knowledgeStatus?.path || "Folder path"}
+                className="flex-1 text-[11px] p-1 border border-gray-200 dark:border-gray-600 rounded bg-white dark:bg-[#1e1e1e]"
+              />
+              <button
+                onClick={() => { void handleBrowseProject(); }}
+                className="px-2 py-1 text-[11px] bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600"
+              >
+                Browse
+              </button>
+            </div>
+            {knowledgeStatus?.exists && knowledgeStatus.path && projectRoot !== knowledgeStatus.path && (
+              <button
+                onClick={() => setProjectRoot(knowledgeStatus.path)}
+                className="self-start text-[11px] text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                Use notes folder
+              </button>
+            )}
+            <div className="flex gap-1">
+              <button
+                onClick={() => { void handleTranslateProject(); }}
+                disabled={projectStarting || projectRunning || !projectRoot.trim()}
+                className="flex-1 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40"
+              >
+                {projectRunning ? "Translating project…" : "Translate project"}
+              </button>
+              {projectRunning && (
+                <button
+                  onClick={() => { void handleCancelProject(); }}
+                  className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-[#2d2d2d]"
+                >
+                  Stop
+                </button>
+              )}
+            </div>
+            {projectTask && (
+              <div className="flex flex-col gap-1 text-[11px] text-gray-600 dark:text-gray-300">
+                <div className="flex items-center justify-between">
+                  <span>
+                    {projectTask.completed}/{projectTask.total} files
+                    {projectTask.failed > 0 ? `, ${projectTask.failed} failed` : ""}
+                  </span>
+                  <span className="capitalize">{projectTask.status}</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded bg-gray-200 dark:bg-gray-700">
+                  <div
+                    className="h-full rounded bg-blue-500 transition-all"
+                    style={{
+                      width: `${projectTask.total > 0 ? Math.round((projectTask.completed / projectTask.total) * 100) : 0}%`,
+                    }}
+                  />
+                </div>
+                <div className="max-h-28 overflow-y-auto font-mono">
+                  {projectTask.files.map((file) => (
+                    <div key={file.rel_path} title={file.error ?? file.status} className="truncate">
+                      {file.status === "failed" ? "✕" : file.status === "translated" || file.status === "unchanged" ? "✓" : file.status === "cancelled" ? "–" : "·"} {file.rel_path}
+                    </div>
+                  ))}
+                </div>
+                {projectTask.status !== "running" && projectTask.output_dir && (
+                  <div className="break-all text-gray-500 dark:text-gray-400">Output: {projectTask.output_dir}</div>
+                )}
+              </div>
+            )}
+            {projectError && (
+              <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">{projectError}</div>
+            )}
+          </div>
 
           {translationMode === "sentences" && (translationProgress || loading) && (
             <div className="flex flex-col gap-1 rounded border border-blue-100 bg-blue-50 p-2 text-xs text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
