@@ -39,6 +39,27 @@ class TestHeadingAnchorHelpers(unittest.TestCase):
             "logo-big-co",
         )
 
+    def test_slug_uses_unquoted_img_alt_text(self):
+        # Unquoted attribute values are valid HTML and the renderer reads them
+        # via html.parser, so the slug must include the alt text too.
+        self.assertEqual(
+            slugify_heading('Logo <img src="x.png" alt=Big>'),
+            "logo-big",
+        )
+
+    def test_prefixed_alt_attribute_is_not_an_alt(self):
+        # `data-alt` is a different attribute; the renderer ignores it, so the
+        # slug must too. Only a whitespace-separated bare `alt` counts.
+        for attr in ("data-alt", "aria-alt", "x-alt", "@alt", ":alt"):
+            self.assertEqual(
+                slugify_heading(f'Logo <img src="x.png" {attr}=Big>'),
+                "logo",
+                attr,
+            )
+
+    def test_alt_like_text_inside_a_quoted_attribute_is_not_an_alt(self):
+        self.assertEqual(slugify_heading('Logo <img title=" alt=Big" src=x>'), "logo")
+
     def test_slug_keeps_autolink_content(self):
         self.assertEqual(
             slugify_heading("Read <https://example.com> now"),
@@ -78,6 +99,33 @@ class TestHeadingAnchorConvergence(unittest.TestCase):
             ["logo-big-co", "title"],
         )
         self.assertEqual(_toc_hrefs(md), ["logo-big-co", "title"])
+
+    def test_unquoted_img_alt_in_heading_keeps_anchors_aligned(self):
+        md = '# Logo <img src="x.png" alt=Big>\n\n# Title'
+        html = render_markdown(md)
+        self.assertIn('<h1 id="logo-big">', html)
+        self.assertEqual(
+            [node["anchor"] for node in _extract_outline(md)],
+            ["logo-big", "title"],
+        )
+        self.assertEqual(_toc_hrefs(md), ["logo-big", "title"])
+
+    def test_prefixed_alt_attribute_keeps_anchors_aligned(self):
+        for attr in ("data-alt", "aria-alt", "x-alt"):
+            md = f'# Logo <img src="x.png" {attr}=Big>'
+            html = render_markdown(md)
+            self.assertIn('<h1 id="logo">', html)
+            self.assertEqual(
+                [node["anchor"] for node in _extract_outline(md)], ["logo"], attr
+            )
+            self.assertEqual(_toc_hrefs(md), ["logo"], attr)
+
+    def test_quoted_alt_like_text_keeps_anchors_aligned(self):
+        md = '# Logo <img title=" alt=Big" src=x>'
+        html = render_markdown(md)
+        self.assertIn('<h1 id="logo">', html)
+        self.assertEqual([node["anchor"] for node in _extract_outline(md)], ["logo"])
+        self.assertEqual(_toc_hrefs(md), ["logo"])
 
     def test_autolink_heading_anchor_resolves_in_outline_and_toc(self):
         md = "# Read <https://example.com> now\n\n## Mail <foo@example.com>"
