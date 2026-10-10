@@ -133,6 +133,26 @@ def _shade_run(run, fill: str) -> None:
     _add_shading(properties, fill)
 
 
+def _add_horizontal_rule(paragraph) -> None:
+    """Give *paragraph* a bottom border, Word's horizontal rule.
+
+    Word has no "thematic break" element: a rule is an otherwise empty
+    paragraph whose bottom edge is drawn as a border. The border run must go
+    through the paragraph properties (``w:pPr/w:pBdr``) rather than through a
+    run, because a run-level border outlines the glyphs and an empty run would
+    draw nothing at all.
+    """
+    properties = paragraph._p.get_or_add_pPr()
+    borders = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+    bottom.set(qn("w:val"), "single")
+    bottom.set(qn("w:sz"), "6")
+    bottom.set(qn("w:space"), "1")
+    bottom.set(qn("w:color"), "auto")
+    borders.append(bottom)
+    properties.append(borders)
+
+
 class _DocxHtmlParser(HTMLParser):
     def __init__(self, document: Document, base_dir: str | None = None):
         super().__init__(convert_charrefs=False)
@@ -203,6 +223,14 @@ class _DocxHtmlParser(HTMLParser):
             self.current_list_items.append([style, self.current_paragraph, False])
         elif tag == "br" and self.current_paragraph is not None:
             self.current_paragraph.add_run().add_break()
+        elif tag == "hr":
+            # ``render_markdown`` emits ``<hr />`` for a thematic break
+            # (``---``). Without a branch the tag was silently dropped, so
+            # every rule vanished from the Word export and the surrounding
+            # text ran together. The rule is its own empty, bordered
+            # paragraph; nothing else may append to it.
+            _add_horizontal_rule(self.document.add_paragraph())
+            self.current_paragraph = None
         elif tag == "img":
             src = attrs_dict.get("src", "")
             if not src:
