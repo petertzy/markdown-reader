@@ -401,6 +401,26 @@ class TestCitationAuthorFormatting(unittest.TestCase):
             citation_logic._format_authors("{Smith, Jr.}, John"), "John Smith, Jr."
         )
 
+    def test_bibtex_name_suffix_survives_the_second_comma(self):
+        # BibTeX's third name form is ``von Last, Jr, First``: the second top
+        # level comma separates the suffix from the first name. Splitting on
+        # only the first comma moved the suffix to the front of the result.
+        self.assertEqual(
+            citation_logic._format_authors("Smith, Jr., John"), "John Smith, Jr."
+        )
+        self.assertEqual(
+            citation_logic._format_authors("Doe, PhD, Jane"), "Jane Doe, PhD"
+        )
+        # The ``von`` particle belongs to the last name, in front of the suffix.
+        self.assertEqual(
+            citation_logic._format_authors("van Beethoven, Sr., Ludwig"),
+            "Ludwig van Beethoven, Sr.",
+        )
+        # A plain ``Last, First`` still has a single comma and is unchanged.
+        self.assertEqual(citation_logic._format_authors("Doe, Jane"), "Jane Doe")
+        # And it reaches the formatted author through the real upload path.
+        self.assertEqual(self._parse_author("{Smith, Jr., John}"), "John Smith, Jr.")
+
     def test_and_separates_authors_across_a_line_break(self):
         # Long .bib fields wrap, so `and` can arrive on the next line. Requiring
         # a literal " and " folded both names into one and left the word inside
