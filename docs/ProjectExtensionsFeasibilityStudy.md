@@ -78,6 +78,7 @@ Grounded inventory of the surfaces this design builds on:
 
 ### 4.3 Explicitly out of scope
 
+Arbitrary code execution, shell access, UI plugins that inject into the editor DOM, and anything that bypasses the review pipeline. The issue's design principle — *"minimal impact on users who do not need extensions"* — implies the default install carries **zero** of §4.2.
 
 ---
 
@@ -229,5 +230,3 @@ Note: `POST /api/files/write` accepting arbitrary absolute paths is acceptable *
 3. **Then:** reassess §8's exit criteria; if a concrete integration demand exists, implement Phase 1 as specified — registry, manifests, mediated invocation, one PoC capability.
 
 Until step 3 is triggered, **no extension code should be merged**, keeping the core small and the default experience untouched, per the issue's own guidance.
-
-Arbitrary code execution, shell access, UI plugins that inject into the editor DOM, and anything that bypasses the review pipeline. The issue's design principle — *"minimal impact on users who do not need extensions"* — implies the default install carries **zero** of §4.2.
