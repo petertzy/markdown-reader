@@ -78,7 +78,12 @@ def protect_math(markdown_text: str) -> tuple[str, dict[str, str]]:
         return key
 
     def replace_block(match: re.Match[str]) -> str:
-        return make_placeholder(match.group(1), display=True)
+        # Keep each display placeholder in its own Markdown block. Without
+        # these boundaries adjacent display expressions share markdown2's
+        # paragraph wrapper, which would still nest their restored <div>s in a
+        # <p> even though a lone expression is unwrapped in restore_math.
+        placeholder = make_placeholder(match.group(1), display=True)
+        return f"\n\n{placeholder}\n\n"
 
     def replace_inline(match: re.Match[str]) -> str:
         return make_placeholder(match.group(1), display=False)
@@ -110,8 +115,15 @@ def protect_math(markdown_text: str) -> tuple[str, dict[str, str]]:
 def restore_math(html_content: str, replacements: dict[str, str]) -> str:
     """Restore MathJax-compatible HTML placeholders."""
     for key, value in replacements.items():
+        # Display math is a block element and markdown2 wraps a lone placeholder
+        # in a paragraph of its own ("<p>KEY</p>"). Replace that whole paragraph
+        # so the block <div> is not nested inside a <p> (invalid HTML, and it
+        # leaves a stray empty paragraph behind). Inline math shares its
+        # paragraph with surrounding text, so only the loose replacement below
+        # applies.
+        if value.startswith("<div"):
+            html_content = html_content.replace(f"<p>{key}</p>", value)
         html_content = html_content.replace(key, value)
-        html_content = html_content.replace(f"<p>{key}</p>", value)
     return html_content
 
 

@@ -166,6 +166,45 @@ class TestRenderMarkdown(unittest.TestCase):
         self.assertIn("Total $50 with", body)
         self.assertNotIn("$50 with \\(", body)
 
+    def test_display_math_is_not_nested_inside_a_paragraph(self):
+        # markdown2 wraps a lone display-math placeholder in "<p>...</p>".
+        # Restoring the math while that wrapper was still present produced
+        # "<p><div class="math-display">...</div></p>" -- a block <div> inside a
+        # <p> is invalid HTML and leaves a stray empty paragraph behind.
+        html = render_markdown("$$x^2$$")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertIn('<div class="math-display">', body)
+        self.assertNotIn("<p><div", body)
+        self.assertNotIn("</div></p>", body)
+
+    def test_adjacent_display_math_blocks_are_not_nested_inside_a_paragraph(self):
+        # A newline alone becomes <br /> under the renderer's
+        # ``break-on-newline`` extra. Each display equation must therefore be
+        # isolated before markdown2 builds paragraphs.
+        html = render_markdown("$$x$$\n$$y$$")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertEqual(body.count('<div class="math-display">'), 2)
+        self.assertNotIn("<p><div", body)
+        self.assertNotIn("</div></p>", body)
+
+    def test_inline_math_is_still_restored_inside_a_paragraph(self):
+        html = render_markdown("Area is $x^2$ exactly.")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertIn('<span class="math-inline">', body)
+        self.assertIn("<p>Area is", body)
+
+    def test_lone_inline_math_keeps_its_paragraph(self):
+        # A paragraph whose only content is inline math must keep its <p>
+        # wrapper; only display math unwraps the paragraph.
+        html = render_markdown("$x$")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertIn('<p><span class="math-inline">', body)
+        self.assertIn("</span></p>", body)
+
     def test_digit_leading_math_and_currency_remain_separate(self):
         for expression in ("2x + 1", "5", "2x", "x^2 + y^2 = z^2"):
             with self.subTest(expression=expression):
