@@ -106,7 +106,7 @@ export default function HomePage() {
         backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null} />
       <TabBar tabs={editor.tabs} activeTabId={editor.activeTabId} onSelect={handleTabSelect} onClose={editor.closeTab} onNew={editor.newTab} />
       <div className="flex flex-1 overflow-hidden">
-        {!focusMode && <ProjectExplorer root={project.projectRoot} onOpenFile={(path) => { void editor.openFile(path); }} onOpenProject={() => { void openProject(); }} onCloseProject={project.closeProject} />}
+        {!focusMode && <ProjectExplorer root={project.projectRoot} onOpenFile={(path) => { void editor.openProjectFile(path); }} onOpenProject={() => { void openProject(); }} onCloseProject={project.closeProject} />}
         {focusMode ? <FocusModePane key={`${editor.activeTabId}-${revision}`} value={editor.activeTab.content}
           onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
           slashCommands={slash.filteredCommands} onSelect={(command) => { void executeSlashCommand(command); }} /> :

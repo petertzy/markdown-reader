@@ -139,7 +139,7 @@ export function useEditor() {
 
   // ── file ops ───────────────────────────────────────────────────────────────
   const openFile = useCallback(
-    async (filePath: string) => {
+    async (filePath: string, { convert = true }: { convert?: boolean } = {}) => {
       const existing = tabs.find(
         (tab) => tab.filePath === filePath || tab.sourceFilePath === filePath
       );
@@ -151,7 +151,7 @@ export function useEditor() {
       if (openingFilePathsRef.current.has(filePath)) return;
       openingFilePathsRef.current.add(filePath);
       try {
-        if (needsConversion(filePath)) {
+        if (convert && needsConversion(filePath)) {
           const { markdown } = await Files.convertToMarkdown({ path: filePath });
           const label = convertedMarkdownLabel(filePath);
           const id = nextTabId();
@@ -188,6 +188,11 @@ export function useEditor() {
       }
     },
     [tabs, refreshPreview]
+  );
+
+  const openProjectFile = useCallback(
+    async (filePath: string) => openFile(filePath, { convert: false }),
+    [openFile]
   );
 
   const openTextAsTab = useCallback(
@@ -399,6 +404,7 @@ export function useEditor() {
     setFontSize,
     handleContentChange,
     openFile,
+    openProjectFile,
     openTextAsTab,
     saveFile,
     newTab,
