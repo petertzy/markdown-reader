@@ -93,6 +93,18 @@ class TestRenderMarkdown(unittest.TestCase):
         self.assertIn("math-inline", html)
         self.assertIn("<code>keep $1</code>", html)
 
+    def test_math_inside_an_indented_code_fence_is_not_converted(self):
+        # A fence may be indented. The unindented mask missed it, so the
+        # "$$...$$" inside the code sample was rewritten into math markup and
+        # rendered as a live formula instead of the literal text the author
+        # wrote.
+        html = render_markdown("   ```\n   $$x^2$$\n   ```\n\nAfter")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertNotIn("math-display", body)
+        self.assertIn("$$x^2$$", body)
+        self.assertIn("After", body)
+
     def test_code_placeholder_names_in_document_are_not_mangled(self):
         html = render_markdown("This is CODEPLACEHOLDER0X text and `real code $x`")
 
@@ -470,6 +482,37 @@ class TestHeadingAnchors(unittest.TestCase):
         self.assertEqual([node["line"] for node in outline], [5, 7])
         self.assertEqual(
             re.findall(r"\]\(#([^)]+)\)", _generate_markdown_toc(md)), expected
+        )
+
+
+class TestStrikethroughRendering(unittest.TestCase):
+    """GFM strikethrough must render, the way the rest of the app treats it.
+
+    ``heading_anchor.extract_heading_text`` and ``word_count.strip_markdown``
+    both strip ``~~...~~`` when they read a document, so the preview was the
+    only place a strikethrough stayed literal -- and text that is markup in the
+    anchor and the word count should not be markup only there.
+    """
+
+    def test_strikethrough_renders(self):
+        self.assertRegex(render_markdown("~~gone~~"), r"<(s|strike)>gone</\1>")
+
+    def test_single_tilde_is_left_literal(self):
+        self.assertIn("~not strike~", render_markdown("~not strike~"))
+
+    def test_strikethrough_inside_a_code_span_is_kept_verbatim(self):
+        self.assertIn("<code>~~literal~~</code>", render_markdown("`~~literal~~`"))
+
+    def test_struck_heading_keeps_its_visible_text_anchor(self):
+        from backend.routers.markdown import _extract_outline
+
+        md = "# ~~old~~ new\n"
+        html = render_markdown(md)
+        self.assertIn('<h1 id="old-new">', html)
+        self.assertRegex(html, r"<(s|strike)>old</\1> new")
+        self.assertEqual([node["anchor"] for node in _extract_outline(md)], ["old-new"])
+        self.assertEqual(
+            re.findall(r"\]\(#([^)]+)\)", _generate_markdown_toc(md)), ["old-new"]
         )
 
 
