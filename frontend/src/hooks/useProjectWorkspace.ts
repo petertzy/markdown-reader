@@ -1,6 +1,20 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { isTauriRuntime } from "@/lib/tauri";
+
+async function maximizeProjectWindow() {
+  if (!isTauriRuntime()) {
+    return;
+  }
+
+  try {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().maximize();
+  } catch {
+    // Opening a project remains available if the window API is unavailable.
+  }
+}
 
 export function useProjectWorkspace() {
   const [projectRoot, setProjectRoot] = useState<string | null>(null);
@@ -10,6 +24,7 @@ export function useProjectWorkspace() {
       const selected = await open({ directory: true, multiple: false });
       if (typeof selected === "string") {
         setProjectRoot(selected);
+        await maximizeProjectWindow();
         return true;
       }
     } catch {
