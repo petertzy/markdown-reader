@@ -93,6 +93,18 @@ class TestRenderMarkdown(unittest.TestCase):
         self.assertIn("math-inline", html)
         self.assertIn("<code>keep $1</code>", html)
 
+    def test_math_inside_an_indented_code_fence_is_not_converted(self):
+        # A fence may be indented. The unindented mask missed it, so the
+        # "$$...$$" inside the code sample was rewritten into math markup and
+        # rendered as a live formula instead of the literal text the author
+        # wrote.
+        html = render_markdown("   ```\n   $$x^2$$\n   ```\n\nAfter")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertNotIn("math-display", body)
+        self.assertIn("$$x^2$$", body)
+        self.assertIn("After", body)
+
     def test_code_placeholder_names_in_document_are_not_mangled(self):
         html = render_markdown("This is CODEPLACEHOLDER0X text and `real code $x`")
 
