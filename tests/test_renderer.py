@@ -426,7 +426,7 @@ class TestStrikethroughRendering(unittest.TestCase):
     """
 
     def test_strikethrough_renders(self):
-        self.assertIn("<s>gone</s>", render_markdown("~~gone~~"))
+        self.assertRegex(render_markdown("~~gone~~"), r"<(s|strike)>gone</\1>")
 
     def test_single_tilde_is_left_literal(self):
         self.assertIn("~not strike~", render_markdown("~not strike~"))
@@ -440,7 +440,7 @@ class TestStrikethroughRendering(unittest.TestCase):
         md = "# ~~old~~ new\n"
         html = render_markdown(md)
         self.assertIn('<h1 id="old-new">', html)
-        self.assertIn("<s>old</s> new", html)
+        self.assertRegex(html, r"<(s|strike)>old</\1> new")
         self.assertEqual([node["anchor"] for node in _extract_outline(md)], ["old-new"])
         self.assertEqual(
             re.findall(r"\]\(#([^)]+)\)", _generate_markdown_toc(md)), ["old-new"]
