@@ -244,8 +244,9 @@ def _format_author_names(raw_author: str) -> list[str]:
                 # (``Jr., John Smith``). Only treat the middle part as a suffix
                 # when it is non-empty, so a stray comma still formats plainly.
                 middle, remainder = _split_on_top_level_comma(rest)
+                rest = remainder
                 if _clean_bibtex_value(middle):
-                    suffix, rest = middle, remainder
+                    suffix = middle
             formatted_name = (
                 f"{_clean_bibtex_value(rest)} {_clean_bibtex_value(last)}"
             ).strip()

@@ -418,6 +418,8 @@ class TestCitationAuthorFormatting(unittest.TestCase):
         )
         # A plain ``Last, First`` still has a single comma and is unchanged.
         self.assertEqual(citation_logic._format_authors("Doe, Jane"), "Jane Doe")
+        # An empty middle segment is not a suffix and must not leak a comma.
+        self.assertEqual(citation_logic._format_authors("Smith, , John"), "John Smith")
         # And it reaches the formatted author through the real upload path.
         self.assertEqual(self._parse_author("{Smith, Jr., John}"), "John Smith, Jr.")
 
