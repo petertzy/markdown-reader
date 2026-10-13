@@ -20,6 +20,8 @@ export type Tab = {
   id: string;
   label: string;       // Display name (filename)
   filePath: string | null;
+  /** Original path for a converted document that is not yet a Markdown file. */
+  sourceFilePath?: string;
   /**
    * Folder relative image paths resolve against. Normally the parent of
    * `filePath`, but a document converted on open (html/pdf/docx) has no
@@ -70,6 +72,7 @@ export function useEditor() {
   const [darkMode, setDarkMode] = useState(false);
   const [fontSize, setFontSize] = useState(24);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openingFilePathsRef = useRef(new Set<string>());
   // Renders and word counts are HTTP requests that can finish out of order, so
   // each channel only accepts the response belonging to its newest request.
   const previewGuardRef = useRef(createLatestRequestGuard());
@@ -137,13 +140,24 @@ export function useEditor() {
   // ── file ops ───────────────────────────────────────────────────────────────
   const openFile = useCallback(
     async (filePath: string) => {
-      if (needsConversion(filePath)) {
-        try {
+      const existing = tabs.find(
+        (tab) => tab.filePath === filePath || tab.sourceFilePath === filePath
+      );
+      if (existing) {
+        setActiveTabId(existing.id);
+        refreshPreview(existing.content, filePath);
+        return;
+      }
+      if (openingFilePathsRef.current.has(filePath)) return;
+      openingFilePathsRef.current.add(filePath);
+      try {
+        if (needsConversion(filePath)) {
           const { markdown } = await Files.convertToMarkdown({ path: filePath });
           const label = convertedMarkdownLabel(filePath);
           const id = nextTabId();
           const newTab = {
             ...makeTab(id, label, markdown, null, null, parentDirOf(filePath)),
+            sourceFilePath: filePath,
             dirty: true,
           };
           setTabs((prev) => [...prev, newTab]);
@@ -152,21 +166,9 @@ export function useEditor() {
           Files.addRecent(filePath)
             .then(({ entries }) => setRecentFiles(entries))
             .catch(console.error);
-        } catch (err) {
-          console.error("Failed to convert file:", err);
-          throw err;
+          return;
         }
-        return;
-      }
 
-      // Check if already open
-      const existing = tabs.find((t) => t.filePath === filePath);
-      if (existing) {
-        setActiveTabId(existing.id);
-        refreshPreview(existing.content, filePath);
-        return;
-      }
-      try {
         const { content } = await Files.read(filePath);
         const label = filePath.split(/[/\\]/).pop() ?? filePath;
         const id = nextTabId();
@@ -181,6 +183,8 @@ export function useEditor() {
       } catch (err) {
         console.error("Failed to open file:", err);
         throw err;
+      } finally {
+        openingFilePathsRef.current.delete(filePath);
       }
     },
     [tabs, refreshPreview]

@@ -25,6 +25,8 @@ export type UseActionsOptions = {
   monacoRef: MutableRefObject<MonacoEditor.IStandaloneCodeEditor | null>;
   setShowAIPanel: Dispatch<SetStateAction<boolean>>;
   setSplit: Dispatch<SetStateAction<number>>;
+  onOpenProject: () => void;
+  onShowPreview: () => void;
 };
 
 export function useActions({
@@ -35,6 +37,8 @@ export function useActions({
   monacoRef,
   setShowAIPanel,
   setSplit,
+  onOpenProject,
+  onShowPreview,
 }: UseActionsOptions) {
   const { handleOpenFile, handleExport } = fileIO;
   const {
@@ -70,6 +74,7 @@ export function useActions({
     () => ({
       "file.new": editor.newTab,
       "file.open": () => { void handleOpenFile(); },
+      "file.openFolder": onOpenProject,
       "file.save": () => { void handleSaveFile(); },
       "file.closeTab": () => editor.closeTab(editor.activeTabId),
       "file.closeAllTabs": editor.closeAllTabs,
@@ -90,6 +95,7 @@ export function useActions({
       "table.insert": insertTable,
       "view.toggleDarkMode": () => editor.setDarkMode((dark) => !dark),
       "view.toggleAIPanel": () => setShowAIPanel((visible) => !visible),
+      "view.showPreview": onShowPreview,
       "view.openBrowserPreview": () => { void handleOpenBrowserPreview(); },
       "view.fullEditor": () => setSplit(100),
       "view.balancedSplit": () => setSplit(50),
@@ -106,6 +112,8 @@ export function useActions({
       runMonacoAction,
       setShowAIPanel,
       setSplit,
+      onOpenProject,
+      onShowPreview,
       wrapSelection,
     ]
   );
@@ -120,6 +128,7 @@ export function useActions({
         items: [
           { id: "file.new", label: "New", onSelect: actions["file.new"] },
           { id: "file.open", label: "Open File", onSelect: actions["file.open"], disabled: backendDisabled },
+          { id: "file.openFolder", label: "Open Folder", onSelect: actions["file.openFolder"], disabled: backendDisabled },
           { id: "file.save", label: "Save File", onSelect: actions["file.save"], disabled: backendDisabled },
           "separator",
           { id: "file.exportHtml", label: "Export to HTML", onSelect: actions["file.exportHtml"], disabled: backendDisabled },
@@ -158,6 +167,7 @@ export function useActions({
         items: [
           { id: "view.toggleDarkMode", label: "Toggle Dark Mode", onSelect: actions["view.toggleDarkMode"] },
           { id: "view.toggleAIPanel", label: "Show AI Agent Panel", onSelect: actions["view.toggleAIPanel"] },
+          { id: "view.showPreview", label: "Show Preview Panel", onSelect: actions["view.showPreview"] },
           { id: "view.openBrowserPreview", label: "Open Preview in Browser", onSelect: actions["view.openBrowserPreview"], disabled: backendDisabled },
           "separator",
           { id: "view.fullEditor", label: "Full Width Editor", onSelect: actions["view.fullEditor"] },

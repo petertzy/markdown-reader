@@ -36,10 +36,9 @@ export default function HomePage() {
     reset: resetEditor,
   } = editorWorkspace;
   const [focusMode, setFocusMode] = useState(false);
-  const [showPreview] = useState(true);
   const { activePanel, togglePanel, setShowAIPanel } = usePanels();
   const [aiPanelInitialTab, setAiPanelInitialTab] = useState<AIPanelTab | undefined>();
-  const [split, setSplit] = useState(50);
+  const [split, setSplit] = useState(70);
   const { isDesktopRuntime, backendStatus, backendMessage, showPackagedBackendStatus } = useTauriBackend(editor);
   const fileIO = useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef });
   const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt, executeWork, isWorking } = useAIActions({
@@ -64,6 +63,8 @@ export default function HomePage() {
     setShowAIPanel,
     setAiPanelInitialTab,
     setSplit,
+    onOpenProject: () => { void project.openProject(); },
+    onShowPreview: () => togglePanel(PANELS.PREVIEW),
     executeAIPrompt,
     syncSelectedText,
   });
@@ -93,17 +94,15 @@ export default function HomePage() {
         {focusMode ? <FocusModePane key={`${editor.activeTabId}-${revision}`} value={editor.activeTab.content}
           onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
           slashCommands={slash.filteredCommands} onSelect={(command) => { void executeSlashCommand(command); }} /> :
-          <SplitPane split={split} onSplitChange={setSplit}
+          <SplitPane split={split} onSplitChange={setSplit} minSize={20}
             left={<EditorWorkspace tabId={editor.activeTab.id} value={editor.activeTab.content}
               onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
               revision={revision} monacoRef={monacoRef} onReady={markReady}
               slash={{ isOpen: slash.isOpen, filteredCommands: slash.filteredCommands, selectedIndex: slash.selectedIndex,
                 position: slashMenuPosition,
                 onSelect: (command) => { void executeSlashCommand(command); }, onClose: slash.close }} />}
-            right={showPreview ? <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
-              error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : null} />}
-        {activePanel === PANELS.AI && <AIPanel projectRoot={project.projectRoot} projectWork={projectWork} documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} />}
-        {activePanel === PANELS.CITATION && <CitationPanel onInsert={formatting.insertCitation} />}
+            right={activePanel === PANELS.PREVIEW ? <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
+              error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : activePanel === PANELS.AI ? <AIPanel projectRoot={project.projectRoot} projectWork={projectWork} documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} /> : <CitationPanel onInsert={formatting.insertCitation} />} />}
       </div>
       <StatusBar stats={editor.wordCount} filePath={editor.activeTab.filePath} dirty={editor.activeTab.dirty} />
     </div>

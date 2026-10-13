@@ -181,6 +181,15 @@ export default function Toolbar({
       <button
         onPointerDown={keepEditorFocusedOnPointerDown}
         onMouseDown={keepEditorFocused}
+        onClick={() => onTogglePanel(PANELS.PREVIEW)}
+        className={`${btnCls} ${activePanel === PANELS.PREVIEW ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
+        title="Preview"
+      >
+        👁 Preview
+      </button>
+      <button
+        onPointerDown={keepEditorFocusedOnPointerDown}
+        onMouseDown={keepEditorFocused}
         onClick={() => onTogglePanel(PANELS.AI)}
         className={`${btnCls} ${activePanel === PANELS.AI ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
         title="AI Assistant"

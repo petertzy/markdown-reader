@@ -3,7 +3,7 @@
 /**
  * usePanels.ts
  * ============
- * Owns which side panel is currently open (AI / Citation / none).
+ * Owns the one visible right-side panel (Preview / AI / Citation).
  *
  * The homepage used to hold this state plus a boolean adapter that translated
  * the legacy `setShowAIPanel` calls (from the action/shortcut and slash-command
@@ -16,11 +16,11 @@ import { useCallback, useState, type SetStateAction } from "react";
 import { PANELS, type PanelId } from "@/types/panels";
 
 export function usePanels() {
-  const [activePanel, setActivePanel] = useState<PanelId>(null);
+  const [activePanel, setActivePanel] = useState<PanelId>(PANELS.PREVIEW);
 
-  /** Toggle a panel open/closed (used by the toolbar buttons). */
+  /** Select one right-side panel. Selecting it again keeps it visible. */
   const togglePanel = useCallback((panelId: PanelId) => {
-    setActivePanel((prev) => (prev === panelId ? null : panelId));
+    if (panelId) setActivePanel(panelId);
   }, []);
 
   /**
@@ -36,7 +36,7 @@ export function usePanels() {
       const shouldShowAI = typeof action === "function" ? action(isCurrentlyAI) : action;
 
       if (shouldShowAI) return PANELS.AI;
-      if (!shouldShowAI && isCurrentlyAI) return null;
+      if (!shouldShowAI && isCurrentlyAI) return PANELS.PREVIEW;
       return prevPanel;
     });
   }, []);

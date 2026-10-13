@@ -1,4 +1,5 @@
 export const PANELS = {
+  PREVIEW: "preview",
   AI: "ai",
   CITATION: "citation",
 } as const;
