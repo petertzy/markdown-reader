@@ -89,6 +89,47 @@ class TestStripMarkdown(unittest.TestCase):
         result = _strip_markdown("![alt text](image.png)")
         self.assertNotIn("alt", result)
 
+    def test_autolink_keeps_its_visible_text(self):
+        # "<https://...>" renders as a clickable link whose text is the URL
+        # itself, so the count must keep that URL instead of dropping it like an
+        # HTML tag.
+        md = "Visit <https://example.com> for the docs"
+        self.assertIn("<a ", _render_markdown(md))
+        self.assertEqual(_count_words(_strip_markdown(md)), 5)
+
+    def test_email_autolink_keeps_its_visible_text(self):
+        md = "Mail <bob@example.com> today"
+        self.assertIn("<a ", _render_markdown(md))
+        self.assertEqual(_count_words(_strip_markdown(md)), 3)
+
+    def test_real_html_tags_are_still_removed(self):
+        # Only autolink-shaped angle brackets are kept; genuine tags contribute
+        # no words, exactly as before the autolink rule.
+        self.assertEqual(_count_words(_strip_markdown("<p>Some <b>text</b></p>")), 2)
+
+    def test_non_autolink_angle_brackets_are_still_removed(self):
+        # The renderer autolinks only http/https/ftp URLs and bare email
+        # addresses. Other angle-bracketed text ("<tel:555>", "<foo:bar>") stays
+        # an invisible HTML element, so it must not add words.
+        for md in ("Call <tel:555> now", "see <foo:bar> baz"):
+            with self.subTest(markdown=md):
+                self.assertNotIn("<a ", _render_markdown(md))
+                self.assertEqual(_count_words(_strip_markdown(md)), 2)
+
+    def test_reference_definition_adds_no_words(self):
+        # "[d]: https://..." defines a link for the renderer but is never shown
+        # in the document, so it must not be counted as words.
+        for definition in ("[d]: https://example.com", "[d]:https://example.com"):
+            with self.subTest(definition=definition):
+                md = f"See [docs][d]\n\n{definition}"
+                self.assertIn("<a ", _render_markdown(md))
+                self.assertEqual(_count_words(_strip_markdown(md)), 2)
+
+    def test_reference_image_contributes_no_words(self):
+        md = "Logo ![logo][img]\n\n[img]: assets/logo.png"
+        self.assertIn("<img", _render_markdown(md))
+        self.assertEqual(_count_words(_strip_markdown(md)), 1)
+
     def test_blockquote_marker(self):
         result = _strip_markdown("> quoted line")
         self.assertIn("quoted", result)
