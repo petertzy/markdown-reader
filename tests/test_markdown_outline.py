@@ -423,3 +423,10 @@ def test_outline_keeps_headings_after_a_skipped_fence_and_tracks_lines():
     nodes = _extract_outline(md)
     assert [node["text"] for node in nodes] == ["Real", "After"]
     assert [node["line"] for node in nodes] == [1, 7]
+
+
+def test_outline_skips_headings_in_crlf_fences():
+    # Windows-authored Markdown must mask fences just as LF Markdown does.
+    md = "# Real\r\n\r\n```\r\n# fake\r\n`````\r\n\r\n## Second\r\n"
+    assert _outline_anchors(md) == ["real", "second"]
+    assert _outline_anchors(md) == _rendered_ids(md) == _toc_anchors(md)

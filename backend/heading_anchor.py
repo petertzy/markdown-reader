@@ -153,7 +153,7 @@ def unique_heading_slug(base: str, counts: dict[str, int]) -> str:
 # by a longer or differently indented fence stayed unmasked and its "#" lines
 # leaked into the outline and the AI table of contents.
 _FENCED_CODE_RE = re.compile(
-    r"^[ \t]*(`{3,})[ \t]*[\w+-]*[ \t]*\n.*?^[ \t]*\1`*[ \t]*(?:\n|$)",
+    r"^[ \t]*(`{3,})[ \t]*[\w+-]*[ \t]*\r?\n.*?^[ \t]*\1`*[ \t]*(?:\r?\n|$)",
     re.MULTILINE | re.DOTALL,
 )
 
