@@ -119,9 +119,11 @@ class TestStripMarkdown(unittest.TestCase):
     def test_reference_definition_adds_no_words(self):
         # "[d]: https://..." defines a link for the renderer but is never shown
         # in the document, so it must not be counted as words.
-        md = "See [docs][d]\n\n[d]: https://example.com"
-        self.assertIn("<a ", _render_markdown(md))
-        self.assertEqual(_count_words(_strip_markdown(md)), 2)
+        for definition in ("[d]: https://example.com", "[d]:https://example.com"):
+            with self.subTest(definition=definition):
+                md = f"See [docs][d]\n\n{definition}"
+                self.assertIn("<a ", _render_markdown(md))
+                self.assertEqual(_count_words(_strip_markdown(md)), 2)
 
     def test_reference_image_contributes_no_words(self):
         md = "Logo ![logo][img]\n\n[img]: assets/logo.png"

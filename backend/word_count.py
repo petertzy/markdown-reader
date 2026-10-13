@@ -35,7 +35,7 @@ def strip_markdown(text: str) -> str:
     text = re.sub(r"\[([^\]]*)\]\[[^\]]*\]", r"\1", text)
     # A link-reference definition ("[label]: url") is metadata the rendered
     # document never shows, so it holds no words.
-    text = re.sub(r"^ {0,3}\[[^\]]+\]:\s+\S+.*$", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^ {0,3}\[[^\]]+\]:\s*\S+.*$", "", text, flags=re.MULTILINE)
     text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
     text = re.sub(r"\*{1,3}|_{1,3}", "", text)
     text = re.sub(r"~~", "", text)
