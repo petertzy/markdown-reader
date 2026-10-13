@@ -7,7 +7,7 @@
   [![Linux x64](https://img.shields.io/badge/Linux-x64-yellow?logo=linux)](#desktop-downloads)
   
   <br />
-  <img width="1177" height="646" alt="Image" src="https://github.com/user-attachments/assets/a6716f6e-5bdb-41fb-914b-314e4c4eb394" />
+  <img width="1177" height="646" alt="Image" src="docs/markdown-reader.webp" />
 </div>
 
 ---
