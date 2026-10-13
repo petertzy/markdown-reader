@@ -4,11 +4,15 @@ import { useState, useRef, useEffect, useCallback, type ReactNode } from "react"
 import { useAIChat, type TranslationPair, type TranslationProgress } from "@/hooks/useAIChat";
 import { AI, getDefaultAISettings, type AISettings, Knowledge, type KnowledgeStatus } from "@/lib/api";
 import { tokenizeInlineMarkdown } from "@/lib/inline-markdown.mjs";
+import ProjectWorkReview from "@/components/ProjectWorkReview";
+import type { useProjectWork } from "@/hooks/useProjectWork";
 
 export type AIPanelTab = "chat" | "translate" | "settings" | "work";
 type Tab = AIPanelTab;
 
 type Props = {
+  projectRoot: string | null;
+  projectWork: ReturnType<typeof useProjectWork>;
   documentText: string;
   selectedText?: string;
   onApplyAction?: (type: string, content: string) => void;
@@ -157,6 +161,8 @@ function ChatMessageContent({ content }: { content: string }) {
 }
 
 export default function AIPanel({
+  projectRoot,
+  projectWork,
   documentText,
   selectedText = "",
   onApplyAction,
@@ -172,6 +178,7 @@ export default function AIPanel({
   }, [initialTab]);
 
   const [input, setInput] = useState("");
+  const [workScope, setWorkScope] = useState<"document" | "project">("document");
   const [sourceLang, setSourceLang] = useState("Auto Detect");
   const [targetLang, setTargetLang] = useState("English");
   const [translateScope, setTranslateScope] = useState<"selection" | "document">("document");
@@ -834,8 +841,16 @@ export default function AIPanel({
       ) : tab === "work" ? (
         <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
           <div className="text-xs text-gray-500 dark:text-gray-400">
-            Describe a task, and the AI will directly modify the active document.
+            {workScope === "document" ? "Describe a task, and the AI will directly modify the active document." : "Describe a task across the open project, then review every proposed file change."}
           </div>
+          <label className="text-xs">Work scope
+            <select className="ml-2 rounded border p-1 dark:bg-gray-800" value={workScope} disabled={isWorking || projectWork.busy}
+              onChange={(event) => setWorkScope(event.target.value as "document" | "project")}>
+              <option value="document">Active document</option>
+              <option value="project">Open project</option>
+            </select>
+          </label>
+          {workScope === "project" && <ProjectWorkReview projectRoot={projectRoot} work={projectWork} />}
           <textarea 
             className="w-full h-32 p-2 text-sm border rounded resize-none dark:bg-gray-800 dark:border-gray-600 dark:text-white"
             placeholder="e.g., 'Rewrite this document to be more professional' or 'Fix all typos'"
@@ -845,15 +860,18 @@ export default function AIPanel({
           <button 
             className="w-full bg-blue-600 text-white py-1.5 px-3 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
             onClick={() => {
-              if (executeWork) {
+              if (workScope === "project") {
+                void projectWork.run(input.trim());
+                setInput("");
+              } else if (executeWork) {
                 const instruction = input.trim();
                 setInput("");
                 void executeWork(instruction);
               }
             }}
-            disabled={!input.trim() || isWorking}
+            disabled={!input.trim() || isWorking || projectWork.busy || (workScope === "project" && (!projectRoot || !!projectWork.task))}
           >
-            {isWorking ? "Working..." : "Apply Changes"}
+            {isWorking || projectWork.busy ? "Working..." : workScope === "project" ? "Plan Project Changes" : "Apply Changes"}
           </button>
         </div>
       ) : tab === "translate" ? (

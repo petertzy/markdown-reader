@@ -9,7 +9,7 @@
  */
 
 import { useState, useCallback, useRef } from "react";
-import { Files, Markdown, Export, type ExportPayload, type WordCountResult } from "@/lib/api";
+import { Files, Markdown, Export, type ExportPayload, type ProjectWorkChange, type WordCountResult } from "@/lib/api";
 import { needsConversion } from "@/lib/supportedFormats";
 import { resolveTabClose } from "@/lib/tabLifecycle.mjs";
 import { settleSavedTab } from "@/lib/save-settle.mjs";
@@ -341,6 +341,23 @@ export function useEditor() {
     debounceRef.current = null;
   }, []);
 
+  const applyProjectChanges = useCallback((changes: ProjectWorkChange[]) => {
+    setTabs((previous) => {
+      const next = [...previous];
+      for (const change of changes) {
+        const index = next.findIndex((tab) => tab.filePath === change.file_path);
+        if (index >= 0) {
+          next[index] = { ...next[index], content: change.content, dirty: true };
+        } else {
+          next.push({ ...makeTab(nextTabId(), change.path, change.content, change.file_path), dirty: true });
+        }
+      }
+      return next;
+    });
+    const activeChange = changes.find((change) => change.file_path === activeTab.filePath);
+    if (activeChange) refreshPreview(activeChange.content, activeChange.file_path);
+  }, [activeTab.filePath, refreshPreview]);
+
   // ── recent files ───────────────────────────────────────────────────────────
   const loadRecentFiles = useCallback(async () => {
     const { entries } = await Files.getRecent();
@@ -383,6 +400,7 @@ export function useEditor() {
     newTab,
     closeTab,
     closeAllTabs,
+    applyProjectChanges,
     loadRecentFiles,
     refreshPreview,
     exportAs,

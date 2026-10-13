@@ -3,6 +3,8 @@
 import { useState, useCallback } from "react";
 import { useEditor } from "@/hooks/useEditor";
 import { useAIActions } from "@/hooks/useAIActions";
+import { useProjectWorkspace } from "@/hooks/useProjectWorkspace";
+import { useProjectWork } from "@/hooks/useProjectWork";
 import { useFileIO } from "@/hooks/useFileIO";
 import { usePanels } from "@/hooks/usePanels";
 import { useTauriBackend } from "@/hooks/useTauriBackend";
@@ -17,11 +19,14 @@ import SplitPane from "@/components/SplitPane";
 import FocusModePane from "@/components/FocusModePane";
 import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
+import ProjectExplorer from "@/components/ProjectExplorer";
 import StatusBar from "@/components/StatusBar";
 import { PANELS } from "@/types/panels";
 
 export default function HomePage() {
   const editor = useEditor();
+  const project = useProjectWorkspace();
+  const projectWork = useProjectWork(editor, project.projectRoot);
   const editorWorkspace = useEditorWorkspace();
   const {
     monacoRef,
@@ -75,7 +80,7 @@ export default function HomePage() {
       onDragOver={fileIO.handleDragOver} onDrop={fileIO.handleDrop}>
       <input ref={fileIO.fileInputRef} type="file" accept={fileIO.fileInputAccept} className="hidden" onChange={fileIO.handleFileInputChange} />
       <MenuBar groups={menuGroups} shortcuts={shortcuts} />
-      <Toolbar onOpenFile={() => { void fileIO.handleOpenFile(); }} onSaveFile={() => { void handleSaveFile(); }}
+      <Toolbar onOpenFile={() => { void fileIO.handleOpenFile(); }} onOpenProject={() => { void project.openProject(); }} onSaveFile={() => { void handleSaveFile(); }}
         onExport={fileIO.handleExport} onOpenBrowserPreview={() => { void handleOpenBrowserPreview(); }}
         onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={togglePanel}
         onToggleFocusMode={() => { setFocusMode((enabled) => !enabled); resetEditor(); }}
@@ -84,6 +89,7 @@ export default function HomePage() {
         backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null} />
       <TabBar tabs={editor.tabs} activeTabId={editor.activeTabId} onSelect={handleTabSelect} onClose={editor.closeTab} onNew={editor.newTab} />
       <div className="flex flex-1 overflow-hidden">
+        {!focusMode && <ProjectExplorer root={project.projectRoot} onOpenFile={(path) => { void editor.openFile(path); }} onOpenProject={() => { void project.openProject(); }} onCloseProject={project.closeProject} />}
         {focusMode ? <FocusModePane key={`${editor.activeTabId}-${revision}`} value={editor.activeTab.content}
           onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
           slashCommands={slash.filteredCommands} onSelect={(command) => { void executeSlashCommand(command); }} /> :
@@ -96,7 +102,7 @@ export default function HomePage() {
                 onSelect: (command) => { void executeSlashCommand(command); }, onClose: slash.close }} />}
             right={showPreview ? <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
               error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : null} />}
-        {activePanel === PANELS.AI && <AIPanel documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} />}
+        {activePanel === PANELS.AI && <AIPanel projectRoot={project.projectRoot} projectWork={projectWork} documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} />}
         {activePanel === PANELS.CITATION && <CitationPanel onInsert={formatting.insertCitation} />}
       </div>
       <StatusBar stats={editor.wordCount} filePath={editor.activeTab.filePath} dirty={editor.activeTab.dirty} />
