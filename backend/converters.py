@@ -12,6 +12,11 @@ def convert_html_to_markdown(html: str) -> str:
     converter = html2text.HTML2Text()
     converter.ignore_links = False
     converter.body_width = 0
+    # Keep named/numeric character references as the characters they name
+    # ("caf&eacute;" -> "café", "&mdash;" -> "—", "&copy;" -> "©"). With the
+    # html2text default these are silently degraded to ASCII approximations
+    # ("cafe", "--", "(C)"), which corrupts imported text.
+    converter.unicode_snob = True
     return converter.handle(html or "").strip()
 
 
