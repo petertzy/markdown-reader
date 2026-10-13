@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, type SetStateAction } from "react";
 import { useEditor } from "@/hooks/useEditor";
 import { useAIActions } from "@/hooks/useAIActions";
 import { useProjectWorkspace } from "@/hooks/useProjectWorkspace";
@@ -36,14 +36,30 @@ export default function HomePage() {
     reset: resetEditor,
   } = editorWorkspace;
   const [focusMode, setFocusMode] = useState(false);
-  const { activePanel, togglePanel, setShowAIPanel } = usePanels();
+  const { activePanel, togglePanel, hidePanel, setShowAIPanel } = usePanels();
   const [aiPanelInitialTab, setAiPanelInitialTab] = useState<AIPanelTab | undefined>();
-  const [split, setSplit] = useState(70);
+  const [split, setSplit] = useState(50);
   const { isDesktopRuntime, backendStatus, backendMessage, showPackagedBackendStatus } = useTauriBackend(editor);
   const fileIO = useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef });
   const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt, executeWork, isWorking } = useAIActions({
     documentId: editor.activeTab.id, documentText: editor.activeTab.content, editorRef: monacoRef, onDocumentChange: editor.handleContentChange,
   });
+  const selectPanel = useCallback((panel: NonNullable<typeof PANELS[keyof typeof PANELS]>) => {
+    togglePanel(panel);
+    setSplit(panel === PANELS.PREVIEW ? 50 : 70);
+  }, [togglePanel]);
+  const openProject = useCallback(async () => {
+    if (await project.openProject()) {
+      hidePanel();
+      setSplit(100);
+    }
+  }, [hidePanel, project]);
+  const setShowAIPanelWithLayout = useCallback((action: SetStateAction<boolean>) => {
+    const aiVisible = activePanel === PANELS.AI;
+    const showAI = typeof action === "function" ? action(aiVisible) : action;
+    setShowAIPanel(action);
+    setSplit(showAI ? 70 : 50);
+  }, [activePanel, setShowAIPanel]);
 
   const {
     formatting,
@@ -60,11 +76,11 @@ export default function HomePage() {
     backendStatus,
     monacoRef,
     monacoReady,
-    setShowAIPanel,
+    setShowAIPanel: setShowAIPanelWithLayout,
     setAiPanelInitialTab,
     setSplit,
-    onOpenProject: () => { void project.openProject(); },
-    onShowPreview: () => togglePanel(PANELS.PREVIEW),
+    onOpenProject: () => { void openProject(); },
+    onShowPreview: () => selectPanel(PANELS.PREVIEW),
     executeAIPrompt,
     syncSelectedText,
   });
@@ -81,16 +97,16 @@ export default function HomePage() {
       onDragOver={fileIO.handleDragOver} onDrop={fileIO.handleDrop}>
       <input ref={fileIO.fileInputRef} type="file" accept={fileIO.fileInputAccept} className="hidden" onChange={fileIO.handleFileInputChange} />
       <MenuBar groups={menuGroups} shortcuts={shortcuts} />
-      <Toolbar onOpenFile={() => { void fileIO.handleOpenFile(); }} onOpenProject={() => { void project.openProject(); }} onSaveFile={() => { void handleSaveFile(); }}
+      <Toolbar onOpenFile={() => { void fileIO.handleOpenFile(); }} onOpenProject={() => { void openProject(); }} onSaveFile={() => { void handleSaveFile(); }}
         onExport={fileIO.handleExport} onOpenBrowserPreview={() => { void handleOpenBrowserPreview(); }}
-        onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={togglePanel}
+        onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={selectPanel}
         onToggleFocusMode={() => { setFocusMode((enabled) => !enabled); resetEditor(); }}
         darkMode={editor.darkMode} fontSize={editor.fontSize} onFontSizeChange={editor.setFontSize}
         showFocusPanel={focusMode}
         backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null} />
       <TabBar tabs={editor.tabs} activeTabId={editor.activeTabId} onSelect={handleTabSelect} onClose={editor.closeTab} onNew={editor.newTab} />
       <div className="flex flex-1 overflow-hidden">
-        {!focusMode && <ProjectExplorer root={project.projectRoot} onOpenFile={(path) => { void editor.openFile(path); }} onOpenProject={() => { void project.openProject(); }} onCloseProject={project.closeProject} />}
+        {!focusMode && <ProjectExplorer root={project.projectRoot} onOpenFile={(path) => { void editor.openFile(path); }} onOpenProject={() => { void openProject(); }} onCloseProject={project.closeProject} />}
         {focusMode ? <FocusModePane key={`${editor.activeTabId}-${revision}`} value={editor.activeTab.content}
           onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
           slashCommands={slash.filteredCommands} onSelect={(command) => { void executeSlashCommand(command); }} /> :

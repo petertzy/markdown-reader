@@ -23,6 +23,8 @@ export function usePanels() {
     if (panelId) setActivePanel(panelId);
   }, []);
 
+  const hidePanel = useCallback(() => setActivePanel(null), []);
+
   /**
    * Adapter to keep compatibility with `useActions` and `useSlashCommandWiring`.
    * Those hooks still expect a standard boolean state setter (`setShowAIPanel`),
@@ -41,7 +43,7 @@ export function usePanels() {
     });
   }, []);
 
-  return { activePanel, togglePanel, setShowAIPanel };
+  return { activePanel, togglePanel, hidePanel, setShowAIPanel };
 }
 
 export type PanelsController = ReturnType<typeof usePanels>;

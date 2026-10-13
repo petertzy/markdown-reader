@@ -8,11 +8,18 @@ export function useProjectWorkspace() {
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const selected = await open({ directory: true, multiple: false });
-      if (typeof selected === "string") setProjectRoot(selected);
+      if (typeof selected === "string") {
+        setProjectRoot(selected);
+        return true;
+      }
     } catch {
       const supplied = window.prompt("Enter an absolute project folder path:");
-      if (supplied?.trim()) setProjectRoot(supplied.trim());
+      if (supplied?.trim()) {
+        setProjectRoot(supplied.trim());
+        return true;
+      }
     }
+    return false;
   }, []);
   return { projectRoot, openProject, closeProject: () => setProjectRoot(null) };
 }
