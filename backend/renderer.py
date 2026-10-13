@@ -131,6 +131,22 @@ class _BareUrlLinkifier(HTMLParser):
     def handle_data(self, data: str) -> None:
         self._buf.append((False, data))
 
+    def parse_comment(self, i: int, report: int = 1) -> int:
+        # An unterminated "<!--" (no comment close follows) is what an author has
+        # while typing a comment; markdown2 passes it through as ordinary text.
+        # The base implementation returns -1 and goahead drops the rest of the
+        # document, so emit a literal opener and resume parsing the tail as
+        # text. Deferring to the base for the close test keeps this in step with
+        # its comment-close rule. Hooking the parser (rather than rewriting the
+        # input) keeps the substitution out of <script>/<style> bodies and
+        # attribute values, which html.parser never routes through parse_comment.
+        end = super().parse_comment(i, report)
+        if end == -1:
+            self._flush()
+            self.parts.append("&lt;!--")
+            return i + 4
+        return end
+
     def handle_entityref(self, name: str) -> None:
         # A bare "&" in the source is escaped to "&amp;" by markdown2 before
         # linkification. Rejoin it as data so the URL regex sees the whole
@@ -203,6 +219,8 @@ def linkify_bare_urls(html: str) -> str:
     parser = _BareUrlLinkifier()
     parser.feed(html)
     parser.close()
+    # Text buffered by the last tag has no following tag to trigger a flush.
+    parser._flush()
     return "".join(parser.parts)
 
 
