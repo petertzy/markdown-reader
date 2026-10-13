@@ -182,7 +182,11 @@ def fix_image_paths(markdown_text: str, base_path: str) -> str:
 
     code_replacements: dict[str, str] = {}
     text = _mask_code_regions(markdown_text or "", code_replacements)
-    text = re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", replace_image, text)
+    text = re.sub(
+        r"!\[([^\]]*)\]\((<[^>\r\n]*>(?:[ \t]+(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|\([^)\r\n]*\)))?|[^)]+)\)",
+        replace_image,
+        text,
+    )
 
     # Restore the code spans verbatim.
     for key, value in code_replacements.items():

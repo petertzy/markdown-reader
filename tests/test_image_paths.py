@@ -75,6 +75,12 @@ class TestAngleBracketImageDestinations(unittest.TestCase):
             f'![a](<file://{self.BASE}/my file.png> "the title")',
         )
 
+    def test_destination_with_parentheses_is_resolved_inside_the_brackets(self):
+        self.assertEqual(
+            fix_image_paths('![a](<my (draft).png> "version (2)")', self.BASE),
+            f'![a](<file://{self.BASE}/my (draft).png> "version (2)")',
+        )
+
     def test_absolute_angle_bracket_destination_is_left_alone(self):
         for text in (
             "![a](<https://example.com/my file.png>)",
@@ -85,6 +91,11 @@ class TestAngleBracketImageDestinations(unittest.TestCase):
     def test_image_with_spaces_renders_with_the_resolved_source(self):
         html = render_markdown("![a](<my file.png>)", base_dir=self.BASE)
         self.assertIn(f'<img src="file://{self.BASE}/my file.png"', html)
+        self.assertNotIn("&lt;", html)
+
+    def test_image_with_parentheses_renders_with_the_resolved_source(self):
+        html = render_markdown("![a](<my (draft).png>)", base_dir=self.BASE)
+        self.assertIn(f'<img src="file://{self.BASE}/my (draft).png"', html)
         self.assertNotIn("&lt;", html)
 
 
