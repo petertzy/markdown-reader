@@ -178,6 +178,17 @@ class TestRenderMarkdown(unittest.TestCase):
         self.assertNotIn("<p><div", body)
         self.assertNotIn("</div></p>", body)
 
+    def test_adjacent_display_math_blocks_are_not_nested_inside_a_paragraph(self):
+        # A newline alone becomes <br /> under the renderer's
+        # ``break-on-newline`` extra. Each display equation must therefore be
+        # isolated before markdown2 builds paragraphs.
+        html = render_markdown("$$x$$\n$$y$$")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertEqual(body.count('<div class="math-display">'), 2)
+        self.assertNotIn("<p><div", body)
+        self.assertNotIn("</div></p>", body)
+
     def test_inline_math_is_still_restored_inside_a_paragraph(self):
         html = render_markdown("Area is $x^2$ exactly.")
         body = html.split("<body>")[1].split("</body>")[0]

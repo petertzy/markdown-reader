@@ -78,7 +78,12 @@ def protect_math(markdown_text: str) -> tuple[str, dict[str, str]]:
         return key
 
     def replace_block(match: re.Match[str]) -> str:
-        return make_placeholder(match.group(1), display=True)
+        # Keep each display placeholder in its own Markdown block. Without
+        # these boundaries adjacent display expressions share markdown2's
+        # paragraph wrapper, which would still nest their restored <div>s in a
+        # <p> even though a lone expression is unwrapped in restore_math.
+        placeholder = make_placeholder(match.group(1), display=True)
+        return f"\n\n{placeholder}\n\n"
 
     def replace_inline(match: re.Match[str]) -> str:
         return make_placeholder(match.group(1), display=False)
