@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, type SetStateAction } from "react";
+import { useState, useCallback, useRef, type SetStateAction } from "react";
 import { useEditor } from "@/hooks/useEditor";
 import { useAIActions } from "@/hooks/useAIActions";
 import { useProjectWorkspace } from "@/hooks/useProjectWorkspace";
@@ -16,7 +16,7 @@ import MenuBar from "@/components/MenuBar";
 import EditorWorkspace from "@/components/EditorWorkspace";
 import PreviewPane from "@/components/PreviewPane";
 import SplitPane from "@/components/SplitPane";
-import FocusModePane from "@/components/FocusModePane";
+import FocusModePane, { type FocusEditorHandle } from "@/components/FocusModePane";
 import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
 import ProjectExplorer from "@/components/ProjectExplorer";
@@ -37,6 +37,8 @@ export default function HomePage() {
   } = editorWorkspace;
   const [focusMode, setFocusMode] = useState(false);
   const { activePanel, togglePanel, hidePanel, setShowAIPanel } = usePanels();
+  // Focus Mode undo/redo handle (issue #341) — published by FocusModePane.
+  const focusEditorRef = useRef<FocusEditorHandle | null>(null);
   const [aiPanelInitialTab, setAiPanelInitialTab] = useState<AIPanelTab | undefined>();
   const [split, setSplit] = useState(50);
   const [projectRefreshToken, setProjectRefreshToken] = useState(0);
@@ -79,6 +81,7 @@ export default function HomePage() {
     monacoRef,
     monacoReady,
     setShowAIPanel: setShowAIPanelWithLayout,
+    focusEditorRef,
     setAiPanelInitialTab,
     setSplit,
     onOpenProject: () => { void openProject(); },
@@ -112,7 +115,8 @@ export default function HomePage() {
         {!focusMode && <ProjectExplorer root={project.projectRoot} onOpenFile={(path) => { void editor.openFile(path); }} onOpenProject={() => { void openProject(); }} onCloseProject={project.closeProject} refreshToken={projectRefreshToken} />}
         {focusMode ? <FocusModePane key={`${editor.activeTabId}-${revision}`} value={editor.activeTab.content}
           onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
-          slashCommands={slash.filteredCommands} onSelect={(command) => { void executeSlashCommand(command); }} /> :
+          slashCommands={slash.filteredCommands} onSelect={(command) => { void executeSlashCommand(command); }}
+          editorRef={focusEditorRef} /> :
           <SplitPane split={split} onSplitChange={setSplit} minSize={20}
             left={<EditorWorkspace tabId={editor.activeTab.id} value={editor.activeTab.content}
               onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}

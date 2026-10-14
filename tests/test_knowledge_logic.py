@@ -259,6 +259,35 @@ class TestKnowledgeLogic(unittest.TestCase):
             "the fenced body must still be indexed as content",
         )
 
+    def test_chunking_ignores_indented_code_comments(self):
+        # A four-space indented line is an indented code block, not a heading
+        # (the renderer only anchors a '#' that starts the line). The comment
+        # must not become a section and must stay in the indexed content.
+        content = (
+            "# Setup\n\n"
+            "    # install the deps\n"
+            "    pip install -r requirements.txt\n\n"
+            "More text.\n"
+        )
+        chunks = knowledge_logic.chunk_markdown_document(
+            content, str(self.note1_path), "setup.md"
+        )
+        sections = [chunk["section"] for chunk in chunks]
+        self.assertNotIn("install the deps", sections)
+        self.assertIn("Setup", sections)
+        self.assertTrue(
+            any("# install the deps" in chunk["content"] for chunk in chunks),
+            "the indented code line must still be indexed as content",
+        )
+
+    def test_extract_note_title_ignores_indented_code_comments(self):
+        # The only '#' in the note is a comment inside an indented code block,
+        # so the note has no heading title and falls back to the filename.
+        content = "    # install the deps\n    pip install -r requirements.txt\n"
+        self.assertEqual(
+            knowledge_logic.extract_note_title(content, "setup.md"), "setup"
+        )
+
     def test_chunking_treats_an_unclosed_fence_as_code_to_end_of_document(self):
         # Matches CommonMark: an unterminated fence runs to the end of the file.
         content = "# Real Heading\n\n```\n# inside\n"
@@ -763,3 +792,66 @@ class TestIndexingStoresCleanFrontmatterMetadata(unittest.TestCase):
         self.assertEqual([note["title"] for note in notes], ["Second --- draft"])
         hits = knowledge_logic.query_knowledge_base("draft", db_path=self.db_path)
         self.assertEqual([hit["title"] for hit in hits], ["Second --- draft"])
+
+
+# ── indented code blocks ──────────────────────────────────────────────────────
+#
+# Chunking used str.strip(), which eats the leading indentation of the first
+# line of an indented (4-space) code block. The code then re-flowed wrong both
+# in the stored chunk and in the context injected into AI prompts.
+
+
+def _setup_chunks():
+    content = "## Setup\n\n    def setup():\n        return True\n\n    more()\n"
+    return knowledge_logic.chunk_markdown_document(
+        content, "/tmp/notes/setup.md", "setup.md", target_chunk_size=500
+    )
+
+
+def test_chunk_keeps_the_leading_indent_of_an_indented_code_block():
+    chunks = _setup_chunks()
+    setup = [c for c in chunks if c["section"] == "Setup"]
+    assert setup, chunks
+    assert setup[0]["content"].startswith("    def setup():")
+
+
+def test_prompt_context_keeps_the_leading_indent_of_the_first_code_line():
+    chunks = _setup_chunks()
+    context = knowledge_logic.build_knowledge_context_for_prompt(chunks)
+    assert "    def setup():" in context
+
+
+def test_chunking_a_large_section_keeps_indent_of_the_first_code_line():
+    # Exercises the paragraph-split path (section larger than target size).
+    content = (
+        "## Setup\n\n"
+        "    def first():\n"
+        "        pass\n\n"
+        "Some prose." + "\n\nDeeper prose paragraph." * 40 + "\n"
+    )
+    chunks = knowledge_logic.chunk_markdown_document(
+        content, "/tmp/notes/setup.md", "setup.md", target_chunk_size=200
+    )
+    texts = [c["content"] for c in chunks if "def first" in c["content"]]
+    assert texts
+    assert any(t.startswith("    def first():") for t in texts)
+
+
+def test_overview_chunk_keeps_leading_indent_of_an_initial_code_block():
+    chunks = knowledge_logic.chunk_markdown_document(
+        "    def setup():\n        return True\n",
+        "/tmp/notes/setup.md",
+        "setup.md",
+    )
+    assert chunks[0]["section"] == "Overview"
+    assert chunks[0]["content"].startswith("    def setup():")
+
+
+def test_frontmatter_body_keeps_leading_indent_of_an_initial_code_block():
+    chunks = knowledge_logic.chunk_markdown_document(
+        "---\ntitle: Setup\n---\n\n    def setup():\n        return True\n",
+        "/tmp/notes/setup.md",
+        "setup.md",
+    )
+    assert chunks[0]["section"] == "Overview"
+    assert chunks[0]["content"].startswith("    def setup():")

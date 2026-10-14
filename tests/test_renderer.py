@@ -93,6 +93,18 @@ class TestRenderMarkdown(unittest.TestCase):
         self.assertIn("math-inline", html)
         self.assertIn("<code>keep $1</code>", html)
 
+    def test_math_inside_an_indented_code_fence_is_not_converted(self):
+        # A fence may be indented. The unindented mask missed it, so the
+        # "$$...$$" inside the code sample was rewritten into math markup and
+        # rendered as a live formula instead of the literal text the author
+        # wrote.
+        html = render_markdown("   ```\n   $$x^2$$\n   ```\n\nAfter")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertNotIn("math-display", body)
+        self.assertIn("$$x^2$$", body)
+        self.assertIn("After", body)
+
     def test_code_placeholder_names_in_document_are_not_mangled(self):
         html = render_markdown("This is CODEPLACEHOLDER0X text and `real code $x`")
 
@@ -153,6 +165,45 @@ class TestRenderMarkdown(unittest.TestCase):
         self.assertIn('class="math-inline"', body)
         self.assertIn("Total $50 with", body)
         self.assertNotIn("$50 with \\(", body)
+
+    def test_display_math_is_not_nested_inside_a_paragraph(self):
+        # markdown2 wraps a lone display-math placeholder in "<p>...</p>".
+        # Restoring the math while that wrapper was still present produced
+        # "<p><div class="math-display">...</div></p>" -- a block <div> inside a
+        # <p> is invalid HTML and leaves a stray empty paragraph behind.
+        html = render_markdown("$$x^2$$")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertIn('<div class="math-display">', body)
+        self.assertNotIn("<p><div", body)
+        self.assertNotIn("</div></p>", body)
+
+    def test_adjacent_display_math_blocks_are_not_nested_inside_a_paragraph(self):
+        # A newline alone becomes <br /> under the renderer's
+        # ``break-on-newline`` extra. Each display equation must therefore be
+        # isolated before markdown2 builds paragraphs.
+        html = render_markdown("$$x$$\n$$y$$")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertEqual(body.count('<div class="math-display">'), 2)
+        self.assertNotIn("<p><div", body)
+        self.assertNotIn("</div></p>", body)
+
+    def test_inline_math_is_still_restored_inside_a_paragraph(self):
+        html = render_markdown("Area is $x^2$ exactly.")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertIn('<span class="math-inline">', body)
+        self.assertIn("<p>Area is", body)
+
+    def test_lone_inline_math_keeps_its_paragraph(self):
+        # A paragraph whose only content is inline math must keep its <p>
+        # wrapper; only display math unwraps the paragraph.
+        html = render_markdown("$x$")
+        body = html.split("<body>")[1].split("</body>")[0]
+
+        self.assertIn('<p><span class="math-inline">', body)
+        self.assertIn("</span></p>", body)
 
     def test_digit_leading_math_and_currency_remain_separate(self):
         for expression in ("2x + 1", "5", "2x", "x^2 + y^2 = z^2"):
@@ -293,6 +344,63 @@ class TestRawHtmlTokensSurviveRendering(unittest.TestCase):
         # it, and the anchor is still built from the visible text only.
         self.assertIn('<h1 id="title">Title <!-- note --></h1>', html)
 
+    def test_unterminated_comment_keeps_the_rest_of_the_line(self):
+        # An author mid-typing a comment leaves "<!--" unclosed. markdown2 treats
+        # it as ordinary text, so the preview must keep it too instead of
+        # erasing the tail of the document (as html.parser's unclosed-comment
+        # reading did).
+        html = render_markdown("Intro <!-- typed mid-sentence")
+
+        self.assertIn("Intro", html)
+        self.assertIn("&lt;!-- typed mid-sentence", html)
+
+    def test_unterminated_comment_does_not_swallow_the_next_paragraph(self):
+        html = render_markdown("Intro <!-- note\n\nMore text after")
+
+        self.assertIn("<p>Intro", html)
+        self.assertIn("&lt;!-- note", html)
+        self.assertIn("More text after", html)
+        # The comment must not eat a later paragraph's closing tag and flush it
+        # back into the document as visible "&lt;/p&gt;" text.
+        self.assertNotIn("&lt;/p&gt;", html)
+
+    def test_every_unterminated_comment_opener_is_escaped(self):
+        # A line can hold more than one unfinished comment while it is being
+        # typed. If only the first opener were escaped, the next one would still
+        # send html.parser into comment mode and leak the closing tag.
+        html = render_markdown("A <!-- x B <!-- y")
+
+        self.assertIn("&lt;!-- x B &lt;!-- y", html)
+        self.assertNotIn("&lt;/p&gt;", html)
+
+    def test_incomplete_comment_inside_script_is_not_escaped(self):
+        # A "<!" sequence inside a <script> body is raw text (CDATA); the
+        # unfinished-comment handling must leave it alone.
+        html = render_markdown('<script>const s = "<!--";</script>')
+
+        self.assertIn('const s = "<!--"', html)
+
+    def test_incomplete_comment_inside_style_is_not_escaped(self):
+        html = render_markdown('<style>a::before { content: "<!--"; }</style>')
+
+        self.assertIn('content: "<!--"', html)
+
+    def test_incomplete_comment_inside_an_attribute_is_not_escaped(self):
+        html = render_markdown('<a href="x" title="<!--">link</a>')
+
+        self.assertIn('title="<!--"', html)
+        self.assertNotIn("&lt;!--", html)
+
+    def test_linkifier_keeps_trailing_text_at_end_of_input(self):
+        # _BareUrlLinkifier buffers text until a tag arrives; without a final
+        # flush the tail that has no closing tag after it is silently dropped.
+        from backend.renderer import linkify_bare_urls
+
+        self.assertEqual(
+            linkify_bare_urls("<p>Text at the end"),
+            "<p>Text at the end",
+        )
+
 
 class TestHeadingAnchors(unittest.TestCase):
     """Rendered headings carry canonical anchors matching the outline and TOC."""
@@ -413,6 +521,37 @@ class TestHeadingAnchors(unittest.TestCase):
         self.assertEqual([node["line"] for node in outline], [5, 7])
         self.assertEqual(
             re.findall(r"\]\(#([^)]+)\)", _generate_markdown_toc(md)), expected
+        )
+
+
+class TestStrikethroughRendering(unittest.TestCase):
+    """GFM strikethrough must render, the way the rest of the app treats it.
+
+    ``heading_anchor.extract_heading_text`` and ``word_count.strip_markdown``
+    both strip ``~~...~~`` when they read a document, so the preview was the
+    only place a strikethrough stayed literal -- and text that is markup in the
+    anchor and the word count should not be markup only there.
+    """
+
+    def test_strikethrough_renders(self):
+        self.assertRegex(render_markdown("~~gone~~"), r"<(s|strike)>gone</\1>")
+
+    def test_single_tilde_is_left_literal(self):
+        self.assertIn("~not strike~", render_markdown("~not strike~"))
+
+    def test_strikethrough_inside_a_code_span_is_kept_verbatim(self):
+        self.assertIn("<code>~~literal~~</code>", render_markdown("`~~literal~~`"))
+
+    def test_struck_heading_keeps_its_visible_text_anchor(self):
+        from backend.routers.markdown import _extract_outline
+
+        md = "# ~~old~~ new\n"
+        html = render_markdown(md)
+        self.assertIn('<h1 id="old-new">', html)
+        self.assertRegex(html, r"<(s|strike)>old</\1> new")
+        self.assertEqual([node["anchor"] for node in _extract_outline(md)], ["old-new"])
+        self.assertEqual(
+            re.findall(r"\]\(#([^)]+)\)", _generate_markdown_toc(md)), ["old-new"]
         )
 
 

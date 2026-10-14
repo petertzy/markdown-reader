@@ -344,9 +344,10 @@ def extract_note_title(content: str, fallback_filename: str) -> str:
             continue
         if active_fence:
             continue
-        stripped = line.strip()
-        if stripped.startswith("# "):
-            title = stripped[2:].strip()
+        # A '#' that starts the line is a heading; an indented '#' (four
+        # spaces) is an indented code block, exactly as the renderer treats it.
+        if line.startswith("# "):
+            title = line[2:].strip()
             if title:
                 return title
 
@@ -367,7 +368,7 @@ def chunk_markdown_document(
 
     Preserves heading context for each chunk (e.g. "Section > Subsection").
     """
-    text = content.strip()
+    text = content.strip("\n").rstrip()
     if not text:
         return []
 
@@ -377,7 +378,7 @@ def chunk_markdown_document(
     body = text
     frontmatter_split = _split_frontmatter(body)
     if frontmatter_split is not None:
-        body = frontmatter_split[1].strip()
+        body = frontmatter_split[1].strip("\n").rstrip()
 
     lines = body.splitlines()
     sections: list[tuple[str, list[str]]] = []
@@ -387,7 +388,6 @@ def chunk_markdown_document(
 
     active_fence: tuple[str, int] | None = None
     for line in lines:
-        stripped = line.strip()
         fence = _markdown_fence(line, active_fence)
         if fence:
             # A fence marker is content, never a section boundary, and the lines
@@ -398,7 +398,9 @@ def chunk_markdown_document(
         if active_fence:
             current_lines.append(line)
             continue
-        heading_match = re.match(r"^(#{1,6})\s+(.+)$", stripped)
+        # Match the raw line, not its stripped form: a '#' that is indented by
+        # four spaces opens an indented code block, not a heading.
+        heading_match = re.match(r"^(#{1,6})\s+(.+)$", line)
         if heading_match:
             if current_lines:
                 sections.append((current_section, current_lines))
@@ -420,7 +422,7 @@ def chunk_markdown_document(
     chunk_index = 0
 
     for section_name, sec_lines in sections:
-        sec_text = "\n".join(sec_lines).strip()
+        sec_text = "\n".join(sec_lines).strip("\n").rstrip()
         if not sec_text:
             continue
 
@@ -446,7 +448,7 @@ def chunk_markdown_document(
         current_len = 0
 
         for para in paragraphs:
-            para = para.strip()
+            para = para.strip("\n").rstrip()
             if not para:
                 continue
 
@@ -897,7 +899,7 @@ def build_knowledge_context_for_prompt(
         title = ch.get("title", rel_path)
         section = ch.get("section", "")
         sec_header = f" > {section}" if section and section != "Overview" else ""
-        content = ch.get("content", "").strip()
+        content = ch.get("content", "").strip("\n")
 
         block = f"--- [Source {i}: {rel_path} ({title}{sec_header})] ---\n{content}\n"
         if total_len + len(block) > max_chars and i > 1:

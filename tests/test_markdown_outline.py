@@ -338,3 +338,95 @@ def test_a_heading_id_without_images_is_untouched_by_alt_handling():
         ("<h2>Alt without an image: alt</h2>", "alt-without-an-image-alt"),
     ):
         assert f'id="{expected}"' in assign_heading_ids(html), html
+
+
+# ── setext headings ─────────────────────────────────────────────────────────
+#
+# The preview anchors setext headings ("Title\n=====" becomes <h1 id="title">,
+# "Sub\n-----" becomes <h2 id="sub">) but the outline endpoint only scanned
+# ATX ("#") headings, so whole sections silently vanished from the outline
+# and its table-of-contents links while still being anchored in the preview.
+# The two producers have to agree again.
+
+
+def test_setext_heading_level_one_in_outline():
+    nodes = {
+        node["text"]: node for node in _extract_outline("Title\n=====\n\n## More\n")
+    }
+    assert nodes["Title"]["level"] == 1
+    assert nodes["Title"]["anchor"] == "title"
+    assert nodes["Title"]["line"] == 1
+    assert "More" in nodes
+
+
+def test_setext_heading_level_two_in_outline():
+    nodes = {node["text"]: node for node in _extract_outline("Sub\n----\n")}
+    assert nodes["Sub"]["level"] == 2
+    assert nodes["Sub"]["anchor"] == "sub"
+    assert nodes["Sub"]["line"] == 1
+
+
+def test_setext_outline_matches_the_rendered_anchor_ids():
+    md = "Title\n=====\n\n# Intro\n\nSub\n----\n\n## More\n"
+    assert _outline_anchors(md) == _rendered_ids(md)
+    assert _outline_anchors(md) == ["title", "intro", "sub", "more"]
+
+
+def test_setext_underline_after_a_blank_line_is_a_thematic_break():
+    assert _extract_outline("Para\n\n----\n") == []
+
+
+def test_setext_scan_skips_backtick_fenced_code():
+    md = "```\ncode\n=====\n```\n# Real\n"
+    assert [node["text"] for node in _extract_outline(md)] == ["Real"]
+
+
+def test_setext_scan_does_not_close_a_fence_with_an_info_string():
+    md = "```\n```python\nHidden\n=====\n```\n# Real\n"
+    assert [node["text"] for node in _extract_outline(md)] == ["Real"]
+    assert _outline_anchors(md) == _rendered_ids(md) == ["real"]
+
+
+# ── ATX headings inside fenced code ─────────────────────────────────────────
+#
+# A "#" line inside a backtick fence is code, not a heading. The scanner's
+# closing backreference was pinned to the whole opening run -- indentation
+# included -- so it only closed on an identical line. A block closed by a
+# *longer* fence (the usual way to show a triple-backtick snippet) or by a
+# differently indented fence stayed unmasked: its code lines leaked into the
+# outline and the AI table of contents as phantom sections while the preview
+# kept them inside <pre><code>. The outline, the TOC and the rendered ids must
+# agree again.
+
+
+def test_outline_skips_heading_inside_a_fence_closed_by_a_longer_fence():
+    md = "# Real\n\n```\n# fake\n`````\n\n## Second\n"
+    assert _outline_anchors(md) == ["real", "second"]
+    assert _outline_anchors(md) == _rendered_ids(md) == _toc_anchors(md)
+
+
+def test_outline_skips_heading_inside_an_indented_fence():
+    md = "# Real\n\n   ```\n   # fake\n   ```\n\n## Second\n"
+    assert _outline_anchors(md) == ["real", "second"]
+    assert _outline_anchors(md) == _rendered_ids(md) == _toc_anchors(md)
+
+
+def test_outline_skips_heading_inside_a_fence_with_a_different_closing_indent():
+    # The closing fence need not repeat the opener's indentation.
+    md = "# Real\n\n```\n# fake\n   ```\n\n## Second\n"
+    assert _outline_anchors(md) == ["real", "second"]
+    assert _outline_anchors(md) == _rendered_ids(md) == _toc_anchors(md)
+
+
+def test_outline_keeps_headings_after_a_skipped_fence_and_tracks_lines():
+    md = "# Real\n\n```\n# fake\n`````\n\n## After\n"
+    nodes = _extract_outline(md)
+    assert [node["text"] for node in nodes] == ["Real", "After"]
+    assert [node["line"] for node in nodes] == [1, 7]
+
+
+def test_outline_skips_headings_in_crlf_fences():
+    # Windows-authored Markdown must mask fences just as LF Markdown does.
+    md = "# Real\r\n\r\n```\r\n# fake\r\n`````\r\n\r\n## Second\r\n"
+    assert _outline_anchors(md) == ["real", "second"]
+    assert _outline_anchors(md) == _rendered_ids(md) == _toc_anchors(md)

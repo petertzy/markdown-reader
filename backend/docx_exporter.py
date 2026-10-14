@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import base64
 import os
 import re
 from html import unescape
 from html.parser import HTMLParser
 from io import BytesIO
 from typing import Any
+from urllib.parse import unquote, unquote_to_bytes
 
 import requests
 from docx import Document
@@ -23,6 +25,17 @@ def _resolve_image_source(src: str, base_dir: str | None) -> tuple[str, bytes | 
     src = src.strip()
     if src.startswith("file://"):
         src = src[7:]
+    if src.lower().startswith("data:"):
+        # Inline images ("data:image/png;base64,...") have no path to open.
+        # Feed the decoded payload straight to add_picture, or the raw base64
+        # blob would be exported as the paragraph's literal text.
+        try:
+            header, _, payload = src.partition(",")
+            if header.lower().endswith(";base64"):
+                return src, base64.b64decode(payload)
+            return src, unquote_to_bytes(payload)
+        except Exception:
+            return src, None
     if re.match(r"^https?://", src, re.IGNORECASE):
         try:
             response = requests.get(src, timeout=15, allow_redirects=True)
@@ -30,9 +43,18 @@ def _resolve_image_source(src: str, base_dir: str | None) -> tuple[str, bytes | 
             return src, response.content
         except Exception:
             return src, None
-    candidates = [src]
-    if base_dir and not os.path.isabs(src):
-        candidates.insert(0, os.path.abspath(os.path.join(base_dir, src)))
+    # A Markdown image destination is a URL, so a space in the filename reaches
+    # us percent-encoded ("My%20Pic.png"). Decode it before touching the disk,
+    # or the picture is reported missing and replaced by its "[path]" fallback.
+    # The raw form stays as a fallback for a filename that holds a literal
+    # percent sequence.
+    decoded = unquote(src)
+    local_paths = [decoded] if decoded == src else [decoded, src]
+    candidates = []
+    for local_path in local_paths:
+        if base_dir and not os.path.isabs(local_path):
+            candidates.append(os.path.abspath(os.path.join(base_dir, local_path)))
+        candidates.append(local_path)
     for candidate in candidates:
         try:
             with open(candidate, "rb") as file_obj:
@@ -111,6 +133,26 @@ def _shade_run(run, fill: str) -> None:
     _add_shading(properties, fill)
 
 
+def _add_horizontal_rule(paragraph) -> None:
+    """Give *paragraph* a bottom border, Word's horizontal rule.
+
+    Word has no "thematic break" element: a rule is an otherwise empty
+    paragraph whose bottom edge is drawn as a border. The border run must go
+    through the paragraph properties (``w:pPr/w:pBdr``) rather than through a
+    run, because a run-level border outlines the glyphs and an empty run would
+    draw nothing at all.
+    """
+    properties = paragraph._p.get_or_add_pPr()
+    borders = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+    bottom.set(qn("w:val"), "single")
+    bottom.set(qn("w:sz"), "6")
+    bottom.set(qn("w:space"), "1")
+    bottom.set(qn("w:color"), "auto")
+    borders.append(bottom)
+    properties.append(borders)
+
+
 class _DocxHtmlParser(HTMLParser):
     def __init__(self, document: Document, base_dir: str | None = None):
         super().__init__(convert_charrefs=False)
@@ -181,6 +223,14 @@ class _DocxHtmlParser(HTMLParser):
             self.current_list_items.append([style, self.current_paragraph, False])
         elif tag == "br" and self.current_paragraph is not None:
             self.current_paragraph.add_run().add_break()
+        elif tag == "hr":
+            # ``render_markdown`` emits ``<hr />`` for a thematic break
+            # (``---``). Without a branch the tag was silently dropped, so
+            # every rule vanished from the Word export and the surrounding
+            # text ran together. The rule is its own empty, bordered
+            # paragraph; nothing else may append to it.
+            _add_horizontal_rule(self.document.add_paragraph())
+            self.current_paragraph = None
         elif tag == "img":
             src = attrs_dict.get("src", "")
             if not src:

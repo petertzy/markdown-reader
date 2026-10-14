@@ -41,9 +41,14 @@ def _mask_code_regions(markdown_text: str, replacements: dict[str, str]) -> str:
     text = markdown_text or ""
     factory = _PlaceholderFactory("CODEPLACEHOLDER", text, replacements)
 
-    # Fenced code blocks: ``` ... ``` or ~~~ ... ~~~, spanning lines.
+    # Fenced code blocks: ``` ... ``` or ~~~ ... ~~~, spanning lines. The
+    # fence may be indented -- up to three spaces at the top level, and four or
+    # more inside a list item -- so an unindented pattern missed those blocks
+    # and rewrote the ``![...](...)`` samples and ``$...$`` spans inside them as
+    # if they were live markup. The closing fence need not repeat the opener's
+    # indentation.
     text = re.sub(
-        r"(?ms)^(`{3,}|~{3,})[^\n]*\n.*?^\1[^\n]*\n?$",
+        r"(?ms)^[ \t]*(?:(`{3,})[^\r\n]*\r?\n.*?^[ \t]*\1`*[ \t]*(?:\r?\n|$)|(~{3,})[^\r\n]*\r?\n.*?^[ \t]*\2~*[ \t]*(?:\r?\n|$))",
         lambda m: factory(m.group(0)),
         text,
     )
@@ -73,7 +78,12 @@ def protect_math(markdown_text: str) -> tuple[str, dict[str, str]]:
         return key
 
     def replace_block(match: re.Match[str]) -> str:
-        return make_placeholder(match.group(1), display=True)
+        # Keep each display placeholder in its own Markdown block. Without
+        # these boundaries adjacent display expressions share markdown2's
+        # paragraph wrapper, which would still nest their restored <div>s in a
+        # <p> even though a lone expression is unwrapped in restore_math.
+        placeholder = make_placeholder(match.group(1), display=True)
+        return f"\n\n{placeholder}\n\n"
 
     def replace_inline(match: re.Match[str]) -> str:
         return make_placeholder(match.group(1), display=False)
@@ -105,8 +115,15 @@ def protect_math(markdown_text: str) -> tuple[str, dict[str, str]]:
 def restore_math(html_content: str, replacements: dict[str, str]) -> str:
     """Restore MathJax-compatible HTML placeholders."""
     for key, value in replacements.items():
+        # Display math is a block element and markdown2 wraps a lone placeholder
+        # in a paragraph of its own ("<p>KEY</p>"). Replace that whole paragraph
+        # so the block <div> is not nested inside a <p> (invalid HTML, and it
+        # leaves a stray empty paragraph behind). Inline math shares its
+        # paragraph with surrounding text, so only the loose replacement below
+        # applies.
+        if value.startswith("<div"):
+            html_content = html_content.replace(f"<p>{key}</p>", value)
         html_content = html_content.replace(key, value)
-        html_content = html_content.replace(f"<p>{key}</p>", value)
     return html_content
 
 
@@ -154,18 +171,39 @@ def fix_image_paths(markdown_text: str, base_path: str) -> str:
     that :func:`protect_math` relies on, so both agree on what counts as code.
     """
 
+    def is_absolute(src: str) -> bool:
+        return src.lower().startswith(("http://", "https://", "file://", "/", "data:"))
+
+    def resolve(src: str) -> str:
+        abs_path = os.path.abspath(os.path.join(base_path, src))
+        return "file://" + abs_path.replace("\\", "/")
+
     def replace_image(match: re.Match[str]) -> str:
         alt = match.group(1)
         src = match.group(2)
-        if src.lower().startswith(("http://", "https://", "file://", "/", "data:")):
+        # A destination wrapped in <...> may contain spaces and may be followed
+        # by a title. Resolve the path inside the brackets and keep the brackets
+        # (and title) around it: dropping them produced ``file:///dir/<my
+        # file.png>``, where markdown2 read the angle brackets as literal path
+        # characters and the image failed to load.
+        if src.startswith("<"):
+            end = src.find(">")
+            if end != -1:
+                destination = src[1:end]
+                if is_absolute(destination):
+                    return match.group(0)
+                return f"![{alt}](<{resolve(destination)}>{src[end + 1 :]})"
+        if is_absolute(src):
             return match.group(0)
-        abs_path = os.path.abspath(os.path.join(base_path, src))
-        abs_url = "file://" + abs_path.replace("\\", "/")
-        return f"![{alt}]({abs_url})"
+        return f"![{alt}]({resolve(src)})"
 
     code_replacements: dict[str, str] = {}
     text = _mask_code_regions(markdown_text or "", code_replacements)
-    text = re.sub(r"!\[([^\]]*)\]\(([^)]+)\)", replace_image, text)
+    text = re.sub(
+        r"!\[([^\]]*)\]\((<[^>\r\n]*>(?:[ \t]+(?:\"[^\"\r\n]*\"|'[^'\r\n]*'|\([^)\r\n]*\)))?|[^)]+)\)",
+        replace_image,
+        text,
+    )
 
     # Restore the code spans verbatim.
     for key, value in code_replacements.items():

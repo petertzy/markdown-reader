@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback } from "react";
 import { AI, type AgentChatPayload, type AgentResponse } from "@/lib/api";
+import { splitTextIntoTranslationUnits } from "@/lib/translation-units.mjs";
 
 export type ChatMessage = {
   id: string;
@@ -25,75 +26,6 @@ export type TranslationProgress = {
 let _msgCounter = 0;
 const msgId = () => `msg-${++_msgCounter}`;
 const SENTENCE_BATCH_CHAR_LIMIT = 3000;
-const SENTENCE_END_CHARS = ".!?。！？";
-// A full-width terminator ends a sentence whatever follows it — CJK text has no
-// space after 。！？. Mirrors the backend splitter in ai_logic.py.
-const CJK_SENTENCE_END_CHARS = "。！？";
-const SENTENCE_CLOSING_CHARS = new Set(["\"", "'", ")", "]", "」", "』", "）", "】", "》", "〉", "］", "｝", "〗", "〙", "〛"]);
-
-function splitTextIntoTranslationUnits(content: string) {
-  const text = content.trim();
-  if (!text) return [];
-  const units: string[] = [];
-  let buffer = "";
-  let inCodeBlock = false;
-
-  const flush = () => {
-    const unit = buffer.trim();
-    if (unit) units.push(unit);
-    buffer = "";
-  };
-
-  const lines = text.split(/\r?\n/);
-  lines.forEach((line, lineIndex) => {
-    const stripped = line.trim();
-    if (stripped.startsWith("```")) {
-      if (!inCodeBlock) {
-        flush();
-        buffer = line;
-        inCodeBlock = true;
-      } else {
-        buffer += `\n${line}`;
-        flush();
-        inCodeBlock = false;
-      }
-      return;
-    }
-    if (inCodeBlock) {
-      buffer += `${buffer ? "\n" : ""}${line}`;
-      return;
-    }
-    if (!stripped) {
-      flush();
-      return;
-    }
-    if (/^(#{1,6}\s|>\s|[-*+]\s|\d+\.\s)/.test(stripped)) {
-      flush();
-      units.push(line);
-      return;
-    }
-    for (let index = 0; index < line.length; index += 1) {
-      const char = line[index];
-      const nextChar = line[index + 1] ?? "";
-      buffer += char;
-      const endsSentence =
-        CJK_SENTENCE_END_CHARS.includes(char) ||
-        (SENTENCE_END_CHARS.includes(char) && ["", " ", "\t", "\"", "'", ")", "]"].includes(nextChar));
-      if (endsSentence) {
-        // Absorb a closing quote/bracket into the finished unit, otherwise it
-        // becomes the first character of the next one.
-        while (index + 1 < line.length && SENTENCE_CLOSING_CHARS.has(line[index + 1])) {
-          index += 1;
-          buffer += line[index];
-        }
-        flush();
-      }
-    }
-    if (lineIndex < lines.length - 1 && buffer) buffer += " ";
-  });
-  flush();
-  return units;
-}
 
 function batchTranslationUnits(units: string[]) {
   const batches: string[][] = [];

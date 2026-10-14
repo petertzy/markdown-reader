@@ -131,6 +131,24 @@ class TestFencedHeadingsInGeneratedTOC(unittest.TestCase):
         self.assertNotIn("code", summary)
         self.assertIn("Only", summary)
 
+    def test_summary_does_not_close_a_fence_with_an_info_string(self):
+        # The renderer only closes a fence on a bare run of backticks: a
+        # ```python line keeps the block open, so the heading below it is
+        # code and must not be reported as a section of the document.
+        summary = _generate_lightweight_summary(
+            "```\ncode\n```python\n# Hidden\nmore\n```\n\n# Real\n"
+        )
+        self.assertNotIn("Hidden", summary)
+        self.assertIn("Real", summary)
+
+    def test_summary_does_not_close_a_long_fence_with_a_shorter_run(self):
+        summary = _generate_lightweight_summary(
+            "````\n# Hidden\n```\n# Still hidden\n````\n\n# Real\n"
+        )
+        self.assertNotIn("Hidden", summary)
+        self.assertNotIn("Still hidden", summary)
+        self.assertIn("Real", summary)
+
 
 class TestAIAutomationLogic(unittest.TestCase):
     def test_templates_are_available(self):
@@ -247,6 +265,30 @@ class TestAIAutomationLogic(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertEqual(result["proposed_action"]["type"], "replace_document")
         self.assertIn("## Summary", result["assistant_message"])
+
+    def test_summary_with_selection_uses_selection_not_whole_document(self):
+        document_text = (
+            "# Whole document\n\nIntro to the whole document.\n\n"
+            "## Section A\n\nBody of section A.\n"
+        )
+        selected_text = "# Chosen passage\n\nOnly this selected passage matters.\n"
+        for command in ("generate summary", "/summarize"):
+            with self.subTest(command=command):
+                result = build_ai_automation_fallback(
+                    command,
+                    document_text=document_text,
+                    selected_text=selected_text,
+                )
+
+                self.assertIsNotNone(result)
+                self.assertEqual(result["proposed_action"]["type"], "replace_selection")
+                summary = result["proposed_action"]["content"]
+                # The summary describes the passage the user selected, not the whole
+                # document it was selected from (which is what the replace_selection
+                # action would then paste back over the selection).
+                self.assertIn("Only this selected passage matters", summary)
+                self.assertNotIn("Whole document", summary)
+                self.assertNotIn("Section A", summary)
 
     def test_slash_toc_command_uses_toc_fallback(self):
         result = build_ai_automation_fallback(
