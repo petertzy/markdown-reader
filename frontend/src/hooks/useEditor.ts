@@ -190,11 +190,6 @@ export function useEditor() {
     [tabs, refreshPreview]
   );
 
-  const openProjectFile = useCallback(
-    async (filePath: string) => openFile(filePath, { convert: false }),
-    [openFile]
-  );
-
   const openProjectAsMarkdown = useCallback(
     async (root: string) => {
       const collectFiles = async (path: string): Promise<string[]> => {
@@ -433,7 +428,6 @@ export function useEditor() {
     setFontSize,
     handleContentChange,
     openFile,
-    openProjectFile,
     openProjectAsMarkdown,
     openTextAsTab,
     saveFile,

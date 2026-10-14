@@ -49,12 +49,6 @@ export default function HomePage() {
     setSplit(panel === PANELS.PREVIEW ? 50 : 70);
   }, [togglePanel]);
   const openProject = useCallback(async () => {
-    if (await project.openProject()) {
-      hidePanel();
-      setSplit(100);
-    }
-  }, [hidePanel, project]);
-  const openProjectAsMarkdown = useCallback(async () => {
     const root = await project.openProject();
     if (!root) return;
     hidePanel();
@@ -87,7 +81,6 @@ export default function HomePage() {
     setAiPanelInitialTab,
     setSplit,
     onOpenProject: () => { void openProject(); },
-    onOpenProjectAsMarkdown: () => { void openProjectAsMarkdown(); },
     onShowPreview: () => selectPanel(PANELS.PREVIEW),
     executeAIPrompt,
     syncSelectedText,
@@ -114,7 +107,7 @@ export default function HomePage() {
         backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null} />
       <TabBar tabs={editor.tabs} activeTabId={editor.activeTabId} onSelect={handleTabSelect} onClose={editor.closeTab} onNew={editor.newTab} />
       <div className="flex flex-1 overflow-hidden">
-        {!focusMode && <ProjectExplorer root={project.projectRoot} onOpenFile={(path) => { void editor.openProjectFile(path); }} onOpenProject={() => { void openProject(); }} onCloseProject={project.closeProject} />}
+        {!focusMode && <ProjectExplorer root={project.projectRoot} onOpenFile={(path) => { void editor.openFile(path); }} onOpenProject={() => { void openProject(); }} onCloseProject={project.closeProject} />}
         {focusMode ? <FocusModePane key={`${editor.activeTabId}-${revision}`} value={editor.activeTab.content}
           onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
           slashCommands={slash.filteredCommands} onSelect={(command) => { void executeSlashCommand(command); }} /> :

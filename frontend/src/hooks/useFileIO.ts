@@ -51,7 +51,6 @@ type Options = {
 
 export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }: Options) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const browserOpenAsMarkdownRef = useRef(false);
   const openFileRef = useRef(editor.openFile);
   const openTextAsTabRef = useRef(editor.openTextAsTab);
   const lastDroppedPathsRef = useRef<{ signature: string; at: number } | null>(null);
@@ -88,7 +87,7 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
     };
   }, [backendStatus]);
 
-  const openDesktopFile = useCallback(async (convert: boolean) => {
+  const handleOpenFile = useCallback(async () => {
     if (isDesktopRuntime && backendStatus !== "ready") return;
     let filePath: string | null = null;
     try {
@@ -107,40 +106,26 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
           extensions: MARKITDOWN_EXTENSIONS,
         });
       }
-      const selected = await open({
-        multiple: false,
-        ...(convert ? { filters } : {}),
-      });
+      const selected = await open({ multiple: false, filters });
       filePath = selected ? (Array.isArray(selected) ? selected[0] : selected) : null;
     } catch {
       if (isDesktopRuntime) return;
-      browserOpenAsMarkdownRef.current = convert;
       fileInputRef.current?.click();
       return;
     }
     if (!filePath) return;
     try {
-      await editor.openFile(filePath, { convert });
+      await editor.openFile(filePath);
     } catch (error) {
       alert(`Open failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }, [backendStatus, editor, isDesktopRuntime, universalImportAvailable]);
 
-  const handleOpenFile = useCallback(
-    async () => openDesktopFile(false),
-    [openDesktopFile]
-  );
-
-  const handleOpenFileAsMarkdown = useCallback(
-    async () => openDesktopFile(true),
-    [openDesktopFile]
-  );
-
   const handleFileInputChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     try {
-      if (browserOpenAsMarkdownRef.current && needsConversion(file.name)) {
+      if (needsConversion(file.name)) {
         const result = await Files.convertToMarkdown({
           filename: file.name,
           content_base64: arrayBufferToBase64(await file.arrayBuffer()),
@@ -152,7 +137,6 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
     } catch (error) {
       alert(`Open failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
-      browserOpenAsMarkdownRef.current = false;
       event.target.value = "";
     }
   }, [editor]);
@@ -293,7 +277,6 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
     fileInputRef,
     fileInputAccept,
     handleOpenFile,
-    handleOpenFileAsMarkdown,
     handleFileInputChange,
     handleExport,
     handleDragEnter,
