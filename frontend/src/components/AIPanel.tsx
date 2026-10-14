@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
 import { useAIChat, type TranslationPair, type TranslationProgress } from "@/hooks/useAIChat";
-import { AI, getDefaultAISettings, type AISettings, Knowledge, type KnowledgeStatus } from "@/lib/api";
+import { AI, getDefaultAISettings, type AISettings, Knowledge, type KnowledgeStatus, Markdown } from "@/lib/api";
 import { tokenizeInlineMarkdown } from "@/lib/inline-markdown.mjs";
 
 export type AIPanelTab = "chat" | "translate" | "settings" | "work";
@@ -559,6 +559,17 @@ export default function AIPanel({
       onApplyAction?.("replace_selection", INSERT_TABLE_MARKDOWN);
       return;
     }
+    if (slashCommand === "/insert-toc") {
+      // Offline table of contents generated from the document headings.
+      try {
+        const { toc } = await Markdown.toc(documentText);
+        if (toc.trim()) onApplyAction?.("replace_selection", toc);
+      } catch {
+        // Network/backend errors are surfaced by the editor slash command path;
+        // here we simply skip inserting rather than interrupting the chat.
+      }
+      return;
+    }
     const sendOptions = {
       useKnowledgeBase: knowledgeEnabled && Boolean(knowledgeStatus?.exists),
     };
@@ -759,7 +770,7 @@ export default function AIPanel({
               <p className="text-gray-400 dark:text-gray-500 text-xs">
                 {knowledgeStatus?.exists && knowledgeEnabled
                   ? "Ask anything about your notes, or try /summarize, /format, /toc, /fix-code."
-                  : "Try /summarize, /translate, /format, /toc, /fix-code, or /insert-table."}
+                  : "Try /summarize, /translate, /format, /toc, /fix-code, /insert-table, or /insert-toc."}
               </p>
             )}
             {messages.map((msg) => (

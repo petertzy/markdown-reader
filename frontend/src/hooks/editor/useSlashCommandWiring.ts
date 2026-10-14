@@ -9,12 +9,14 @@ import {
   type SlashCommand,
   type useSlashCommands,
 } from "@/hooks/useSlashCommands";
+import { Markdown } from "@/lib/api";
 
 export type UseSlashCommandWiringOptions = {
   monacoRef: MutableRefObject<MonacoEditor.IStandaloneCodeEditor | null>;
   monacoReady: boolean;
   slash: ReturnType<typeof useSlashCommands>;
   insertTable: () => void;
+  insertTableOfContents: (toc: string) => void;
   executeAIPrompt: (prompt: string, documentText: string) => Promise<string | null | undefined>;
   documentText: string;
   syncSelectedText: () => void;
@@ -27,6 +29,7 @@ export function useSlashCommandWiring({
   monacoReady,
   slash,
   insertTable,
+  insertTableOfContents,
   executeAIPrompt,
   documentText,
   syncSelectedText,
@@ -63,6 +66,21 @@ export function useSlashCommandWiring({
         insertTable();
         return;
       }
+      if (command.kind === "insert-toc") {
+        // Build the table of contents offline from the current buffer and
+        // insert it at the cursor. No AI provider or network access is used.
+        try {
+          const { toc } = await Markdown.toc(text);
+          if (!toc.trim()) {
+            alert("No headings found to build a table of contents.");
+            return;
+          }
+          insertTableOfContents(toc);
+        } catch (err) {
+          alert(`Failed to generate table of contents: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        return;
+      }
       if (command.kind === "open-translate-tab") {
         setAiPanelInitialTab("translate");
         setShowAIPanel(true);
@@ -83,6 +101,7 @@ export function useSlashCommandWiring({
       documentText,
       executeAIPrompt,
       insertTable,
+      insertTableOfContents,
       monacoRef,
       setAiPanelInitialTab,
       setShowAIPanel,

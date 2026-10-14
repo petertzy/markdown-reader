@@ -69,6 +69,7 @@ export function useEditorCommands({
     monacoReady,
     slash,
     insertTable: formatting.insertTable,
+    insertTableOfContents: formatting.insertTableOfContents,
     executeAIPrompt,
     documentText: editor.activeTab.content,
     syncSelectedText,
