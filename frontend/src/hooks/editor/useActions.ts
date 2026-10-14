@@ -26,6 +26,7 @@ export type UseActionsOptions = {
   setShowAIPanel: Dispatch<SetStateAction<boolean>>;
   setSplit: Dispatch<SetStateAction<number>>;
   onOpenProject: () => void;
+  onFileSaved: () => void;
   onShowPreview: () => void;
 };
 
@@ -38,6 +39,7 @@ export function useActions({
   setShowAIPanel,
   setSplit,
   onOpenProject,
+  onFileSaved,
   onShowPreview,
 }: UseActionsOptions) {
   const { handleOpenFile, handleExport } = fileIO;
@@ -51,10 +53,11 @@ export function useActions({
   const handleSaveFile = useCallback(async () => {
     try {
       await editor.saveFile();
+      onFileSaved();
     } catch (err) {
       alert(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [editor]);
+  }, [editor, onFileSaved]);
 
   const handleOpenBrowserPreview = useCallback(async () => {
     if (backendStatus !== "ready") return;

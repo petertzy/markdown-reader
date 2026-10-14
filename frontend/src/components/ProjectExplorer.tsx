@@ -8,6 +8,7 @@ type Props = {
   onOpenFile: (path: string) => void;
   onOpenProject: () => void;
   onCloseProject: () => void;
+  refreshToken: number;
 };
 
 function Tree({ path, depth, onOpenFile }: { path: string; depth: number; onOpenFile: (path: string) => void }) {
@@ -46,16 +47,24 @@ function DirectoryNode({ entry, depth, onOpenFile }: { entry: FileEntry; depth: 
   </div>;
 }
 
-export default function ProjectExplorer({ root, onOpenFile, onOpenProject, onCloseProject }: Props) {
+export default function ProjectExplorer({ root, onOpenFile, onOpenProject, onCloseProject, refreshToken }: Props) {
   const name = root?.split(/[\\/]/).filter(Boolean).pop() || "Project";
+  const [collapsed, setCollapsed] = useState(false);
+
+  if (collapsed) {
+    return <aside className="flex h-full w-10 shrink-0 flex-col border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-[#252526]">
+      <button onClick={() => setCollapsed(false)} title="Show Explorer" aria-label="Show Explorer" className="px-2 py-2 text-lg text-gray-500 hover:bg-gray-100 hover:text-blue-500 dark:hover:bg-[#333]">›</button>
+    </aside>;
+  }
+
   return <aside className="flex h-full w-56 shrink-0 flex-col border-r border-gray-200 bg-gray-50 text-sm dark:border-gray-700 dark:bg-[#252526]">
     <div className="flex items-center justify-between border-b border-gray-200 px-2 py-2 dark:border-gray-700">
       <span className="truncate text-xs font-semibold uppercase tracking-wide">Explorer</span>
-      <button onClick={onOpenProject} title="Open project" className="px-1 hover:text-blue-500">+</button>
+      <div className="flex items-center gap-1"><button onClick={onOpenProject} title="Open project" className="px-1 hover:text-blue-500">+</button><button onClick={() => setCollapsed(true)} title="Hide Explorer" aria-label="Hide Explorer" className="px-1 text-gray-500 hover:text-blue-500">‹</button></div>
     </div>
     {!root ? <div className="p-3 text-xs text-gray-500"><p>No project folder is open.</p><button onClick={onOpenProject} className="mt-2 text-blue-600 hover:underline">Open Project Folder</button></div> : <>
       <div className="flex items-center justify-between border-b border-gray-200 px-2 py-2 text-xs font-medium dark:border-gray-700"><span className="truncate" title={root}>{name}</span><button onClick={onCloseProject} title="Close project" className="text-gray-500 hover:text-red-500">×</button></div>
-      <div className="min-h-0 flex-1 overflow-auto"><Tree key={root} path={root} depth={0} onOpenFile={onOpenFile} /></div>
+      <div className="min-h-0 flex-1 overflow-auto"><Tree key={`${root}-${refreshToken}`} path={root} depth={0} onOpenFile={onOpenFile} /></div>
     </>}
   </aside>;
 }

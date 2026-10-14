@@ -21,6 +21,7 @@ export type UseEditorCommandsOptions = {
   setAiPanelInitialTab: Dispatch<SetStateAction<AIPanelTab | undefined>>;
   setSplit: Dispatch<SetStateAction<number>>;
   onOpenProject: () => void;
+  onFileSaved: () => void;
   onShowPreview: () => void;
   executeAIPrompt: (prompt: string, documentText: string) => Promise<string | null | undefined>;
   syncSelectedText: () => void;
@@ -40,6 +41,7 @@ export function useEditorCommands({
   setAiPanelInitialTab,
   setSplit,
   onOpenProject,
+  onFileSaved,
   onShowPreview,
   executeAIPrompt,
   syncSelectedText,
@@ -57,6 +59,7 @@ export function useEditorCommands({
     setShowAIPanel,
     setSplit,
     onOpenProject,
+    onFileSaved,
     onShowPreview,
   });
 

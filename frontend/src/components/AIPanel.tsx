@@ -643,7 +643,7 @@ export default function AIPanel({
   };
 
   return (
-    <div className="flex flex-col w-80 min-w-[280px] max-w-[380px] border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] text-sm">
+    <div className="flex h-full w-full min-w-[300px] flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] text-sm">
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700 shrink-0">
         <div className="flex gap-1">
           {(["chat", "work", "translate", "settings"] as Tab[]).map((t) => (
