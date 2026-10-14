@@ -19,13 +19,14 @@ type FileIOController = ReturnType<typeof useFileIO>;
 
 export type UseActionsOptions = {
   editor: EditorController;
-  fileIO: Pick<FileIOController, "handleOpenFile" | "handleExport">;
+  fileIO: Pick<FileIOController, "handleOpenFile" | "handleOpenFileAsMarkdown" | "handleExport">;
   formatting: EditorFormattingController;
   backendStatus: "starting" | "ready" | "error";
   monacoRef: MutableRefObject<MonacoEditor.IStandaloneCodeEditor | null>;
   setShowAIPanel: Dispatch<SetStateAction<boolean>>;
   setSplit: Dispatch<SetStateAction<number>>;
   onOpenProject: () => void;
+  onOpenProjectAsMarkdown: () => void;
   onShowPreview: () => void;
 };
 
@@ -38,9 +39,10 @@ export function useActions({
   setShowAIPanel,
   setSplit,
   onOpenProject,
+  onOpenProjectAsMarkdown,
   onShowPreview,
 }: UseActionsOptions) {
-  const { handleOpenFile, handleExport } = fileIO;
+  const { handleOpenFile, handleOpenFileAsMarkdown, handleExport } = fileIO;
   const {
     runMonacoAction,
     wrapSelection,
@@ -74,7 +76,9 @@ export function useActions({
     () => ({
       "file.new": editor.newTab,
       "file.open": () => { void handleOpenFile(); },
+      "file.openAsMarkdown": () => { void handleOpenFileAsMarkdown(); },
       "file.openFolder": onOpenProject,
+      "file.openFolderAsMarkdown": onOpenProjectAsMarkdown,
       "file.save": () => { void handleSaveFile(); },
       "file.closeTab": () => editor.closeTab(editor.activeTabId),
       "file.closeAllTabs": editor.closeAllTabs,
@@ -105,6 +109,7 @@ export function useActions({
       applyHeading,
       editor,
       handleOpenFile,
+      handleOpenFileAsMarkdown,
       handleExport,
       handleOpenBrowserPreview,
       handleSaveFile,
@@ -113,6 +118,7 @@ export function useActions({
       setShowAIPanel,
       setSplit,
       onOpenProject,
+      onOpenProjectAsMarkdown,
       onShowPreview,
       wrapSelection,
     ]
@@ -129,6 +135,8 @@ export function useActions({
           { id: "file.new", label: "New", onSelect: actions["file.new"] },
           { id: "file.open", label: "Open File", onSelect: actions["file.open"], disabled: backendDisabled },
           { id: "file.openFolder", label: "Open Folder", onSelect: actions["file.openFolder"], disabled: backendDisabled },
+          { id: "file.openAsMarkdown", label: "Open File as Markdown", onSelect: actions["file.openAsMarkdown"], disabled: backendDisabled },
+          { id: "file.openFolderAsMarkdown", label: "Open Folder as Markdown", onSelect: actions["file.openFolderAsMarkdown"], disabled: backendDisabled },
           { id: "file.save", label: "Save File", onSelect: actions["file.save"], disabled: backendDisabled },
           "separator",
           { id: "file.exportHtml", label: "Export to HTML", onSelect: actions["file.exportHtml"], disabled: backendDisabled },

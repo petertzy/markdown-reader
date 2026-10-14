@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { Files, Markdown, Export, type ExportPayload, type ProjectWorkChange, type WordCountResult } from "@/lib/api";
-import { needsConversion } from "@/lib/supportedFormats";
+import { isSupportedFile, needsConversion } from "@/lib/supportedFormats";
 import { resolveTabClose } from "@/lib/tabLifecycle.mjs";
 import { settleSavedTab } from "@/lib/save-settle.mjs";
 import { parentDirOf, resolvePreviewBaseDir } from "@/lib/preview-base-dir.mjs";
@@ -192,6 +192,35 @@ export function useEditor() {
 
   const openProjectFile = useCallback(
     async (filePath: string) => openFile(filePath, { convert: false }),
+    [openFile]
+  );
+
+  const openProjectAsMarkdown = useCallback(
+    async (root: string) => {
+      const collectFiles = async (path: string): Promise<string[]> => {
+        const { entries } = await Files.list(path);
+        const nestedFiles = await Promise.all(
+          entries
+            .filter((entry) => entry.is_dir)
+            .map((entry) => collectFiles(entry.path))
+        );
+        return [
+          ...entries
+            .filter((entry) => !entry.is_dir && isSupportedFile(entry.name))
+            .map((entry) => entry.path),
+          ...nestedFiles.flat(),
+        ];
+      };
+
+      const filePaths = await collectFiles(root);
+      for (const filePath of filePaths) {
+        try {
+          await openFile(filePath);
+        } catch (error) {
+          console.error(`Failed to open ${filePath}:`, error);
+        }
+      }
+    },
     [openFile]
   );
 
@@ -405,6 +434,7 @@ export function useEditor() {
     handleContentChange,
     openFile,
     openProjectFile,
+    openProjectAsMarkdown,
     openTextAsTab,
     saveFile,
     newTab,

@@ -3,7 +3,9 @@
 export type ActionId =
   | "file.new"
   | "file.open"
+  | "file.openAsMarkdown"
   | "file.openFolder"
+  | "file.openFolderAsMarkdown"
   | "file.save"
   | "file.closeTab"
   | "file.closeAllTabs"

@@ -54,6 +54,13 @@ export default function HomePage() {
       setSplit(100);
     }
   }, [hidePanel, project]);
+  const openProjectAsMarkdown = useCallback(async () => {
+    const root = await project.openProject();
+    if (!root) return;
+    hidePanel();
+    setSplit(100);
+    await editor.openProjectAsMarkdown(root);
+  }, [editor, hidePanel, project]);
   const setShowAIPanelWithLayout = useCallback((action: SetStateAction<boolean>) => {
     const aiVisible = activePanel === PANELS.AI;
     const showAI = typeof action === "function" ? action(aiVisible) : action;
@@ -80,6 +87,7 @@ export default function HomePage() {
     setAiPanelInitialTab,
     setSplit,
     onOpenProject: () => { void openProject(); },
+    onOpenProjectAsMarkdown: () => { void openProjectAsMarkdown(); },
     onShowPreview: () => selectPanel(PANELS.PREVIEW),
     executeAIPrompt,
     syncSelectedText,

@@ -10,16 +10,16 @@ export function useProjectWorkspace() {
       const selected = await open({ directory: true, multiple: false });
       if (typeof selected === "string") {
         setProjectRoot(selected);
-        return true;
+        return selected;
       }
     } catch {
       const supplied = window.prompt("Enter an absolute project folder path:");
       if (supplied?.trim()) {
         setProjectRoot(supplied.trim());
-        return true;
+        return supplied.trim();
       }
     }
-    return false;
+    return null;
   }, []);
   return { projectRoot, openProject, closeProject: () => setProjectRoot(null) };
 }

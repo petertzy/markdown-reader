@@ -13,7 +13,7 @@ import { useSlashCommandWiring } from "@/hooks/editor/useSlashCommandWiring";
 
 export type UseEditorCommandsOptions = {
   editor: ReturnType<typeof useEditor>;
-  fileIO: Pick<ReturnType<typeof useFileIO>, "handleOpenFile" | "handleExport">;
+  fileIO: Pick<ReturnType<typeof useFileIO>, "handleOpenFile" | "handleOpenFileAsMarkdown" | "handleExport">;
   backendStatus: "starting" | "ready" | "error";
   monacoRef: MutableRefObject<MonacoEditor.IStandaloneCodeEditor | null>;
   monacoReady: boolean;
@@ -21,6 +21,7 @@ export type UseEditorCommandsOptions = {
   setAiPanelInitialTab: Dispatch<SetStateAction<AIPanelTab | undefined>>;
   setSplit: Dispatch<SetStateAction<number>>;
   onOpenProject: () => void;
+  onOpenProjectAsMarkdown: () => void;
   onShowPreview: () => void;
   executeAIPrompt: (prompt: string, documentText: string) => Promise<string | null | undefined>;
   syncSelectedText: () => void;
@@ -40,6 +41,7 @@ export function useEditorCommands({
   setAiPanelInitialTab,
   setSplit,
   onOpenProject,
+  onOpenProjectAsMarkdown,
   onShowPreview,
   executeAIPrompt,
   syncSelectedText,
@@ -57,6 +59,7 @@ export function useEditorCommands({
     setShowAIPanel,
     setSplit,
     onOpenProject,
+    onOpenProjectAsMarkdown,
     onShowPreview,
   });
 
