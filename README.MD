@@ -37,6 +37,7 @@ Most modern writing apps force you to choose between **privacy** and **power**. 
 - ⚡ **Slash Commands**: Type `/` in the editor to trigger AI actions or insert a table inline, without opening the AI panel.
 - 🛡️ **Audit & Rollback**: Review all AI suggestions before applying them. Reject or rollback changes with a single click.
 - 🖥️ **Native Desktop Feel**: Built with Next.js and packaged with Tauri for blazing-fast performance.
+- 📊 **Document Statistics**: View word count, character count, heading count, and estimated reading time for the current document.
 
 ---
 

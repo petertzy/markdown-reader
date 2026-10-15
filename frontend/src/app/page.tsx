@@ -18,6 +18,7 @@ import FocusModePane, { type FocusEditorHandle } from "@/components/FocusModePan
 import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
 import StatusBar from "@/components/StatusBar";
+import DocumentStats from "@/components/DocumentStats";
 import { PANELS } from "@/types/panels";
 
 export default function HomePage() {
@@ -102,7 +103,8 @@ export default function HomePage() {
               error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : null} />}
         {activePanel === PANELS.AI && <AIPanel documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} />}
         {activePanel === PANELS.CITATION && <CitationPanel onInsert={formatting.insertCitation} />}
-      </div>
+            </div>
+      <DocumentStats content={editor.activeTab.content} className="px-4 py-1 border-t" />
       <StatusBar stats={editor.wordCount} filePath={editor.activeTab.filePath} dirty={editor.activeTab.dirty} />
     </div>
   );

@@ -347,6 +347,25 @@ class TestCountWords(unittest.TestCase):
         count = _count_words("Hello, world!")
         self.assertEqual(count, 2)
 
+    def test_word_count_includes_heading_count(self):
+        payload = RenderPayload(content="# Title\n\nSome text.\n\n## Section\n\nMore text.")
+        result = word_count(payload)
+        self.assertEqual(result["heading_count"], 2)
+        self.assertGreater(result["words"], 0)
+        self.assertIn("reading_time", result)
+
+    def test_word_count_ignores_headings_in_code_blocks(self):
+        payload = RenderPayload(content="```\n# Not a heading\n```\n\n# Real heading")
+        result = word_count(payload)
+        self.assertEqual(result["heading_count"], 1)
+
+    def test_word_count_empty_document(self):
+        payload = RenderPayload(content="")
+        result = word_count(payload)
+        self.assertEqual(result["heading_count"], 0)
+        self.assertEqual(result["words"], 0)
+        self.assertEqual(result["reading_time"], "< 1 min read")
+
 
 class TestReadingTime(unittest.TestCase):
     """_reading_time should return sensible human-readable strings."""
