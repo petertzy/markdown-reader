@@ -125,7 +125,7 @@ export default function HomePage() {
                 position: slashMenuPosition,
                 onSelect: (command) => { void executeSlashCommand(command); }, onClose: slash.close }} />}
             right={activePanel === PANELS.PREVIEW ? <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
-              error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : activePanel === PANELS.AI ? <AIPanel projectRoot={project.projectRoot} projectWork={projectWork} documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} /> : <CitationPanel onInsert={formatting.insertCitation} />} />}
+              error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : activePanel === PANELS.AI ? <AIPanel projectRoot={project.projectRoot} projectWork={projectWork} documentId={editor.activeTab.id} documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} /> : <CitationPanel onInsert={formatting.insertCitation} />} />}
       </div>
       <StatusBar stats={editor.wordCount} filePath={editor.activeTab.filePath} dirty={editor.activeTab.dirty} />
     </div>

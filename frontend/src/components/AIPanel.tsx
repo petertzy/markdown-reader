@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode } from "react";
 import { useAIChat, type TranslationPair, type TranslationProgress } from "@/hooks/useAIChat";
 import { AI, getDefaultAISettings, type AISettings, Knowledge, type KnowledgeStatus } from "@/lib/api";
 import { tokenizeInlineMarkdown } from "@/lib/inline-markdown.mjs";
@@ -13,6 +13,7 @@ type Tab = AIPanelTab;
 type Props = {
   projectRoot: string | null;
   projectWork: ReturnType<typeof useProjectWork>;
+  documentId: string;
   documentText: string;
   selectedText?: string;
   onApplyAction?: (type: string, content: string) => void;
@@ -163,6 +164,7 @@ function ChatMessageContent({ content }: { content: string }) {
 export default function AIPanel({
   projectRoot,
   projectWork,
+  documentId,
   documentText,
   selectedText = "",
   onApplyAction,
@@ -170,7 +172,7 @@ export default function AIPanel({
   executeWork,
   isWorking,
 }: Props) {
-  const { messages, loading, error, sendMessage, translate, translateSentences, cancelTranslation, clearHistory } = useAIChat();
+  const { messages, loading, error, sendMessage, translate, translateSentences, cancelTranslation, clearHistory } = useAIChat(documentId);
   const [tab, setTab] = useState<Tab>(initialTab ?? "chat");
 
   useEffect(() => {
@@ -186,6 +188,7 @@ export default function AIPanel({
   const [translatedPreview, setTranslatedPreview] = useState<string | null>(null);
   const [translationPairs, setTranslationPairs] = useState<TranslationPair[]>([]);
   const [translationProgress, setTranslationProgress] = useState<TranslationProgress | null>(null);
+  const translationDocumentRef = useRef(documentId);
   const [settings, setSettings] = useState<AISettings>(() => getDefaultAISettings());
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -210,6 +213,13 @@ export default function AIPanel({
   const providerRef = useRef(provider);
   const localBaseUrlChoiceRef = useRef(localBaseUrlChoice);
   const localBaseUrlRef = useRef(localBaseUrl);
+
+  useLayoutEffect(() => {
+    translationDocumentRef.current = documentId;
+    setTranslatedPreview(null);
+    setTranslationPairs([]);
+    setTranslationProgress(null);
+  }, [documentId]);
 
   const currentLocalBaseUrl = () => {
     const choice = localBaseUrlChoiceRef.current;
@@ -582,6 +592,7 @@ export default function AIPanel({
   };
 
   const handleTranslate = async () => {
+    const requestDocumentId = documentId;
     const content = translateScope === "selection" && selectedText ? selectedText : documentText;
     if (!content.trim()) return;
     setTranslatedPreview(null);
@@ -591,6 +602,7 @@ export default function AIPanel({
       await AI.setProvider(provider);
       await AI.setLocalAIBaseUrlChoice(localBaseUrlChoice, localBaseUrl);
     }
+    if (translationDocumentRef.current !== requestDocumentId) return;
     const normalizedSourceLang = sourceLang === "Auto Detect" ? "auto" : sourceLang;
     if (translationMode === "sentences") {
       const result = await translateSentences(
@@ -599,7 +611,7 @@ export default function AIPanel({
         targetLang,
         setTranslationProgress
       );
-      if (result) {
+      if (result && translationDocumentRef.current === requestDocumentId) {
         setTranslatedPreview(result.translated);
         setTranslationPairs(result.pairs);
       }
@@ -607,7 +619,7 @@ export default function AIPanel({
       return;
     }
     const result = await translate(content, normalizedSourceLang, targetLang);
-    if (result) setTranslatedPreview(result);
+    if (result && translationDocumentRef.current === requestDocumentId) setTranslatedPreview(result);
   };
 
   const sentencePairApplyContent = () =>
