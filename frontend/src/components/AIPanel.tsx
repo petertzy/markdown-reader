@@ -333,11 +333,11 @@ export default function AIPanel({
       }
       const models = Array.from(new Set(result.models));
       setModelOptions(models);
-      if (models.length > 0 && !models.includes(model)) {
-        setModel(models[0]);
-      } else if (models.length === 0) {
-        setModel("");
-      }
+      // Provider switches and user selections can update state while fetching.
+      // Reconcile against the current selection, not this request's render snapshot.
+      setModel((currentModel) =>
+        models.includes(currentModel) ? currentModel : models[0] ?? ""
+      );
       setSettingsMessage(result.message || `${models.length} models available.`);
     } catch (err) {
       if (requestId === modelRequestSeq.current) {
