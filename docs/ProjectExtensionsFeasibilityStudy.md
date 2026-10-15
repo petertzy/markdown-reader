@@ -103,11 +103,13 @@ Arbitrary code execution, shell access, UI plugins that inject into the editor D
 │                  │                            │              │
 │   ┌──────────────▼───────────┐   ┌────────────▼────────────┐ │
 │   │ Core capabilities        │   │ Extension host (future) │ │
-│   │  work, translate,        │   │  subprocess/HTTP tools  │ │
-│   │  export, index, summarize│   │  no raw FS — mediated   │ │
+│   │  work, translate,        │   │  trusted subprocess —   │ │
+│   │  export, index, summarize│   │  not OS-sandboxed       │ │
 │   └──────────────────────────┘   └─────────────────────────┘ │
 └───────────────────────────────────────────────────────────────┘
 ```
+
+The extension host is **not** an OS sandbox: mediation (path clamping, egress allowlist, review pipeline) constrains only requests routed through the backend. A subprocess running as the same OS user can bypass those on its own — see §6.1 and §6.3 for what that means for trust.
 
 ### 5.2 How an extension surfaces in the Work panel
 
@@ -144,9 +146,15 @@ This gives the issue's requirement — "extensions expose capabilities to the Wo
 
 ### 6.1 Threat model (local-first)
 
-The current app trusts its own process (shared token, absolute-path file I/O). Extensions change one thing: **third-party code becomes a principal**. Goals:
+The current app trusts its own process (shared token, absolute-path file I/O). Extensions change one thing: **third-party code becomes a principal**.
 
-1. A malicious or buggy extension cannot read outside the opened project, exfiltrate API keys, or write files without user review.
+**Mediation ≠ sandbox.** Everything in §6.2 constrains *brokered requests* — calls routed through the backend (path clamping, allowlisted egress, review-before-write, hidden token). A plugin subprocess running as the same OS user is **not** contained by any of it: through its own filesystem and socket APIs it can independently read files, reach local services, or use the network. The goals below are therefore stated for the mediated surface only.
+
+**Chosen Phase-1 execution model: (a).** The first iteration allows only declarative manifests and backend-owned, audited capability adapters — **no arbitrary third-party executable code**. The subprocess extension host from §5.1 stays out of scope until an OS-level filesystem/network/secret isolation boundary exists and is tested; option (b) — running untrusted extension processes — is explicitly *not* taken in v1. The ≤3 project-developed plugins of §7 are first-party code and are covered by this model.
+
+Goals:
+
+1. Through the mediated surface, an extension cannot read outside the opened project, exfiltrate API keys, or write files without user review. This does **not** hold against a subprocess that bypasses the backend — restricting what runs at all (§6.3, §7) is the compensating control.
 2. Users can see, per extension, exactly what was granted — and revoke it.
 3. Nothing in the default install is affected (issue requirement: minimal impact on non-users).
 
@@ -162,9 +170,11 @@ The current app trusts its own process (shared token, absolute-path file I/O). E
 
 **Deny-by-default.** Grants are per-extension, shown at enable time, stored in app settings next to existing AI settings (`_load_app_settings`/`_save_app_settings` pattern), revocable instantly by disabling the extension.
 
+Under the Phase-1 execution model of §6.1, these permissions deliberately govern **brokered requests only**: they constrain what the backend will do *for* a plugin, not what first-party plugin code does in-process. `project:read` and `net:allowlist` are not, and are not claimed to be, a containment boundary against executable code running as the user.
+
 ### 6.3 Why this beats the alternatives
 
-- **Subprocess sandbox per extension** (language runtimes, seccomp): strongest, but heavy for a document app; propose as a *Phase 2 hardening*, not a prerequisite — see §8.
+- **OS-level subprocess sandbox** (language runtimes, seccomp): the only control that genuinely contains a same-user subprocess. It is deferred in the first iteration *because only trusted, project-developed plugins run* (§7) — not because it is optional. If untrusted plugins are ever wanted and strict isolation cannot be demonstrated, they must not be run at all.
 - **"Trusted extensions" (all-or-nothing)**: too coarse; a diagram plugin shouldn't inherit file-write authority.
 - **Current absolute-path I/O as-is**: fine for user-initiated actions; **unacceptable for extension-initiated ones** — §5.3's path clamping is the required new boundary.
 
@@ -177,14 +187,14 @@ Note: `POST /api/files/write` accepting arbitrary absolute paths is acceptable *
 
 | Stage | Design | Precedent in-app |
 | :--- | :--- | :--- |
-| **Discover** | Curated directory (a JSON index in an `extensions/` folder or a registry URL); *browse-only, no auto-install* | Knowledge-base folder picker pattern |
-| **Install** | Copy a folder containing an `extension.json` manifest + assets into the app's extension directory; hash recorded | Settings persistence (`_save_app_settings`) |
-| **Enable/Disable** | Toggle in Settings; disabled = not loaded, zero surface | AI provider on/off style toggles |
+| **Discover** | v1: the plugins ship with the app itself — at most three, all project-developed and project-maintained; a curated directory stays a future option | — |
+| **Install** | Installed by the app itself; **no third-party executable downloads and no folder-drop install** in this iteration | App packaging |
+| **Enable/Disable** | **Disabled by default**; a **Plugins** option on the right side of the app menu loads/unloads or enables/disables each plugin | App-menu toggles |
 | **Configure** | Per-manifest typed settings (path, URL, token) rendered from schema; secrets go through **existing secure key storage**, never manifest files | `set_secure_ai_api_key` / keyring path |
 | **Update** | Hash-pinned; update shows manifest diff (permission changes require re-grant) | — (new, but small) |
 | **Uninstall** | Delete folder + grants; no residue | — |
 
-**Deliberately excluded from v1:** in-app marketplace, ratings, auto-updates, remote code fetch. Distribution starts as "drop a folder in" — matching the issue's *simple installation and configuration* principle and the project's conservative risk posture.
+**Deliberately excluded from v1:** in-app marketplace, ratings, auto-updates, remote code fetch, **third-party executable downloads, and folder-drop installation**. The first iteration runs at most **three** plugins, all developed and maintained by this project, all **disabled by default** and toggled from the **Plugins** option on the right side of the app menu — matching the issue's *simple installation and configuration* principle and the project's conservative risk posture.
 
 ---
 
@@ -197,7 +207,7 @@ Note: `POST /api/files/write` accepting arbitrary absolute paths is acceptable *
 3. On invoke: backend clamps the file path to the project root, reads it, calls the **existing** provider stack (`_request_chat_from_provider`), and returns a proposal that the user applies through the unchanged review/undo pipeline.
 4. Nothing else changes: no new frontend write paths, no key exposure, deny-by-default.
 
-**Why this PoC:** it proves (a) manifest→registry→panel rendering, (b) permission mediation, (c) proposal-based results — using existing machinery end to end. A hypothetical `hello-world` shell extension is *rejected*: it would set the wrong precedent (ambient execution authority).
+**Why this PoC:** it proves (a) manifest→registry→panel rendering, (b) permission mediation, (c) proposal-based results — using existing machinery end to end. It is a **trusted, mediated proof of workflow integration**, *not* proof of plugin isolation: the bridge runs as first-party code, so it exercises the brokered surface (clamping, review) rather than any OS-level containment (§6.1, §6.3). A hypothetical `hello-world` shell extension is *rejected*: it would set the wrong precedent (ambient execution authority).
 
 **Exit criteria for a real Phase 1** (to be judged *after* #357 ships):
 
@@ -213,7 +223,7 @@ Note: `POST /api/files/write` accepting arbitrary absolute paths is acceptable *
 
 | # | Risk / Question | Direction |
 | :--- | :--- | :--- |
-| 1 | Extension maintenance burden falls entirely on the maintainer | Start with *folder-drop* distribution; no registry = no SLA |
+| 1 | Extension maintenance burden falls entirely on the maintainer | First iteration ships at most three project-maintained plugins — no third-party distribution, no folder-drop, no registry = no SLA |
 | 2 | Model/output injection: extension content influencing the model | Treat extension output as data; never merge into system prompts |
 | 3 | Versioning vs. rapid core evolution | Manifest declares `apiVersion`; core rejects incompatible ones loudly |
 | 4 | Is a plugin system justified at all? | Honest answer: **not yet**. §4.1's core list satisfies #357–#359 without it. Re-evaluate when a concrete external integration request arrives |
@@ -228,5 +238,7 @@ Note: `POST /api/files/write` accepting arbitrary absolute paths is acceptable *
 1. **Now:** ship this study (this PR).
 2. **Next:** #357 project-wide Work → its natural by-products (project root, path clamping) become the foundation.
 3. **Then:** reassess §8's exit criteria; if a concrete integration demand exists, implement Phase 1 as specified — registry, manifests, mediated invocation, one PoC capability.
+
+Throughout, **#357 and its project-root safeguards come first**: a VS Code-like project interaction layer is the foundation this study builds on, not something it replaces. The Local Model Bridge PoC is a **trusted, mediated proof of workflow integration** — it exercises the brokered surface end to end but does **not** prove plugin isolation (§6.1, §6.3).
 
 Until step 3 is triggered, **no extension code should be merged**, keeping the core small and the default experience untouched, per the issue's own guidance.
