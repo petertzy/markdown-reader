@@ -1,0 +1,1 @@
+$(cat /workspace/artifacts/test_temperature_compatibility.py)
