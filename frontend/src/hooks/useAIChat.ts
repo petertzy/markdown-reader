@@ -48,6 +48,7 @@ export function useAIChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastOperation, setLastOperation] = useState<"chat" | "translation" | null>(null);
   const translationAbortRef = useRef<AbortController | null>(null);
 
   const sendMessage = useCallback(
@@ -59,6 +60,7 @@ export function useAIChat() {
     ) => {
       if (!userMessage.trim()) return;
 
+      setLastOperation("chat");
       const userMsg: ChatMessage = { id: msgId(), role: "user", content: userMessage };
       setMessages((prev) => [...prev, userMsg]);
       setLoading(true);
@@ -99,25 +101,15 @@ export function useAIChat() {
     async (
       content: string,
       sourceLang: string,
-      targetLang: string
+      targetLang: string,
+      prepare?: () => Promise<void>
     ): Promise<string | null> => {
+      setLastOperation("translation");
       setLoading(true);
       setError(null);
-      const userMsg: ChatMessage = {
-        id: msgId(),
-        role: "user",
-        content: `Translate ${sourceLang === "auto" ? "" : `from ${sourceLang} `}to ${targetLang}:\n\n${content.slice(0, 120)}${content.length > 120 ? "…" : ""}`,
-      };
-      setMessages((prev) => [...prev, userMsg]);
       try {
+        if (prepare) await prepare();
         const result = await AI.translate(content, sourceLang, targetLang);
-        const assistantMsg: ChatMessage = {
-          id: msgId(),
-          role: "assistant",
-          content: `Translation complete (→ ${targetLang}).`,
-          proposedAction: { type: "replace_document", content: result.translated, reason: "translated" },
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
         return result.translated;
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -134,20 +126,17 @@ export function useAIChat() {
       content: string,
       sourceLang: string,
       targetLang: string,
-      onProgress?: (progress: TranslationProgress) => void
+      onProgress?: (progress: TranslationProgress) => void,
+      prepare?: () => Promise<void>
     ): Promise<{ translated: string; pairs: TranslationPair[] } | null> => {
+      setLastOperation("translation");
       setLoading(true);
       setError(null);
       translationAbortRef.current?.abort();
       const abortController = new AbortController();
       translationAbortRef.current = abortController;
-      const userMsg: ChatMessage = {
-        id: msgId(),
-        role: "user",
-        content: `Translate sentence by sentence ${sourceLang === "auto" ? "" : `from ${sourceLang} `}to ${targetLang}:\n\n${content.slice(0, 120)}${content.length > 120 ? "…" : ""}`,
-      };
-      setMessages((prev) => [...prev, userMsg]);
       try {
+        if (prepare) await prepare();
         const batches = batchTranslationUnits(splitTextIntoTranslationUnits(content));
         onProgress?.({ currentBatch: 0, totalBatches: batches.length });
         const pairs: TranslationPair[] = [];
@@ -168,24 +157,13 @@ export function useAIChat() {
           }
           pairs.push(...result.pairs);
         }
-        const stopped = abortController.signal.aborted;
         const result = {
           pairs,
           translated: pairs.map((pair) => pair.translated).join("\n\n"),
         };
-        const assistantMsg: ChatMessage = {
-          id: msgId(),
-          role: "assistant",
-          content: stopped
-            ? `Sentence-by-sentence translation stopped (${pairs.length} pair${pairs.length === 1 ? "" : "s"} translated).`
-            : `Sentence-by-sentence translation complete (→ ${targetLang}).`,
-          proposedAction: { type: "replace_document", content: result.translated, reason: "translated_sentences" },
-        };
-        if (pairs.length || !stopped) {
-          setMessages((prev) => [...prev, assistantMsg]);
-        }
         return result;
       } catch (err) {
+        if (abortController.signal.aborted) return { translated: "", pairs: [] };
         setError(err instanceof Error ? err.message : String(err));
         return null;
       } finally {
@@ -207,5 +185,5 @@ export function useAIChat() {
     setError(null);
   }, []);
 
-  return { messages, loading, error, sendMessage, translate, translateSentences, cancelTranslation, clearHistory };
+  return { messages, loading, error, lastOperation, sendMessage, translate, translateSentences, cancelTranslation, clearHistory };
 }
