@@ -274,12 +274,13 @@ export type RenderPayload = {
   font_size?: number;
 };
 
-export type WordCountResult = {
+export interface WordCountResult {
   words: number;
   chars_with_spaces: number;
   chars_without_spaces: number;
+  heading_count: number;
   reading_time: string;
-};
+}
 
 export type BrowserPreviewResult = {
   path: string;

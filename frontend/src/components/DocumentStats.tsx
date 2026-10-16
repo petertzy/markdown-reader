@@ -1,5 +1,6 @@
 "use client";
 
+import { Markdown } from "@/lib/api";
 import { useEffect, useState, useCallback } from "react";
 
 interface Stats {
@@ -32,13 +33,7 @@ export default function DocumentStats({ content, className }: DocumentStatsProps
     }
     setLoading(true);
     try {
-      const res = await fetch("/api/markdown/wordcount", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text }),
-      });
-      if (!res.ok) throw new Error("Failed to fetch stats");
-      const data: Stats = await res.json();
+      const data: Stats = await Markdown.wordCount(text);
       setStats(data);
     } catch (err) {
       console.error("DocumentStats fetch error:", err);
