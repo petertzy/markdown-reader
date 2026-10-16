@@ -203,6 +203,9 @@ export default function AIPanel({
   const providerRef = useRef(provider);
   const localBaseUrlChoiceRef = useRef(localBaseUrlChoice);
   const localBaseUrlRef = useRef(localBaseUrl);
+  const keySlot =
+    provider === "openai_compatible" ? `openai_compatible_${baseUrlChoice}` : provider;
+  const keyStatus = settings.api_key_statuses[keySlot] ?? "unavailable";
 
   const currentLocalBaseUrl = () => {
     const choice = localBaseUrlChoiceRef.current;
@@ -289,6 +292,7 @@ export default function AIPanel({
       }
     } catch (err) {
       if (requestId === settingsRequestSeq.current) {
+        setSettings((current) => ({ ...current, api_key_statuses: {} }));
         setSettingsMessage(err instanceof Error ? err.message : String(err));
       }
     } finally {
@@ -407,8 +411,7 @@ export default function AIPanel({
   };
 
   const handleFetchModels = async () => {
-    settingsRequestSeq.current += 1;
-    setSettingsLoading(false);
+    if (settingsLoading || settingsSaving || modelsFetching) return;
     if (provider === "local") {
       const currentLocalBaseUrl = selectedLocalBaseUrl(localBaseUrlChoice, localBaseUrl);
       if (!currentLocalBaseUrl.trim()) {
@@ -447,9 +450,16 @@ export default function AIPanel({
         await AI.setModel(provider, model.trim());
       }
       await AI.setProvider(provider);
-      syncSettingsForm(await AI.getSettings());
-      setSettingsMessage("Settings saved.");
+      const nextSettings = await AI.getSettings();
+      syncSettingsForm(nextSettings);
+      const nextKeyStatus = nextSettings.api_key_statuses[keySlot];
+      setSettingsMessage(
+        apiKey.trim() && nextKeyStatus !== "saved" && nextKeyStatus !== "environment"
+          ? "Settings saved, but the API key status could not be confirmed. Refresh to try again."
+          : "Settings saved."
+      );
     } catch (err) {
+      setSettings((current) => ({ ...current, api_key_statuses: {} }));
       setSettingsMessage(err instanceof Error ? err.message : String(err));
     } finally {
       setSettingsSaving(false);
@@ -460,14 +470,22 @@ export default function AIPanel({
     setSettingsSaving(true);
     setSettingsMessage(null);
     try {
-      const keyProvider =
-        provider === "openai_compatible" ? `openai_compatible_${baseUrlChoice}` : provider;
-      await AI.deleteApiKey(keyProvider);
-      await AI.setProvider(provider);
+      await AI.deleteApiKey(keySlot);
+      const nextSettings = await AI.getSettings();
+      setSettings(nextSettings);
       setApiKey("");
-      syncSettingsForm(await AI.getSettings());
-      setSettingsMessage("Stored key deleted.");
+      const nextKeyStatus = nextSettings.api_key_statuses[keySlot];
+      setSettingsMessage(
+        nextKeyStatus === "not_saved"
+          ? keyStatus === "environment"
+            ? "Key cleared from the current environment."
+            : "Saved key deleted."
+          : nextKeyStatus === "saved" || nextKeyStatus === "environment"
+            ? "The API key is still configured. Refresh and try again."
+            : "Could not confirm that the API key was removed. Refresh to try again."
+      );
     } catch (err) {
+      setSettings((current) => ({ ...current, api_key_statuses: {} }));
       setSettingsMessage(err instanceof Error ? err.message : String(err));
     } finally {
       setSettingsSaving(false);
@@ -1047,7 +1065,7 @@ export default function AIPanel({
             <div className="text-xs font-semibold text-gray-700 dark:text-gray-200">AI Provider</div>
             <button
               onClick={() => { void loadSettings(); }}
-              disabled={settingsLoading}
+              disabled={settingsLoading || settingsSaving}
               className="text-xs text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-40"
             >
               Refresh
@@ -1078,6 +1096,7 @@ export default function AIPanel({
                 <select
                   value={provider}
                   onChange={(e) => handleProviderChange(e.target.value)}
+                  disabled={settingsLoading || settingsSaving}
                   className="text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
                 >
                   {settings.provider_order.map((name) => (
@@ -1094,6 +1113,7 @@ export default function AIPanel({
                   <select
                     value={baseUrlChoice}
                     onChange={(e) => handleBaseUrlChange(e.target.value)}
+                    disabled={settingsLoading || settingsSaving}
                     className="text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
                   >
                     {settings.openai_compatible_base_url_options.map((item) => (
@@ -1114,6 +1134,7 @@ export default function AIPanel({
                   <select
                     value={localBaseUrlChoice}
                     onChange={(e) => handleLocalBaseUrlChoiceChange(e.target.value)}
+                    disabled={settingsLoading || settingsSaving}
                     className="text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
                   >
                     {settings.local_ai_base_url_options.map((item) => (
@@ -1157,6 +1178,7 @@ export default function AIPanel({
                 <select
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
+                  disabled={settingsLoading || settingsSaving}
                   className="text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
                 >
                   {provider !== "local" && model && !modelOptions.includes(model) && (
@@ -1175,7 +1197,7 @@ export default function AIPanel({
 
               <button
                 onClick={() => { void handleFetchModels(); }}
-                disabled={modelsFetching}
+                disabled={modelsFetching || settingsLoading || settingsSaving}
                 className="py-1 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-[#2d2d2d] text-gray-700 dark:text-gray-300 disabled:opacity-40"
               >
                 {modelsFetching ? "Fetching..." : "Fetch Models"}
@@ -1187,33 +1209,45 @@ export default function AIPanel({
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
+                  disabled={settingsLoading || settingsSaving}
                   placeholder={
                     provider === "local"
                       ? "Optional for local endpoints"
                       : settings.providers[provider]?.key_configured
-                      ? "Stored key is configured"
+                      ? "API key is configured"
                       : "Enter API key"
                   }
                   className="text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
                 />
-                <div className="text-[11px] text-gray-400 dark:text-gray-500">
-                  {settings.secure_key_storage_available
-                    ? "Keys are saved in the system credential store."
-                    : "Secure key storage is not available on this system."}
+                <div role="status" className="text-[11px] text-gray-500 dark:text-gray-400">
+                  {settingsLoading
+                    ? "Checking saved API key status..."
+                    : keyStatus === "saved"
+                      ? "An API key is saved in the system credential store."
+                      : keyStatus === "environment"
+                        ? "An API key is configured in the environment. Secure storage is unavailable."
+                        : keyStatus === "not_saved"
+                          ? "No API key is saved."
+                          : "Saved API key status is unavailable. Refresh to try again."}
                 </div>
+                {!settingsLoading && keyStatus === "not_saved" && !settings.secure_key_storage_available && (
+                  <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Secure storage is unavailable; keys use the environment.
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2 pt-1">
                 <button
                   onClick={() => { void deleteKey(); }}
-                  disabled={settingsSaving}
-                  className="flex-1 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-[#2d2d2d] text-gray-700 dark:text-gray-300 disabled:opacity-40"
+                  disabled={settingsLoading || settingsSaving || (keyStatus !== "saved" && keyStatus !== "environment")}
+                  className="flex-1 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded enabled:hover:bg-gray-50 dark:enabled:hover:bg-[#2d2d2d] text-gray-700 dark:text-gray-300 disabled:cursor-not-allowed disabled:bg-gray-100 dark:disabled:bg-[#2d2d2d] disabled:text-gray-400 dark:disabled:text-gray-500"
                 >
-                  Delete Key
+                  {keyStatus === "environment" ? "Clear Environment Key" : "Delete Key"}
                 </button>
                 <button
                   onClick={() => { void saveSettings(); }}
-                  disabled={settingsSaving || !model.trim()}
+                  disabled={settingsLoading || settingsSaving || !model.trim()}
                   className="flex-1 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40"
                 >
                   {settingsSaving ? "Saving..." : "Save"}

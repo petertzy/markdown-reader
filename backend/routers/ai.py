@@ -96,11 +96,12 @@ class TranslateSentenceBatchPayload(BaseModel):
 
 @router.get("/settings")
 def get_ai_settings():
-    """Return all persisted AI provider settings."""
+    """Return provider settings and the storage status of each key action slot."""
     logic = _logic()
     logic.load_persisted_ai_settings()
     settings = logic._load_app_settings()
     providers = {}
+    api_key_statuses = {}
     for provider in logic.AI_PROVIDER_PRIORITY:
         key_slot = provider
         env_var = logic.get_ai_provider_env_var(provider)
@@ -108,9 +109,15 @@ def get_ai_settings():
             choice = logic.get_openai_compatible_base_url_choice()
             key_slot = logic.get_openai_compatible_storage_key_name(choice)
             env_var = logic.get_openai_compatible_env_var(choice)
-        key_configured = False
-        if provider != "local":
-            key_configured = logic.is_ai_api_key_configured(key_slot, env_var)
+            for option in logic.get_openai_compatible_base_url_options():
+                slot = logic.get_openai_compatible_storage_key_name(option["key"])
+                api_key_statuses[slot] = logic.get_ai_api_key_storage_status(slot)
+        else:
+            api_key_statuses[key_slot] = logic.get_ai_api_key_storage_status(key_slot)
+        key_configured = provider != "local" and (
+            bool(os.getenv(env_var, "").strip())
+            or api_key_statuses[key_slot] == "saved"
+        )
         providers[provider] = {
             "display_name": logic.get_ai_provider_display_name(provider),
             "env_var": env_var,
@@ -119,6 +126,7 @@ def get_ai_settings():
             "key_configured": key_configured,
         }
     settings["providers"] = providers
+    settings["api_key_statuses"] = api_key_statuses
     settings["provider_order"] = list(logic.AI_PROVIDER_PRIORITY)
     settings_provider = settings.get("ai_provider", "")
     settings["ai_provider"] = logic._normalize_provider_name(

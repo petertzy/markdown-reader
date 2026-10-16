@@ -412,28 +412,47 @@ def resolve_ai_api_key_for_slot(key_slot: str) -> str:
     )
 
 
+def get_ai_api_key_storage_status(provider: str, timeout_seconds: float = 1.0) -> str:
+    """Check a slot without treating a failed or timed-out read as absence.
+
+    Environment keys are clearable through the existing fallback only when
+    secure storage is unavailable.
+    """
+    storage = keyring
+    if storage is None:
+        return (
+            "environment"
+            if os.getenv(_get_key_slot_env_var(provider), "").strip()
+            else "not_saved"
+        )
+
+    result = {"status": "unavailable"}
+
+    def check_keyring() -> None:
+        try:
+            result["status"] = (
+                "saved"
+                if storage.get_password(AI_CREDENTIAL_SERVICE, provider)
+                else "not_saved"
+            )
+        except KeyringError:
+            result["status"] = "unavailable"
+
+    thread = threading.Thread(target=check_keyring, daemon=True)
+    thread.start()
+    thread.join(timeout_seconds)
+    return result["status"] if not thread.is_alive() else "unavailable"
+
+
 def is_ai_api_key_configured(
     provider: str, env_var: str = "", timeout_seconds: float = 1.0
 ) -> bool:
     if env_var and os.getenv(env_var, "").strip():
         return True
-    if keyring is None:
-        return bool(os.getenv(_get_key_slot_env_var(provider), "").strip())
-
-    result = {"configured": False}
-
-    def check_keyring() -> None:
-        try:
-            result["configured"] = bool(
-                keyring.get_password(AI_CREDENTIAL_SERVICE, provider)
-            )
-        except KeyringError:
-            result["configured"] = False
-
-    thread = threading.Thread(target=check_keyring, daemon=True)
-    thread.start()
-    thread.join(timeout_seconds)
-    return result["configured"] if not thread.is_alive() else False
+    return get_ai_api_key_storage_status(provider, timeout_seconds) in (
+        "saved",
+        "environment",
+    )
 
 
 def set_secure_ai_api_key(provider: str, api_key: str) -> None:

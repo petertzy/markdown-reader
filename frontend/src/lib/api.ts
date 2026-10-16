@@ -387,6 +387,8 @@ export type LocalAIBaseUrlOption = {
   url: string;
 };
 
+export type AIKeyStorageStatus = "saved" | "environment" | "not_saved" | "unavailable";
+
 export type AISettings = {
   ai_provider: string;
   ai_models?: Record<string, string>;
@@ -399,6 +401,7 @@ export type AISettings = {
   local_ai_custom_base_url: string;
   local_ai_base_url_options: LocalAIBaseUrlOption[];
   secure_key_storage_available: boolean;
+  api_key_statuses: Record<string, AIKeyStorageStatus>;
 };
 
 const AI_PROVIDER_ORDER = [
@@ -493,6 +496,7 @@ function normalizeAISettings(raw: PartialAISettings): AISettings {
     local_ai_base_url_options:
       raw.local_ai_base_url_options ?? LOCAL_AI_BASE_URL_OPTIONS,
     secure_key_storage_available: raw.secure_key_storage_available ?? false,
+    api_key_statuses: raw.api_key_statuses ?? {},
   };
 }
 
