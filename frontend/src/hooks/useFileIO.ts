@@ -6,6 +6,7 @@ import { flushSync } from "react-dom";
 import type { editor as MonacoEditor } from "monaco-editor";
 import type { useEditor } from "@/hooks/useEditor";
 import { Export, Files, type ExportPayload } from "@/lib/api";
+import { revealInFileManager } from "@/utils/revealInFileManager";
 import {
   isSupportedFile,
   MARKITDOWN_EXTENSIONS,
@@ -181,8 +182,11 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
 
   const showInFinder = useCallback(async () => {
     if (!lastExportedPath) return;
-    const dir = lastExportedPath.substring(0, lastExportedPath.lastIndexOf("/"));
-    open(dir); // abre Finder/Explorer en la carpeta
+    try {
+      await revealInFileManager(lastExportedPath);
+    } catch (err) {
+      console.error("Failed to reveal exported file:", err);
+    }
   }, [lastExportedPath]);
 
   const openDroppedPaths = useCallback(async (paths: string[]) => {

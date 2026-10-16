@@ -86,7 +86,7 @@ export default function HomePage() {
         showFocusPanel={focusMode}
         backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null}
         lastExportedPath={fileIO.lastExportedPath}
-        showInFinder={fileIO.showInFinder}
+        onShowInFinder={fileIO.showInFinder}
       />
       <TabBar tabs={editor.tabs} activeTabId={editor.activeTabId} onSelect={handleTabSelect} onClose={editor.closeTab} onNew={editor.newTab} />
       <div className="flex flex-1 overflow-hidden">
