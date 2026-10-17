@@ -43,6 +43,9 @@ function renderSettings(status) {
     if (name === "@/hooks/useAIChat") {
       return { useAIChat: () => ({ messages: [], loading: false, error: null }) };
     }
+    if (name === "@/components/ProjectWorkReview") {
+      return { default: () => null };
+    }
     if (name === "@/lib/inline-markdown.mjs") {
       return require("../lib/inline-markdown.mjs");
     }
