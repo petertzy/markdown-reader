@@ -863,13 +863,13 @@ export default function AIPanel({
             </select>
           </label>
           {workScope === "project" && <ProjectWorkReview projectRoot={projectRoot} work={projectWork} />}
-          <textarea 
+          <textarea
             className="w-full h-32 p-2 text-sm border rounded resize-none dark:bg-gray-800 dark:border-gray-600 dark:text-white"
             placeholder="e.g., 'Rewrite this document to be more professional' or 'Fix all typos'"
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
-          <button 
+          <button
             className="w-full bg-blue-600 text-white py-1.5 px-3 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
             onClick={() => {
               if (workScope === "project") {

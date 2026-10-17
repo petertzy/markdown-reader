@@ -33,6 +33,8 @@ type Props = {
   showFocusPanel: boolean;
   backendStatus?: "starting" | "ready" | "error";
   backendMessage?: string | null;
+  lastExportedPath?: string | null;
+  onShowInFinder?: () => void;
 };
 
 export default function Toolbar({
@@ -48,9 +50,11 @@ export default function Toolbar({
   darkMode,
   fontSize,
   onFontSizeChange,
+  onShowInFinder,
   showFocusPanel,
   backendStatus = "ready",
   backendMessage = null,
+  lastExportedPath = null,
 }: Props) {
   const backendBusy = backendStatus === "starting";
   const backendFailed = backendStatus === "error";
@@ -95,6 +99,11 @@ export default function Toolbar({
       <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onSaveFile} className={buttonClass(backendDisabled)} title="Save (Ctrl+S)" disabled={backendDisabled}>
         💾 Save
       </button>
+      {lastExportedPath && (
+        <button onClick={onShowInFinder} title="Show in Finder">
+          📁 Show in Finder
+        </button>
+      )}
 
       <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
 

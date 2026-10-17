@@ -110,7 +110,10 @@ export default function HomePage() {
         onToggleFocusMode={() => { setFocusMode((enabled) => !enabled); resetEditor(); }}
         darkMode={editor.darkMode} fontSize={editor.fontSize} onFontSizeChange={editor.setFontSize}
         showFocusPanel={focusMode}
-        backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null} />
+        backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null}
+        lastExportedPath={fileIO.lastExportedPath}
+        onShowInFinder={fileIO.showInFinder}
+      />
       <TabBar tabs={editor.tabs} activeTabId={editor.activeTabId} onSelect={handleTabSelect} onClose={editor.closeTab} onNew={editor.newTab} />
       <div className="flex flex-1 overflow-hidden">
         {!focusMode && <ProjectExplorer root={project.projectRoot} onOpenFile={(path) => { void editor.openFile(path); }} onOpenProject={() => { void openProject(); }} onCloseProject={project.closeProject} refreshToken={projectRefreshToken} />}
