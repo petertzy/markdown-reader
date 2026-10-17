@@ -5,6 +5,7 @@ import type { editor as MonacoEditor } from "monaco-editor";
 import type { useEditor } from "@/hooks/useEditor";
 import type { useFileIO } from "@/hooks/useFileIO";
 import type { AIPanelTab } from "@/components/AIPanel";
+import type { FocusEditorHandle } from "@/components/FocusModePane";
 import { useEditorFormatting } from "@/hooks/editor/useEditorFormatting";
 import { useActions } from "@/hooks/editor/useActions";
 import { useKeyboardShortcuts } from "@/hooks/editor/useKeyboardShortcuts";
@@ -17,9 +18,14 @@ export type UseEditorCommandsOptions = {
   backendStatus: "starting" | "ready" | "error";
   monacoRef: MutableRefObject<MonacoEditor.IStandaloneCodeEditor | null>;
   monacoReady: boolean;
+  /** Focus Mode editor handle (issue #341) — forwarded to useActions. */
+  focusEditorRef?: MutableRefObject<FocusEditorHandle | null>;
   setShowAIPanel: Dispatch<SetStateAction<boolean>>;
   setAiPanelInitialTab: Dispatch<SetStateAction<AIPanelTab | undefined>>;
   setSplit: Dispatch<SetStateAction<number>>;
+  onOpenProject: () => void;
+  onFileSaved: () => void;
+  onShowPreview: () => void;
   executeAIPrompt: (prompt: string, documentText: string) => Promise<string | null | undefined>;
   syncSelectedText: () => void;
 };
@@ -34,9 +40,13 @@ export function useEditorCommands({
   backendStatus,
   monacoRef,
   monacoReady,
+  focusEditorRef,
   setShowAIPanel,
   setAiPanelInitialTab,
   setSplit,
+  onOpenProject,
+  onFileSaved,
+  onShowPreview,
   executeAIPrompt,
   syncSelectedText,
 }: UseEditorCommandsOptions) {
@@ -50,8 +60,12 @@ export function useEditorCommands({
     formatting,
     backendStatus,
     monacoRef,
+    focusEditorRef,
     setShowAIPanel,
     setSplit,
+    onOpenProject,
+    onFileSaved,
+    onShowPreview,
   });
 
   // 3. Register keyboard shortcuts

@@ -29,4 +29,1810 @@ except Exception:
 
 AI_CREDENTIAL_SERVICE = "MarkdownReader.AI"
 logger = logging.getLogger(__name__)
-# ... [truncated for this example, but in real I need full]
+
+
+def _temperature_for_model(model: str | None, default: float) -> float | None:
+    """Return a supported temperature value for an OpenAI-compatible model.
+
+    OpenAI reasoning models and GPT-5 models reject an explicitly supplied
+    temperature parameter. Other providers retain their existing defaults.
+    """
+    normalized_model = (model or "").strip().lower()
+    model_name = normalized_model.rsplit("/", 1)[-1]
+    if model_name.startswith(("o1", "o3", "gpt-5")):
+        return None
+    return default
+
+
+LOCAL_AI_DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1"
+LOCAL_AI_BASE_URL_OPTIONS = {
+    "lm_studio": "http://127.0.0.1:1234/v1",
+    "ollama": "http://127.0.0.1:11434/v1",
+    "custom": "",
+}
+LOCAL_AI_BASE_URL_LABELS = {
+    "lm_studio": "LM Studio",
+    "ollama": "Ollama",
+    "custom": "Custom",
+}
+OPENAI_COMPATIBLE_BASE_URL_OPTIONS = {
+    "nvidia": "https://integrate.api.nvidia.com/v1",
+    "groq": "https://api.groq.com/openai/v1",
+}
+OPENAI_COMPATIBLE_BASE_URL_LABELS = {"nvidia": "NVIDIA", "groq": "Groq"}
+OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION = {
+    "nvidia": [
+        "mistralai/mistral-large-3-675b-instruct-2512",
+        "mistralai/mistral-medium-3-instruct",
+        "mistralai/mistral-small-3.1-24b-instruct-2503",
+    ],
+    "groq": [
+        "openai/gpt-oss-120b",
+        "llama-3.3-70b-versatile",
+        "openai/gpt-oss-20b",
+    ],
+}
+AI_PROVIDER_PRIORITY = (
+    "local",
+    "openai_compatible",
+    "openrouter",
+    "openai",
+    "anthropic",
+)
+AI_PROVIDER_BASE_URLS = {
+    "local": LOCAL_AI_DEFAULT_BASE_URL,
+    "openai_compatible": OPENAI_COMPATIBLE_BASE_URL_OPTIONS["nvidia"],
+    "openrouter": "https://openrouter.ai/api/v1",
+    "openai": "https://api.openai.com/v1",
+    "anthropic": "https://api.anthropic.com/v1",
+}
+AI_PROVIDER_DEFAULT_MODELS = {
+    "local": [],
+    "openrouter": ["meta-llama/llama-3.3-70b-instruct:free", "openai/gpt-4o-mini"],
+    "openai": ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
+    "anthropic": ["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"],
+}
+AI_PROVIDER_MODEL_ENV = {
+    "local": "LOCAL_AI_MODEL",
+    "openai_compatible": "OPENAI_COMPATIBLE_MODEL",
+    "openrouter": "OPENROUTER_MODEL",
+    "openai": "OPENAI_MODEL",
+    "anthropic": "ANTHROPIC_MODEL",
+}
+AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES = 300
+AI_SENTENCE_TRANSLATION_BATCH_CHAR_LIMIT = 3000
+AI_AUTOMATION_TASK_TEMPLATES = [
+    {
+        "id": "format_selection",
+        "title": "Format Selected Section",
+        "prompt": "Apply Markdown formatting rules to the selected section.",
+        "requires_selection": True,
+    },
+    {
+        "id": "generate_toc",
+        "title": "Generate Table of Contents",
+        "prompt": "Generate a Markdown table of contents from headings and insert it.",
+        "requires_selection": False,
+    },
+    {
+        "id": "generate_summary",
+        "title": "Generate Summary",
+        "prompt": "Generate a concise document summary in Markdown bullet points.",
+        "requires_selection": False,
+    },
+    {
+        "id": "fix_code_blocks",
+        "title": "Format and Fix Code Blocks",
+        "prompt": "Format Markdown code fences and fix common fence syntax issues.",
+        "requires_selection": False,
+    },
+]
+
+
+class TranslationConfigError(RuntimeError):
+    def __init__(
+        self, message: str, provider_name: str | None = None, env_var: str | None = None
+    ):
+        super().__init__(message)
+        self.provider_name = provider_name
+        self.env_var = env_var
+
+
+def _get_settings_file_path() -> Path:
+    if sys.platform == "darwin":
+        base_dir = Path.home() / "Library" / "Application Support" / "MarkdownReader"
+    elif sys.platform.startswith("win"):
+        appdata = os.environ.get("APPDATA", "").strip()
+        base_dir = (
+            Path(appdata) / "MarkdownReader"
+            if appdata
+            else Path.home() / "AppData" / "Roaming" / "MarkdownReader"
+        )
+    else:
+        base_dir = Path.home() / ".config" / "markdown-reader"
+    return base_dir / "settings.json"
+
+
+APP_SETTINGS_FILE_PATH = _get_settings_file_path()
+AI_CHAT_HISTORY_FILE_PATH = APP_SETTINGS_FILE_PATH.parent / "chat_history.json"
+AI_AUTOMATION_LOG_FILE_PATH = APP_SETTINGS_FILE_PATH.parent / "ai_automation_log.json"
+
+
+def _normalize_provider_name(provider: str) -> str:
+    provider = (provider or "").strip().lower()
+    return provider if provider in AI_PROVIDER_PRIORITY else "openai_compatible"
+
+
+def _load_app_settings() -> dict[str, Any]:
+    if not APP_SETTINGS_FILE_PATH.exists():
+        return {}
+    try:
+        with open(APP_SETTINGS_FILE_PATH, encoding="utf-8") as file_obj:
+            data = json.load(file_obj)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_app_settings(settings: dict[str, Any]) -> None:
+    APP_SETTINGS_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(APP_SETTINGS_FILE_PATH, "w", encoding="utf-8") as file_obj:
+        json.dump(settings, file_obj, indent=2, ensure_ascii=False)
+
+
+def load_persisted_ai_settings() -> None:
+    settings = _load_app_settings()
+    for key, value in settings.items():
+        if isinstance(value, str) and key.isupper() and not os.getenv(key):
+            os.environ[key] = value
+
+
+def get_ai_provider_env_var(provider: str) -> str:
+    provider = _normalize_provider_name(provider)
+    return {
+        "local": "LOCAL_AI_API_KEY",
+        "openai_compatible": "OPENAI_COMPATIBLE_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+    }[provider]
+
+
+def _get_key_slot_env_var(provider_or_slot: str) -> str:
+    provider_or_slot = (provider_or_slot or "").strip()
+    for choice in OPENAI_COMPATIBLE_BASE_URL_OPTIONS:
+        if provider_or_slot == get_openai_compatible_storage_key_name(choice):
+            return get_openai_compatible_env_var(choice)
+    return get_ai_provider_env_var(provider_or_slot)
+
+
+def get_ai_provider_display_name(provider: str) -> str:
+    return {
+        "local": "Local Model",
+        "openai_compatible": "OpenAI Compatible",
+        "openrouter": "OpenRouter",
+        "openai": "OpenAI",
+        "anthropic": "Anthropic",
+    }.get(provider, provider)
+
+
+def _build_provider_order(preferred_provider: str = "") -> list[str]:
+    preferred = _normalize_provider_name(preferred_provider)
+    order = [preferred]
+    order.extend(provider for provider in AI_PROVIDER_PRIORITY if provider != preferred)
+    return order
+
+
+def get_openai_compatible_base_url_options() -> list[dict[str, str]]:
+    return [
+        {"key": key, "label": OPENAI_COMPATIBLE_BASE_URL_LABELS[key], "url": url}
+        for key, url in OPENAI_COMPATIBLE_BASE_URL_OPTIONS.items()
+    ]
+
+
+def get_local_ai_base_url_options() -> list[dict[str, str]]:
+    return [
+        {"key": key, "label": LOCAL_AI_BASE_URL_LABELS[key], "url": url}
+        for key, url in LOCAL_AI_BASE_URL_OPTIONS.items()
+    ]
+
+
+def get_openai_compatible_base_url_choice() -> str:
+    choice = (
+        str(
+            os.getenv("OPENAI_COMPATIBLE_BASE_URL_CHOICE")
+            or _load_app_settings().get("openai_compatible_base_url_choice")
+            or "nvidia"
+        )
+        .strip()
+        .lower()
+    )
+    return choice if choice in OPENAI_COMPATIBLE_BASE_URL_OPTIONS else "nvidia"
+
+
+def set_openai_compatible_base_url_choice(choice_key: str) -> str:
+    choice = choice_key.strip().lower()
+    if choice not in OPENAI_COMPATIBLE_BASE_URL_OPTIONS:
+        choice = "nvidia"
+    os.environ["OPENAI_COMPATIBLE_BASE_URL_CHOICE"] = choice
+    os.environ["OPENAI_COMPATIBLE_BASE_URL"] = OPENAI_COMPATIBLE_BASE_URL_OPTIONS[
+        choice
+    ]
+    settings = _load_app_settings()
+    settings["openai_compatible_base_url_choice"] = choice
+    _save_app_settings(settings)
+    return choice
+
+
+def get_openai_compatible_base_url() -> str:
+    override = os.getenv("OPENAI_COMPATIBLE_BASE_URL", "").strip()
+    if override:
+        return override.rstrip("/")
+    return OPENAI_COMPATIBLE_BASE_URL_OPTIONS[get_openai_compatible_base_url_choice()]
+
+
+def get_local_ai_base_url() -> str:
+    settings = _load_app_settings()
+    choice = str(settings.get("local_ai_base_url_choice", "")).strip()
+    if choice in LOCAL_AI_BASE_URL_OPTIONS and choice != "custom":
+        return LOCAL_AI_BASE_URL_OPTIONS[choice].rstrip("/")
+    custom_url = str(settings.get("local_ai_custom_base_url", "")).strip()
+    if choice == "custom" and custom_url:
+        return custom_url.rstrip("/")
+    env_url = os.getenv("LOCAL_AI_BASE_URL", "").strip()
+    if env_url:
+        return env_url.rstrip("/")
+    configured_url = (
+        custom_url
+        or str(settings.get("local_ai_base_url", "")).strip()
+        or LOCAL_AI_DEFAULT_BASE_URL
+    )
+    return configured_url.rstrip("/")
+
+
+def set_local_ai_base_url(base_url: str) -> str:
+    normalized = (base_url or "").strip().rstrip("/") or LOCAL_AI_DEFAULT_BASE_URL
+    os.environ["LOCAL_AI_BASE_URL"] = normalized
+    settings = _load_app_settings()
+    settings["local_ai_base_url_choice"] = "custom"
+    settings["local_ai_custom_base_url"] = normalized
+    settings["local_ai_base_url"] = normalized
+    _save_app_settings(settings)
+    return normalized
+
+
+def get_local_ai_base_url_choice() -> str:
+    choice = str(_load_app_settings().get("local_ai_base_url_choice", "")).strip()
+    if choice in LOCAL_AI_BASE_URL_OPTIONS:
+        return choice
+    current_url = get_local_ai_base_url().rstrip("/")
+    for key, option_url in LOCAL_AI_BASE_URL_OPTIONS.items():
+        if option_url and current_url == option_url.rstrip("/"):
+            return key
+    return "custom" if current_url != LOCAL_AI_DEFAULT_BASE_URL else "lm_studio"
+
+
+def get_local_ai_custom_base_url() -> str:
+    custom_url = str(_load_app_settings().get("local_ai_custom_base_url", "")).strip()
+    return custom_url.rstrip("/")
+
+
+def set_local_ai_base_url_choice(choice_key: str, custom_base_url: str = "") -> str:
+    choice = choice_key if choice_key in LOCAL_AI_BASE_URL_OPTIONS else "lm_studio"
+    settings = _load_app_settings()
+    settings["local_ai_base_url_choice"] = choice
+    if custom_base_url.strip():
+        settings["local_ai_custom_base_url"] = custom_base_url.strip().rstrip("/")
+    resolved_url = (
+        settings.get("local_ai_custom_base_url", "")
+        if choice == "custom"
+        else LOCAL_AI_BASE_URL_OPTIONS[choice]
+    )
+    resolved_url = str(resolved_url or LOCAL_AI_DEFAULT_BASE_URL).strip().rstrip("/")
+    settings["local_ai_base_url"] = resolved_url
+    os.environ["LOCAL_AI_BASE_URL"] = resolved_url
+    _save_app_settings(settings)
+    return choice
+
+
+def get_openai_compatible_storage_key_name(choice_key: str | None = None) -> str:
+    choice = choice_key or get_openai_compatible_base_url_choice()
+    return (
+        f"openai_compatible_{choice}"
+        if choice in OPENAI_COMPATIBLE_BASE_URL_OPTIONS
+        else "openai_compatible"
+    )
+
+
+def get_openai_compatible_env_var(choice_key: str | None = None) -> str:
+    choice = choice_key or get_openai_compatible_base_url_choice()
+    return (
+        f"OPENAI_COMPATIBLE_{choice.upper()}_API_KEY"
+        if choice in OPENAI_COMPATIBLE_BASE_URL_OPTIONS
+        else "OPENAI_COMPATIBLE_API_KEY"
+    )
+
+
+def get_ai_provider_model(provider: str) -> str:
+    provider = _normalize_provider_name(provider)
+    env_var = AI_PROVIDER_MODEL_ENV[provider]
+    settings_model = ""
+    ai_models = _load_app_settings().get("ai_models", {})
+    if isinstance(ai_models, dict):
+        settings_model = str(ai_models.get(provider, "")).strip()
+    return (
+        os.getenv(env_var, "").strip()
+        or settings_model
+        or next(iter(get_provider_default_models(provider)), "")
+    )
+
+
+def set_ai_provider_model(provider: str, model: str) -> None:
+    provider = _normalize_provider_name(provider)
+    model = model.strip()
+    os.environ[AI_PROVIDER_MODEL_ENV[provider]] = model
+    settings = _load_app_settings()
+    settings.setdefault("ai_models", {})
+    if isinstance(settings["ai_models"], dict):
+        settings["ai_models"][provider] = model
+    _save_app_settings(settings)
+
+
+def set_current_ai_provider(provider: str) -> None:
+    provider = _normalize_provider_name(provider)
+    os.environ["AI_PROVIDER"] = provider
+    settings = _load_app_settings()
+    settings["ai_provider"] = provider
+    _save_app_settings(settings)
+
+
+def get_provider_default_models(
+    provider: str, base_url_override: str = ""
+) -> list[str]:
+    provider = _normalize_provider_name(provider)
+    if provider == "openai_compatible":
+        url = (base_url_override or get_openai_compatible_base_url()).rstrip("/")
+        for key, option_url in OPENAI_COMPATIBLE_BASE_URL_OPTIONS.items():
+            if url == option_url.rstrip("/"):
+                return list(OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION[key])
+        return list(OPENAI_COMPATIBLE_DEFAULT_MODELS_BY_BASE_OPTION["nvidia"])
+    return list(AI_PROVIDER_DEFAULT_MODELS[provider])
+
+
+def is_secure_key_storage_available() -> bool:
+    return keyring is not None
+
+
+def get_secure_ai_api_key(provider: str) -> str:
+    if keyring is None:
+        return os.getenv(_get_key_slot_env_var(provider), "")
+    try:
+        return keyring.get_password(AI_CREDENTIAL_SERVICE, provider) or ""
+    except KeyringError:
+        return ""
+
+
+def resolve_ai_api_key_for_slot(key_slot: str) -> str:
+    """Resolve the API key a key slot should authenticate with.
+
+    The environment variable wins over the secure store, so a key supplied
+    through the environment applies even on a machine that has a keyring
+    backend installed but no credential stored for this slot. Every caller that
+    needs a slot's key goes through here, because the two orders that were once
+    spelled out at two call sites disagreed.
+    """
+    return (
+        os.getenv(_get_key_slot_env_var(key_slot), "").strip()
+        or get_secure_ai_api_key(key_slot).strip()
+    )
+
+
+def get_ai_api_key_storage_status(provider: str, timeout_seconds: float = 1.0) -> str:
+    """Check a slot without treating a failed or timed-out read as absence.
+
+    Environment keys are clearable through the existing fallback only when
+    secure storage is unavailable.
+    """
+    storage = keyring
+    if storage is None:
+        return (
+            "environment"
+            if os.getenv(_get_key_slot_env_var(provider), "").strip()
+            else "not_saved"
+        )
+
+    result = {"status": "unavailable"}
+
+    def check_keyring() -> None:
+        try:
+            result["status"] = (
+                "saved"
+                if storage.get_password(AI_CREDENTIAL_SERVICE, provider)
+                else "not_saved"
+            )
+        except KeyringError:
+            result["status"] = "unavailable"
+
+    thread = threading.Thread(target=check_keyring, daemon=True)
+    thread.start()
+    thread.join(timeout_seconds)
+    return result["status"] if not thread.is_alive() else "unavailable"
+
+
+def is_ai_api_key_configured(
+    provider: str, env_var: str = "", timeout_seconds: float = 1.0
+) -> bool:
+    if env_var and os.getenv(env_var, "").strip():
+        return True
+    return get_ai_api_key_storage_status(provider, timeout_seconds) in (
+        "saved",
+        "environment",
+    )
+
+
+def set_secure_ai_api_key(provider: str, api_key: str) -> None:
+    if keyring is None:
+        os.environ[_get_key_slot_env_var(provider)] = api_key
+        return
+    keyring.set_password(AI_CREDENTIAL_SERVICE, provider, api_key)
+
+
+def delete_secure_ai_api_key(provider: str) -> None:
+    if keyring is None:
+        os.environ.pop(_get_key_slot_env_var(provider), None)
+        return
+    try:
+        keyring.delete_password(AI_CREDENTIAL_SERVICE, provider)
+    except KeyringError:
+        pass
+
+
+def fetch_available_models(
+    provider: str, api_key: str, base_url_override: str = ""
+) -> list[str]:
+    provider = _normalize_provider_name(provider)
+    if provider == "local":
+        base_url = (base_url_override or get_local_ai_base_url()).rstrip("/")
+    elif provider == "openai_compatible":
+        base_url = (base_url_override or get_openai_compatible_base_url()).rstrip("/")
+    else:
+        base_url = AI_PROVIDER_BASE_URLS[provider].rstrip("/")
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    response = requests.get(f"{base_url}/models", headers=headers, timeout=20)
+    try:
+        response.raise_for_status()
+    except requests.RequestException:
+        if provider == "local" and base_url.endswith(":11434/v1"):
+            tags_url = base_url.removesuffix("/v1") + "/api/tags"
+            tags_response = requests.get(tags_url, timeout=20)
+            tags_response.raise_for_status()
+            tags_data = tags_response.json()
+            tags_models = tags_data.get("models", [])
+            if isinstance(tags_models, list):
+                return [
+                    item.get("name", "")
+                    for item in tags_models
+                    if isinstance(item, dict) and item.get("name")
+                ]
+        raise
+    data = response.json()
+    models = data.get("data", data)
+    if isinstance(models, list):
+        ids = [
+            item.get("id") if isinstance(item, dict) else str(item) for item in models
+        ]
+        return [model for model in ids if model]
+    return get_provider_default_models(provider, base_url_override=base_url_override)
+
+
+def _get_current_ai_provider() -> str:
+    load_persisted_ai_settings()
+    settings_provider = _load_app_settings().get("ai_provider", "")
+    persisted_provider = settings_provider if isinstance(settings_provider, str) else ""
+    return _normalize_provider_name(
+        persisted_provider.strip() or os.getenv("AI_PROVIDER", "")
+    )
+
+
+def _get_ai_api_key_for_provider(provider: str) -> tuple[str, str, str]:
+    provider = _normalize_provider_name(provider)
+    key_slot = provider
+    env_var = get_ai_provider_env_var(provider)
+    if provider == "openai_compatible":
+        choice = get_openai_compatible_base_url_choice()
+        key_slot = get_openai_compatible_storage_key_name(choice)
+        env_var = get_openai_compatible_env_var(choice)
+
+    api_key = resolve_ai_api_key_for_slot(key_slot)
+    if provider == "openai_compatible" and not api_key:
+        fallback_env_var = get_ai_provider_env_var(provider)
+        api_key = resolve_ai_api_key_for_slot(provider)
+        env_var = fallback_env_var
+    return api_key, key_slot, env_var
+
+
+def _get_ai_base_url(provider: str) -> str:
+    provider = _normalize_provider_name(provider)
+    if provider == "local":
+        return get_local_ai_base_url().rstrip("/")
+    if provider == "openai_compatible":
+        return get_openai_compatible_base_url().rstrip("/")
+    return AI_PROVIDER_BASE_URLS[provider].rstrip("/")
+
+
+def _get_ai_model_for_request(provider: str, api_key: str = "") -> str:
+    model = get_ai_provider_model(provider).strip()
+    if model:
+        return model
+    if provider == "local":
+        models = fetch_available_models(provider, api_key)
+        if models:
+            model = models[0]
+            set_ai_provider_model(provider, model)
+            return model
+    raise RuntimeError(
+        f"No model is configured for {get_ai_provider_display_name(provider)}."
+    )
+
+
+def _extract_openai_compatible_text(response_data: dict[str, Any]) -> str:
+    choices = response_data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+    first_choice = choices[0] if isinstance(choices[0], dict) else {}
+    message = first_choice.get("message")
+    if isinstance(message, dict):
+        content = message.get("content")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return "".join(
+                item.get("text", "")
+                for item in content
+                if isinstance(item, dict)
+                and item.get("type") in {"text", "output_text"}
+            )
+    text = first_choice.get("text")
+    return text if isinstance(text, str) else ""
+
+
+def _extract_anthropic_text(response_data: dict[str, Any]) -> str:
+    content = response_data.get("content")
+    if not isinstance(content, list):
+        return ""
+    return "".join(
+        item.get("text", "")
+        for item in content
+        if isinstance(item, dict) and item.get("type") == "text"
+    )
+
+
+_AI_RETRYABLE_STATUS_CODES = frozenset({429, 503})
+_AI_REQUEST_RETRY_ATTEMPTS = 3
+_AI_REQUEST_RETRY_BASE_DELAY_SECONDS = 0.5
+
+
+class ProviderRequestError(RuntimeError):
+    """A provider request failed in a way the caller should surface friendlily.
+
+    Attributes:
+        status_code: The HTTP status that caused the failure, or 0 for transport errors.
+        detail: A short, user-safe description of the failure.
+    """
+
+    def __init__(self, status_code: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
+def _retry_after_seconds(response: Any, default: float) -> float:
+    """Return the Retry-After delay from a response, falling back to `default`."""
+    header = (response.headers or {}).get("Retry-After")
+    if not header:
+        return default
+    try:
+        return max(0.0, float(str(header).strip()))
+    except ValueError:
+        return default
+
+
+def _is_quota_error(text: str) -> bool:
+    lowered = (text or "").lower()
+    return "insufficient_quota" in lowered or "insufficient quota" in lowered
+
+
+_CONTEXT_LENGTH_ERROR_MARKERS = (
+    "context_length_exceeded",
+    "context_length_is_too_long",
+    "context length exceeded",
+    "maximum context length",
+    "too many tokens",
+)
+
+
+def _is_context_length_error(text: str) -> bool:
+    lowered = (text or "").lower()
+    return any(marker in lowered for marker in _CONTEXT_LENGTH_ERROR_MARKERS)
+
+
+def _post_with_retry(
+    url: str,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+    *,
+    max_attempts: int = _AI_REQUEST_RETRY_ATTEMPTS,
+    base_delay: float = _AI_REQUEST_RETRY_BASE_DELAY_SECONDS,
+    timeout: float = 60.0,
+) -> Any:
+    """POST JSON after bounded retries of transient provider failures.
+
+    Transient failures (HTTP 429/503 and connection or timeout errors) are
+    retried with a short exponential backoff that honors ``Retry-After``.
+    After the retries are exhausted a :class:`ProviderRequestError` is raised
+    with a status code and a user-safe message. Quota and auth failures stay
+    immediate and fatal because waiting will not resolve them.
+    """
+    for attempt in range(max_attempts):
+        try:
+            response = requests.post(
+                url, headers=headers, json=payload, timeout=timeout
+            )
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            if attempt >= max_attempts - 1:
+                raise ProviderRequestError(
+                    503,
+                    "The AI provider is temporarily unreachable. "
+                    "Please try again shortly.",
+                ) from exc
+            time.sleep(base_delay * (2**attempt))
+            continue
+
+        status_code = getattr(response, "status_code", 200)
+        if status_code in _AI_RETRYABLE_STATUS_CODES:
+            if status_code == 429 and _is_quota_error(response.text):
+                raise ProviderRequestError(
+                    429,
+                    "The AI provider reported an exceeded quota. "
+                    "Please check the account and try again.",
+                )
+            if attempt >= max_attempts - 1:
+                raise ProviderRequestError(
+                    503,
+                    "The AI provider is temporarily unavailable. "
+                    "Please try again shortly.",
+                )
+            time.sleep(_retry_after_seconds(response, base_delay * (2**attempt)))
+            continue
+
+        if status_code >= 400:
+            raise ProviderRequestError(
+                response.status_code,
+                (response.text or "").strip()
+                or response.reason
+                or "The AI provider rejected the request.",
+            )
+        return response
+
+    raise ProviderRequestError(
+        503, "The AI provider is temporarily unavailable. Please try again shortly."
+    )
+
+
+def _request_translation_from_provider(
+    provider: str,
+    api_key: str,
+    model: str,
+    content: str,
+    source_language: str,
+    target_language: str,
+) -> str:
+    system_prompt = (
+        "Translate Markdown while preserving Markdown structure, front matter, "
+        "links, tables, code fences, inline code, math, and HTML. Return only the "
+        "translated Markdown."
+    )
+    user_prompt = (
+        f"Source language: {source_language or 'auto'}\n"
+        f"Target language: {target_language}\n\n"
+        "Markdown:\n"
+        f"{content}"
+    )
+    base_url = _get_ai_base_url(provider)
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    if provider == "anthropic":
+        headers["anthropic-version"] = "2023-06-01"
+        response = _post_with_retry(
+            f"{base_url}/messages",
+            headers=headers,
+            payload={
+                "model": model,
+                "max_tokens": 4096,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": user_prompt}],
+            },
+        )
+        translated = _extract_anthropic_text(response.json()).strip()
+    else:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        temperature = _temperature_for_model(model, 0.2)
+        if temperature is not None:
+            payload["temperature"] = temperature
+        response = _post_with_retry(
+            f"{base_url}/chat/completions",
+            headers=headers,
+            payload=payload,
+        )
+        translated = _extract_openai_compatible_text(response.json()).strip()
+
+    if not translated:
+        raise RuntimeError("AI provider returned an empty translation.")
+    return translated
+
+
+def _request_chat_from_provider(
+    provider: str,
+    api_key: str,
+    model: str,
+    message: str,
+    document_text: str = "",
+    selected_text: str = "",
+    chat_history: list[dict[str, Any]] | None = None,
+    knowledge_context: str = "",
+) -> str:
+    system_prompt = (
+        "You are Markdown Reader's AI assistant. Help with writing, editing, "
+        "Markdown, document understanding, and general questions. Be concise and "
+        "useful. When document or selected text is provided, use it as context."
+    )
+    if knowledge_context.strip():
+        system_prompt += (
+            " When directory knowledge base context is provided from personal notes, "
+            "ground your response in those notes, cite the relevant note files/sections, "
+            "and prioritize information from them."
+        )
+    context_parts = []
+    if knowledge_context.strip():
+        context_parts.append(knowledge_context.strip())
+    if selected_text.strip():
+        context_parts.append("Selected text:\n" + selected_text.strip())
+    if document_text.strip():
+        context_parts.append("Document:\n" + document_text.strip())
+    user_prompt = (
+        "\n\n".join(context_parts + [message.strip()])
+        if context_parts
+        else message.strip()
+    )
+    base_url = _get_ai_base_url(provider)
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    history_messages = []
+    for item in chat_history or []:
+        role = item.get("role")
+        content = item.get("content")
+        if role in {"user", "assistant"} and isinstance(content, str) and content:
+            history_messages.append({"role": role, "content": content})
+
+    if provider == "anthropic":
+        headers["anthropic-version"] = "2023-06-01"
+        response = requests.post(
+            f"{base_url}/messages",
+            headers=headers,
+            json={
+                "model": model,
+                "max_tokens": 4096,
+                "system": system_prompt,
+                "messages": history_messages
+                + [{"role": "user", "content": user_prompt}],
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+        answer = _extract_anthropic_text(response.json()).strip()
+    else:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                *history_messages,
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        temperature = _temperature_for_model(model, 0.4)
+        if temperature is not None:
+            payload["temperature"] = temperature
+        response = requests.post(
+            f"{base_url}/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=60,
+        )
+        response.raise_for_status()
+        answer = _extract_openai_compatible_text(response.json()).strip()
+
+    if not answer:
+        raise RuntimeError("AI provider returned an empty chat response.")
+    return answer
+
+
+def get_ai_automation_task_templates() -> list[dict[str, Any]]:
+    return [dict(item) for item in AI_AUTOMATION_TASK_TEMPLATES]
+
+
+def load_ai_automation_logs(
+    limit: int = AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES,
+) -> list[dict[str, Any]]:
+    if not AI_AUTOMATION_LOG_FILE_PATH.exists():
+        return []
+    try:
+        with open(AI_AUTOMATION_LOG_FILE_PATH, encoding="utf-8") as file_obj:
+            data = json.load(file_obj)
+    except Exception:
+        return []
+    logs = data if isinstance(data, list) else []
+    return logs[-limit:] if limit > 0 else logs
+
+
+def save_ai_automation_logs(log_entries: list[dict[str, Any]]) -> None:
+    AI_AUTOMATION_LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(AI_AUTOMATION_LOG_FILE_PATH, "w", encoding="utf-8") as file_obj:
+        json.dump(
+            log_entries[-AI_AUTOMATION_MAX_AUDIT_LOG_ENTRIES:], file_obj, indent=2
+        )
+
+
+def load_ai_chat_histories() -> list[dict[str, Any]]:
+    if not AI_CHAT_HISTORY_FILE_PATH.exists():
+        return []
+    try:
+        with open(AI_CHAT_HISTORY_FILE_PATH, encoding="utf-8") as file_obj:
+            data = json.load(file_obj)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def save_ai_chat_histories(histories: list[dict[str, Any]]) -> None:
+    AI_CHAT_HISTORY_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(AI_CHAT_HISTORY_FILE_PATH, "w", encoding="utf-8") as file_obj:
+        json.dump(histories, file_obj, indent=2)
+
+
+# An opening or closing code fence: three or more backticks/tildes, optionally
+# indented up to three spaces (CommonMark). Used to tell real Markdown lines from
+# verbatim code.
+_CODE_FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
+
+
+def _apply_markdown_formatting_rules(markdown_text: str) -> str:
+    normalized = (markdown_text or "").replace("\r\n", "\n")
+    lines = []
+    fence: str | None = None
+    for raw_line in normalized.split("\n"):
+        # Inside a fenced block the line is verbatim code, so none of the
+        # normalisation below may touch it. These rules are line-shaped and read
+        # a leading "#", "-" or "1." as list/heading syntax, but that is a
+        # comment or an operator inside the block: a shebang became
+        # "# !/usr/bin/env bash" and the float 1.5 became "1. 5".
+        fence_match = _CODE_FENCE_RE.match(raw_line)
+        if fence_match:
+            marker = fence_match.group(1)
+            if fence is None:
+                fence = marker[0] * 3
+            elif (
+                marker[0] == fence[0]
+                and len(marker) >= len(fence)
+                and not fence_match.group(2).strip()
+            ):
+                fence = None
+            lines.append(raw_line.rstrip())
+            continue
+        if fence is not None:
+            lines.append(raw_line.rstrip())
+            continue
+        line = raw_line.rstrip()
+        line = re.sub(r"^(#{1,6})([^\s#])", r"\1 \2", line)
+        # The next char must not be another list marker: a run such as "---"
+        # or "***" is a thematic break (and "---" also delimits YAML
+        # frontmatter), not a tight list item, so it must stay verbatim. A
+        # digit after a bullet marker or an ordered-list dot is a number, not
+        # a list: "1.5" and "-1.5" are prose, and rewriting them to "1. 5" /
+        # "- 1.5" mangles the text. Fenced code got this guard first (a float
+        # inside a block became "1. 5"); prose needs the same protection.
+        line = re.sub(r"^(\s*)([-*+])(?![-*+\d])([^\s])", r"\1\2 \3", line)
+        line = re.sub(r"^(\s*\d+\.)(?!\d)(\S)", r"\1 \2", line)
+        lines.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
+
+
+def _guess_code_language(code_block: str) -> str:
+    sample = (code_block or "").strip()
+    lowered = sample.lower()
+    if "def " in sample or "import " in sample or "print(" in sample:
+        return "python"
+    if "function " in sample or "const " in sample or "=>" in sample:
+        return "javascript"
+    if lowered.startswith("{") and lowered.endswith("}"):
+        return "json"
+    return "text"
+
+
+def _format_and_fix_code_blocks(markdown_text: str) -> str:
+    normalized = (markdown_text or "").replace("\r\n", "\n")
+    fence_count = len(re.findall(r"^\s*```", normalized, flags=re.MULTILINE))
+    if fence_count % 2 == 1:
+        return normalized.rstrip() + "\n```"
+    return normalized
+
+
+def _slugify_heading_text(text: str) -> str:
+    # Delegate to the shared canonical slugger so TOC anchors always match
+    # the rendered document outline (backend/routers/markdown.py): unicode
+    # word characters are kept, consecutive spaces/hyphens behave exactly
+    # like GitHub's anchors, and inline markup is stripped the same way.
+    return slugify_heading(text)
+
+
+_FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+
+
+def _iter_heading_lines(markdown_text: str):
+    """Yield only the lines that are real ATX headings.
+
+    A ``#`` line inside a fenced code block is code, not a heading, so scanning
+    line-by-line is not enough: a shell comment or a Python comment would be
+    collected as a section title. Track the fence state so those are skipped.
+    """
+    fence: str | None = None
+    for line in (markdown_text or "").replace("\r\n", "\n").split("\n"):
+        if fence is None:
+            match = _FENCE_RE.match(line)
+            if match:
+                fence = match.group(1)
+                continue
+        else:
+            # A closing fence uses the same character and is at least as long
+            # as the opener; anything else is part of the code block. A line
+            # like ```python is an info string, not a closing fence, so the
+            # renderer keeps the block open and the lines below it stay code.
+            closing = _FENCE_RE.match(line)
+            if (
+                closing
+                and closing.group(1)[0] == fence[0]
+                and len(closing.group(1)) >= len(fence)
+                and not line[closing.end() :].strip()
+            ):
+                fence = None
+            continue
+        yield line
+
+
+_ATX_HEADING_LINE_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+
+
+def _iter_toc_headings(markdown_text: str):
+    """Yield ``(level, title)`` for every heading the preview anchors.
+
+    Covers ATX (``# Heading``) and CommonMark setext headings (a text line over
+    a run of ``=`` or two or more ``-``). Fenced blocks are skipped so a ``#``
+    or a dash run inside code is not reported as a section, and a setext
+    underline separated from its text by a blank line is a thematic break, not
+    a heading. The rules match the renderer so the anchors resolve.
+    """
+    lines = (markdown_text or "").replace("\r\n", "\n").split("\n")
+    fence: str | None = None
+    for index, line in enumerate(lines):
+        if fence is not None:
+            closing = _FENCE_RE.match(line)
+            if (
+                closing
+                and closing.group(1)[0] == fence[0]
+                and len(closing.group(1)) >= len(fence)
+                and not line[closing.end() :].strip()
+            ):
+                fence = None
+            continue
+        fence_match = _FENCE_RE.match(line)
+        if fence_match:
+            fence = fence_match.group(1)
+            continue
+
+        atx = _ATX_HEADING_LINE_RE.match(line)
+        if atx:
+            yield len(atx.group(1)), atx.group(2).strip()
+            continue
+
+        # Setext: this line is the heading text when the next line is an
+        # underline. A blank line, an ATX heading, or another underline/thematic
+        # break never starts one.
+        if index + 1 >= len(lines):
+            continue
+        text = line.strip()
+        if (
+            not text
+            or _ATX_HEADING_LINE_RE.match(line)
+            or re.match(r"^\s*(?:-{3,}|=+)\s*$", line)
+        ):
+            continue
+        underline = lines[index + 1]
+        if re.match(r"^=+\s*$", underline):
+            yield 1, text
+        elif re.match(r"^-{2,}\s*$", underline):
+            yield 2, text
+
+
+def _generate_markdown_toc(markdown_text: str) -> str:
+    toc_lines = []
+    # Track slugs so duplicate headings get the ``-1``, ``-2`` … suffix that
+    # GitHub applies when rendering anchors (same rule as ``_extract_outline``).
+    slug_counts: dict[str, int] = {}
+    for level, title in _iter_toc_headings(markdown_text):
+        anchor = _slugify_heading_text(title)
+        if not anchor:
+            continue
+        unique_anchor = unique_heading_slug(anchor, slug_counts)
+        toc_lines.append(f"{'  ' * max(0, level - 1)}- [{title}](#{unique_anchor})")
+    return "## Table of Contents\n\n" + "\n".join(toc_lines) + "\n" if toc_lines else ""
+
+
+def _merge_toc_into_document(document_text: str, toc_text: str) -> str:
+    doc = (document_text or "").replace("\r\n", "\n")
+    toc = (toc_text or "").strip()
+    if not toc:
+        return doc
+    replacement = toc.rstrip() + "\n\n"
+    if doc.strip():
+        return replacement + doc.lstrip("\n")
+    return toc.rstrip() + "\n"
+
+
+def _generate_lightweight_summary(markdown_text: str) -> str:
+    if not (markdown_text or "").strip():
+        return ""
+    normalized = markdown_text.replace("\r\n", "\n")
+    headings = []
+    for line in _iter_heading_lines(normalized):
+        match = re.match(r"^#{1,3}\s+(.+?)\s*$", line)
+        if match:
+            headings.append(match.group(1).strip())
+        if len(headings) >= 5:
+            break
+    lead = ""
+    # Remove complete fenced blocks before looking for a lead paragraph. A
+    # fenced block may contain blank lines, so splitting the original text
+    # into paragraphs first can otherwise expose a later code paragraph.
+    outside_fences = "\n".join(_iter_heading_lines(normalized))
+    for paragraph in re.split(r"\n\s*\n", outside_fences):
+        paragraph = paragraph.strip()
+        # Skip headings, and skip fenced code blocks: quoting ``npm install`` as
+        # the document's opening sentence is worse than having no lead at all.
+        if not paragraph or paragraph.startswith("#"):
+            continue
+        if paragraph.startswith("```") or paragraph.startswith("~~~"):
+            continue
+        lead = re.sub(r"\s+", " ", paragraph)
+        break
+    lines = ["## Summary"]
+    if lead:
+        lines.extend(["", f"- {lead[:240]}{'...' if len(lead) > 240 else ''}"])
+    if headings:
+        lines.extend(["", "- Main sections:"])
+        lines.extend(f"  - {heading}" for heading in headings)
+    return "\n".join(lines).strip() + "\n"
+
+
+def build_ai_automation_fallback(
+    user_message: str, document_text: str = "", selected_text: str = ""
+) -> dict[str, Any] | None:
+    lowered = (user_message or "").lower()
+    slash_command = lowered.strip()
+    if slash_command == "/summarize":
+        lowered = "generate summary"
+    elif slash_command == "/format":
+        lowered = "format this section"
+    elif slash_command == "/toc":
+        lowered = "generate table of contents"
+    elif slash_command == "/fix-code":
+        lowered = "format code blocks and correct syntax"
+    selection = selected_text if isinstance(selected_text, str) else ""
+    document = document_text if isinstance(document_text, str) else ""
+    target = selection if selection.strip() else document
+    if not lowered.strip():
+        return None
+    if any(
+        keyword in lowered
+        for keyword in ("template", "task template", "automation template")
+    ):
+        template_lines = [
+            f"- {item['id']}: {item['title']}"
+            for item in get_ai_automation_task_templates()
+        ]
+        return {
+            "assistant_message": "Available automation templates:\n"
+            + "\n".join(template_lines),
+            "proposed_action": {
+                "type": "none",
+                "content": "",
+                "reason": "task_templates",
+            },
+            "used_provider": "local-fallback",
+        }
+    if any(keyword in lowered for keyword in ("table of contents", "toc", "目录")):
+        toc = _generate_markdown_toc(document if document.strip() else target)
+        if toc and not selection.strip():
+            return {
+                "assistant_message": toc,
+                "proposed_action": {
+                    "type": "replace_document",
+                    "content": _merge_toc_into_document(document, toc),
+                    "reason": "generate_toc_full_document",
+                },
+                "used_provider": "local-fallback",
+            }
+        if toc:
+            return {
+                "assistant_message": "Generated a table of contents. Review and apply if it matches your document structure.",
+                "proposed_action": {
+                    "type": "replace_selection",
+                    "content": toc,
+                    "reason": "generate_toc",
+                },
+                "used_provider": "local-fallback",
+            }
+    if "summary" in lowered or "summarize" in lowered or "总结" in lowered:
+        summary = _generate_lightweight_summary(target)
+        if not selection.strip() and summary:
+            return {
+                "assistant_message": summary,
+                "proposed_action": {
+                    "type": "replace_document",
+                    "content": summary,
+                    "reason": "generate_summary_full_document",
+                },
+                "used_provider": "local-fallback",
+            }
+        if not selection.strip():
+            return {
+                "assistant_message": "No document content available to summarize.",
+                "proposed_action": {
+                    "type": "none",
+                    "content": "",
+                    "reason": "no_content_for_summary",
+                },
+                "used_provider": "local-fallback",
+            }
+        if summary:
+            return {
+                "assistant_message": "Generated a concise summary based on current content.",
+                "proposed_action": {
+                    "type": "replace_selection",
+                    "content": summary,
+                    "reason": "generate_summary",
+                },
+                "used_provider": "local-fallback",
+            }
+    if (
+        any(
+            keyword in lowered
+            for keyword in (
+                "format code",
+                "code block",
+                "correct syntax",
+                "fix code",
+                # The shipped "Format and Fix Code Blocks" template prompts with
+                # "Format Markdown code fences and fix common fence syntax
+                # issues." — none of the keywords above appear in it, so
+                # /fix-code fell through to the plain formatter below and ran
+                # the wrong tool on the selection. "code fence" and "fence
+                # syntax" are what that prompt actually says.
+                "code fence",
+                "fence syntax",
+            )
+        )
+        and target.strip()
+    ):
+        if not selection.strip():
+            return {
+                "assistant_message": "Select the code block you want to fix, then run this task again.",
+                "proposed_action": {
+                    "type": "none",
+                    "content": "",
+                    "reason": "selection_required_for_code_fix",
+                },
+                "used_provider": "local-fallback",
+            }
+        return {
+            "assistant_message": "Prepared formatted code blocks and fixed common fence syntax issues.",
+            "proposed_action": {
+                "type": "replace_selection",
+                "content": _format_and_fix_code_blocks(target),
+                "reason": "fix_code_blocks",
+            },
+            "used_provider": "local-fallback",
+        }
+    if ("format" in lowered or "formatting" in lowered) and target.strip():
+        action_type = "replace_selection" if selection.strip() else "replace_document"
+        reason = "format_rules" if selection.strip() else "format_rules_full_document"
+        return {
+            "assistant_message": "Applied Markdown formatting normalization rules.",
+            "proposed_action": {
+                "type": action_type,
+                "content": _apply_markdown_formatting_rules(target),
+                "reason": reason,
+            },
+            "used_provider": "local-fallback",
+        }
+    return None
+
+
+def request_ai_agent_response(
+    message: str,
+    document_text: str = "",
+    selected_text: str = "",
+    chat_history: list[dict[str, Any]] | None = None,
+    use_knowledge_base: bool = False,
+    knowledge_top_k: int = 5,
+) -> dict[str, Any]:
+    fallback = build_ai_automation_fallback(message, document_text, selected_text)
+    if fallback:
+        return fallback
+    provider = _get_current_ai_provider()
+    api_key, _key_slot, env_var = _get_ai_api_key_for_provider(provider)
+    if provider != "local" and not api_key:
+        raise TranslationConfigError(
+            "AI chat requires a configured provider API key.",
+            provider_name=provider,
+            env_var=env_var,
+        )
+
+    knowledge_context = ""
+    used_sources: list[dict[str, Any]] = []
+    if use_knowledge_base:
+        try:
+            from backend import knowledge_logic
+
+            # The persisted setting is authoritative as well as the per-request
+            # preference, so a caller cannot bypass the user's OFF toggle.
+            if knowledge_logic.get_knowledge_base_enabled():
+                # Search knowledge base using user query and any active selection
+                search_query = message.strip()
+                if selected_text.strip():
+                    search_query += " " + selected_text.strip()
+                chunks = knowledge_logic.query_knowledge_base(
+                    search_query, top_k=knowledge_top_k
+                )
+                if chunks:
+                    knowledge_context = (
+                        knowledge_logic.build_knowledge_context_for_prompt(chunks)
+                    )
+                    seen_paths = set()
+                    for c in chunks:
+                        rel_p = c.get("rel_path") or c.get("file_path", "")
+                        if rel_p not in seen_paths:
+                            seen_paths.add(rel_p)
+                            used_sources.append(
+                                {
+                                    "rel_path": rel_p,
+                                    "title": c.get("title", rel_p),
+                                    "section": c.get("section", ""),
+                                }
+                            )
+        except Exception as k_err:
+            logger.warning("Knowledge base retrieval failed: %s", k_err)
+
+    assistant_message = _request_chat_from_provider(
+        provider,
+        api_key,
+        _get_ai_model_for_request(provider, api_key),
+        message,
+        document_text=document_text,
+        selected_text=selected_text,
+        chat_history=chat_history,
+        knowledge_context=knowledge_context,
+    )
+    return {
+        "assistant_message": assistant_message,
+        "proposed_action": {
+            "type": "none",
+            "content": "",
+            "reason": "chat_response",
+        },
+        "used_provider": provider,
+        "used_sources": used_sources,
+    }
+
+
+def translate_markdown_with_ai(
+    content: str, source_language: str, target_language: str
+) -> str:
+    if not (content or "").strip():
+        return ""
+
+    provider = _get_current_ai_provider()
+    api_key, _key_slot, env_var = _get_ai_api_key_for_provider(provider)
+    if provider != "local" and not api_key:
+        raise TranslationConfigError(
+            "AI translation requires a configured provider API key.",
+            provider_name=provider,
+            env_var=env_var,
+        )
+
+    return _request_translation_from_provider(
+        provider,
+        api_key,
+        _get_ai_model_for_request(provider, api_key),
+        content,
+        source_language,
+        target_language,
+    )
+
+
+_SENTENCE_END_CHARS = ".!?。！？"
+# Full-width terminators. CJK text does not put a space after them, so they
+# cannot share the "next char must be a space/quote/bracket" rule used for the
+# ASCII set below — otherwise a whole paragraph became one translation unit.
+_CJK_SENTENCE_END_CHARS = frozenset("。！？")
+# Closing punctuation that belongs to the sentence it terminates; a
+# quoted/bracketed sentence keeps its closing quote/bracket in the same
+# translation unit (`He said "Stop." Then` -> `He said "Stop."`).
+# The CJK forms are here for the same reason: `…」` is part of the sentence it
+# closes, and must not be orphaned onto the next unit.
+_SENTENCE_CLOSING_CHARS = frozenset("\"')]」』）】》〉〙〗〛｝］")
+
+# Abbreviations whose period should not terminate the sentence, e.g. ``Dr.``.
+_PERIOD_NOT_SENTENCE_END = frozenset(
+    {
+        "mr",
+        "mrs",
+        "ms",
+        "dr",
+        "prof",
+        "sr",
+        "jr",
+        "st",
+        "rev",
+        "gen",
+        "col",
+        "capt",
+        "lt",
+        "sgt",
+        "fig",
+        "ed",
+        "vol",
+        "no",
+        "dept",
+        "univ",
+        "corp",
+        "inc",
+        "ltd",
+        "co",
+        "vs",
+        "etc",
+        "al",
+        "approx",
+        "e.g",
+        "i.e",
+        "u.s",
+        "u.k",
+        "a.m",
+        "p.m",
+    }
+)
+
+
+def _is_abbreviation_period(text: str, period_index: int) -> bool:
+    """Return True when ``period_index`` ends a known abbreviation.
+
+    Covers fixed abbreviations (``Dr.``), single-letter initials (``A.``),
+    and dotted acronyms such as ``U.S.`` or ``p.m.``.
+    """
+    start = period_index
+    while start > 0 and text[start - 1] not in " \t":
+        start -= 1
+    token = text[start:period_index].lower().rstrip(".")
+    if not token:
+        return False
+    return (
+        token in _PERIOD_NOT_SENTENCE_END
+        or (len(token) == 1 and token.isalpha())
+        or re.fullmatch(r"(?:[a-z][.])+[a-z]?", token) is not None
+    )
+
+
+def _first_char_after(line: str, index: int) -> str | None:
+    """First non-space / non-closing-quote char from ``index`` on, or None."""
+    while index < len(line) and (line[index].isspace() or line[index] in "\"'`)]}"):
+        index += 1
+    return line[index] if index < len(line) else None
+
+
+def _strip_json_code_fence(text: str) -> str:
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    stripped = re.sub(r"^```(?:json)?\s*", "", stripped, flags=re.IGNORECASE)
+    stripped = re.sub(r"\s*```$", "", stripped)
+    return stripped.strip()
+
+
+def _coerce_translation_pairs(
+    response_text: str, source_units: list[str]
+) -> list[dict[str, str]]:
+    try:
+        data = json.loads(_strip_json_code_fence(response_text))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "AI provider returned invalid sentence translation JSON."
+        ) from exc
+
+    raw_pairs = data.get("pairs") if isinstance(data, dict) else data
+    if not isinstance(raw_pairs, list):
+        raise RuntimeError("AI provider did not return sentence translation pairs.")
+
+    pairs: list[dict[str, str]] = []
+    for index, source in enumerate(source_units):
+        raw_pair = raw_pairs[index] if index < len(raw_pairs) else {}
+        translated = ""
+        if isinstance(raw_pair, dict):
+            translated_value = raw_pair.get("translated") or raw_pair.get("translation")
+            translated = translated_value if isinstance(translated_value, str) else ""
+        elif isinstance(raw_pair, str):
+            translated = raw_pair
+        pairs.append({"source": source, "translated": translated.strip()})
+
+    if any(not pair["translated"] for pair in pairs):
+        raise RuntimeError("AI provider returned incomplete sentence translations.")
+    return pairs
+
+
+def _batch_translation_units(
+    units: list[str], char_limit: int = AI_SENTENCE_TRANSLATION_BATCH_CHAR_LIMIT
+) -> list[list[str]]:
+    batches: list[list[str]] = []
+    current: list[str] = []
+    current_size = 0
+    for unit in units:
+        unit_size = len(unit)
+        if current and current_size + unit_size > char_limit:
+            batches.append(current)
+            current = []
+            current_size = 0
+        current.append(unit)
+        current_size += unit_size
+    if current:
+        batches.append(current)
+    return batches
+
+
+def _request_sentence_translation_batch_once(
+    provider: str,
+    api_key: str,
+    model: str,
+    source_units: list[str],
+    source_language: str,
+    target_language: str,
+) -> list[dict[str, str]]:
+    system_prompt = (
+        "Translate Markdown text units for sentence-by-sentence comparison. "
+        "Preserve Markdown syntax, code fences, inline code, links, math, and HTML. "
+        "Return only valid JSON with this shape: "
+        '{"pairs":[{"source":"original text","translated":"translated text"}]}. '
+        "Return exactly one pair for each input item, in the same order."
+    )
+    user_prompt = json.dumps(
+        {
+            "source_language": source_language or "auto",
+            "target_language": target_language,
+            "items": [
+                {"index": index, "source": unit}
+                for index, unit in enumerate(source_units)
+            ],
+        },
+        ensure_ascii=False,
+    )
+    base_url = _get_ai_base_url(provider)
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    if provider == "anthropic":
+        headers["anthropic-version"] = "2023-06-01"
+        response = _post_with_retry(
+            f"{base_url}/messages",
+            headers=headers,
+            payload={
+                "model": model,
+                "max_tokens": 4096,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": user_prompt}],
+            },
+        )
+        response_text = _extract_anthropic_text(response.json()).strip()
+    else:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        temperature = _temperature_for_model(model, 0.1)
+        if temperature is not None:
+            payload["temperature"] = temperature
+        response = _post_with_retry(
+            f"{base_url}/chat/completions",
+            headers=headers,
+            payload=payload,
+        )
+        response_text = _extract_openai_compatible_text(response.json()).strip()
+
+    if not response_text:
+        raise RuntimeError("AI provider returned an empty sentence translation.")
+    return _coerce_translation_pairs(response_text, source_units)
+
+
+def _request_sentence_translation_batch_from_provider(
+    provider: str,
+    api_key: str,
+    model: str,
+    source_units: list[str],
+    source_language: str,
+    target_language: str,
+) -> list[dict[str, str]]:
+    """Translate a batch, shrinking it when the provider runs out of context.
+
+    A single sentence far below the batch limit can still trip a provider's
+    context limit once the system and user prompts are included. When the
+    provider reports ``context_length_exceeded`` (or an equivalent message),
+    the batch is split in half and each half is retried recursively so only
+    the offending units keep shrinking. A single unit that still fails is
+    surfaced as a fatal error, since there is nothing left to shrink.
+    """
+    try:
+        return _request_sentence_translation_batch_once(
+            provider,
+            api_key,
+            model,
+            source_units,
+            source_language,
+            target_language,
+        )
+    except ProviderRequestError as exc:
+        if not _is_context_length_error(exc.detail) or len(source_units) <= 1:
+            raise
+    mid = max(1, len(source_units) // 2)
+    first_half = _request_sentence_translation_batch_from_provider(
+        provider,
+        api_key,
+        model,
+        source_units[:mid],
+        source_language,
+        target_language,
+    )
+    second_half = _request_sentence_translation_batch_from_provider(
+        provider,
+        api_key,
+        model,
+        source_units[mid:],
+        source_language,
+        target_language,
+    )
+    return first_half + second_half
+
+
+def split_text_into_translation_units(content: str) -> list[str]:
+    """Split text into sentence-like units while preserving Markdown blocks."""
+    text = (content or "").strip()
+    if not text:
+        return []
+
+    units: list[str] = []
+    buffer: list[str] = []
+    in_code_block = False
+
+    def flush_buffer() -> None:
+        unit = "".join(buffer).strip()
+        if unit:
+            units.append(unit)
+        buffer.clear()
+
+    lines = text.splitlines()
+    for line_index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            if not in_code_block:
+                flush_buffer()
+                buffer.append(line)
+                in_code_block = True
+            else:
+                buffer.append("\n")
+                buffer.append(line)
+                flush_buffer()
+                in_code_block = False
+            continue
+
+        if in_code_block:
+            if buffer:
+                buffer.append("\n")
+            buffer.append(line)
+            continue
+
+        if not stripped:
+            flush_buffer()
+            continue
+
+        if stripped.startswith(("#", ">", "-", "*", "+")) or re.match(
+            r"^\d+\.\s+", stripped
+        ):
+            flush_buffer()
+            units.append(line)
+            continue
+
+        char_index = 0
+        while char_index < len(line):
+            char = line[char_index]
+            buffer.append(char)
+            next_char = line[char_index + 1] if char_index + 1 < len(line) else ""
+            if char in _SENTENCE_END_CHARS and (
+                # A full-width terminator ends the sentence whatever follows:
+                # CJK text has no space after 。！？, so requiring one made the
+                # whole paragraph a single unit.
+                char in _CJK_SENTENCE_END_CHARS
+                or next_char in {"", " ", "\t", '"', "'", ")", "]"}
+            ):
+                ends_sentence = True
+                if char == ".":
+                    # "Dr." / "e.g." / "U.S." do not end a sentence.
+                    if _is_abbreviation_period(line, char_index):
+                        ends_sentence = False
+                    # "Version 1.2. Next" - otherwise only split when the
+                    # following word is capitalized (real sentence boundary).
+                    else:
+                        following = _first_char_after(line, char_index + 1)
+                        if following is not None and not following.isupper():
+                            ends_sentence = False
+                if ends_sentence:
+                    # A quoted sentence may end with a closing quote or
+                    # bracket (`He said "Stop." Then ran.`). Absorb it into
+                    # the finished unit before flushing, otherwise the
+                    # closing `"` becomes the first character of the next
+                    # unit (`" Then ran.`).
+                    while (
+                        char_index + 1 < len(line)
+                        and line[char_index + 1] in _SENTENCE_CLOSING_CHARS
+                    ):
+                        char_index += 1
+                        buffer.append(line[char_index])
+                    flush_buffer()
+            char_index += 1
+        if line_index < len(lines) - 1 and buffer:
+            buffer.append(" ")
+
+    flush_buffer()
+    return units
+
+
+def translate_markdown_sentences_with_ai(
+    content: str, source_language: str, target_language: str
+) -> list[dict[str, str]]:
+    units = split_text_into_translation_units(content)
+    if not units:
+        return []
+
+    pairs: list[dict[str, str]] = []
+    for batch in _batch_translation_units(units):
+        pairs.extend(
+            translate_markdown_sentence_batch_with_ai(
+                batch,
+                source_language,
+                target_language,
+            )
+        )
+    return pairs
+
+
+def translate_markdown_sentence_batch_with_ai(
+    units: list[str], source_language: str, target_language: str
+) -> list[dict[str, str]]:
+    units = [unit for unit in units if (unit or "").strip()]
+    if not units:
+        return []
+
+    provider = _get_current_ai_provider()
+    api_key, _key_slot, env_var = _get_ai_api_key_for_provider(provider)
+    if provider != "local" and not api_key:
+        raise TranslationConfigError(
+            "AI translation requires a configured provider API key.",
+            provider_name=provider,
+            env_var=env_var,
+        )
+
+    model = _get_ai_model_for_request(provider, api_key)
+    return _request_sentence_translation_batch_from_provider(
+        provider,
+        api_key,
+        model,
+        units,
+        source_language,
+        target_language,
+    )
+
+
+def process_document_work(instruction: str, content: str) -> str:
+    """
+    Applies an AI instruction to the provided Markdown document.
+    """
+    if not (content or "").strip() or not (instruction or "").strip():
+        return content
+
+    system_prompt = (
+        "You are an expert Markdown document editor. You will receive an instruction "
+        "and the current content of a Markdown document. Apply the instruction to the content. "
+        "Return ONLY the modified Markdown content. Do not include greetings, explanations, "
+        "or markdown code block wrappers (```markdown) unless they are part of the document itself."
+    )
+
+    user_prompt = f"Instruction: {instruction}\n\nDocument:\n{content}"
+
+    return request_work_response(system_prompt, user_prompt)
+
+
+def request_work_response(system_prompt: str, user_prompt: str) -> str:
+    """Run a Work prompt through the selected provider."""
+
+    provider = _get_current_ai_provider()
+    api_key, _key_slot, env_var = _get_ai_api_key_for_provider(provider)
+    if provider != "local" and not api_key:
+        raise TranslationConfigError(
+            "AI work panel requires a configured provider API key.",
+            provider_name=provider,
+            env_var=env_var,
+        )
+
+    model = _get_ai_model_for_request(provider, api_key)
+    base_url = _get_ai_base_url(provider)
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    if provider == "anthropic":
+        headers["anthropic-version"] = "2023-06-01"
+        response = _post_with_retry(
+            f"{base_url}/messages",
+            headers=headers,
+            payload={
+                "model": model,
+                "max_tokens": 4096,
+                "system": system_prompt,
+                "messages": [{"role": "user", "content": user_prompt}],
+            },
+        )
+        result_text = _extract_anthropic_text(response.json()).strip()
+    else:
+        response = _post_with_retry(
+            f"{base_url}/chat/completions",
+            headers=headers,
+            payload={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            },
+        )
+        result_text = _extract_openai_compatible_text(response.json()).strip()
+
+    if not result_text:
+        raise RuntimeError("AI provider returned an empty response.")
+    return result_text

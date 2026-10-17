@@ -1,7 +1,9 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useLayoutEffect } from "react";
 import { AI, type AgentChatPayload, type AgentResponse } from "@/lib/api";
+import { splitTextIntoTranslationUnits } from "@/lib/translation-units.mjs";
+import { createDocumentRequestGuard } from "@/lib/work-result-guard.mjs";
 
 export type ChatMessage = {
   id: string;
@@ -25,62 +27,6 @@ export type TranslationProgress = {
 let _msgCounter = 0;
 const msgId = () => `msg-${++_msgCounter}`;
 const SENTENCE_BATCH_CHAR_LIMIT = 3000;
-const SENTENCE_END_CHARS = ".!?。！？";
-
-function splitTextIntoTranslationUnits(content: string) {
-  const text = content.trim();
-  if (!text) return [];
-  const units: string[] = [];
-  let buffer = "";
-  let inCodeBlock = false;
-
-  const flush = () => {
-    const unit = buffer.trim();
-    if (unit) units.push(unit);
-    buffer = "";
-  };
-
-  const lines = text.split(/\r?\n/);
-  lines.forEach((line, lineIndex) => {
-    const stripped = line.trim();
-    if (stripped.startsWith("```")) {
-      if (!inCodeBlock) {
-        flush();
-        buffer = line;
-        inCodeBlock = true;
-      } else {
-        buffer += `\n${line}`;
-        flush();
-        inCodeBlock = false;
-      }
-      return;
-    }
-    if (inCodeBlock) {
-      buffer += `${buffer ? "\n" : ""}${line}`;
-      return;
-    }
-    if (!stripped) {
-      flush();
-      return;
-    }
-    if (/^(#{1,6}\s|>\s|[-*+]\s|\d+\.\s)/.test(stripped)) {
-      flush();
-      units.push(line);
-      return;
-    }
-    for (let index = 0; index < line.length; index += 1) {
-      const char = line[index];
-      const nextChar = line[index + 1] ?? "";
-      buffer += char;
-      if (SENTENCE_END_CHARS.includes(char) && ["", " ", "\t", "\"", "'", ")", "]"].includes(nextChar)) {
-        flush();
-      }
-    }
-    if (lineIndex < lines.length - 1 && buffer) buffer += " ";
-  });
-  flush();
-  return units;
-}
 
 function batchTranslationUnits(units: string[]) {
   const batches: string[][] = [];
@@ -99,11 +45,22 @@ function batchTranslationUnits(units: string[]) {
   return batches;
 }
 
-export function useAIChat() {
+export function useAIChat(documentId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastOperation, setLastOperation] = useState<"chat" | "translation" | null>(null);
   const translationAbortRef = useRef<AbortController | null>(null);
+  const requestGuard = useRef(createDocumentRequestGuard(documentId));
+
+  useLayoutEffect(() => {
+    if (!requestGuard.current.setDocument(documentId)) return;
+    translationAbortRef.current?.abort();
+    translationAbortRef.current = null;
+    setMessages([]);
+    setLoading(false);
+    setError(null);
+  }, [documentId]);
 
   const sendMessage = useCallback(
     async (
@@ -114,6 +71,8 @@ export function useAIChat() {
     ) => {
       if (!userMessage.trim()) return;
 
+      setLastOperation("chat");
+      const request = requestGuard.current.issue();
       const userMsg: ChatMessage = { id: msgId(), role: "user", content: userMessage };
       setMessages((prev) => [...prev, userMsg]);
       setLoading(true);
@@ -131,6 +90,7 @@ export function useAIChat() {
 
       try {
         const result = await AI.chat(payload);
+        if (!requestGuard.current.isCurrent(request)) return;
         const assistantMsg: ChatMessage = {
           id: msgId(),
           role: "assistant",
@@ -142,9 +102,11 @@ export function useAIChat() {
         setMessages((prev) => [...prev, assistantMsg]);
         return result;
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        if (requestGuard.current.isCurrent(request)) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
       } finally {
-        setLoading(false);
+        if (requestGuard.current.isCurrent(request)) setLoading(false);
       }
     },
     [messages]
@@ -154,31 +116,25 @@ export function useAIChat() {
     async (
       content: string,
       sourceLang: string,
-      targetLang: string
+      targetLang: string,
+      prepare?: () => Promise<void>
     ): Promise<string | null> => {
+      setLastOperation("translation");
+      const request = requestGuard.current.issue();
       setLoading(true);
       setError(null);
-      const userMsg: ChatMessage = {
-        id: msgId(),
-        role: "user",
-        content: `Translate ${sourceLang === "auto" ? "" : `from ${sourceLang} `}to ${targetLang}:\n\n${content.slice(0, 120)}${content.length > 120 ? "…" : ""}`,
-      };
-      setMessages((prev) => [...prev, userMsg]);
       try {
+        if (prepare) await prepare();
         const result = await AI.translate(content, sourceLang, targetLang);
-        const assistantMsg: ChatMessage = {
-          id: msgId(),
-          role: "assistant",
-          content: `Translation complete (→ ${targetLang}).`,
-          proposedAction: { type: "replace_document", content: result.translated, reason: "translated" },
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
+        if (!requestGuard.current.isCurrent(request)) return null;
         return result.translated;
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        if (requestGuard.current.isCurrent(request)) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
         return null;
       } finally {
-        setLoading(false);
+        if (requestGuard.current.isCurrent(request)) setLoading(false);
       }
     },
     []
@@ -189,25 +145,23 @@ export function useAIChat() {
       content: string,
       sourceLang: string,
       targetLang: string,
-      onProgress?: (progress: TranslationProgress) => void
+      onProgress?: (progress: TranslationProgress) => void,
+      prepare?: () => Promise<void>
     ): Promise<{ translated: string; pairs: TranslationPair[] } | null> => {
+      setLastOperation("translation");
+      const request = requestGuard.current.issue();
       setLoading(true);
       setError(null);
       translationAbortRef.current?.abort();
       const abortController = new AbortController();
       translationAbortRef.current = abortController;
-      const userMsg: ChatMessage = {
-        id: msgId(),
-        role: "user",
-        content: `Translate sentence by sentence ${sourceLang === "auto" ? "" : `from ${sourceLang} `}to ${targetLang}:\n\n${content.slice(0, 120)}${content.length > 120 ? "…" : ""}`,
-      };
-      setMessages((prev) => [...prev, userMsg]);
+      const pairs: TranslationPair[] = [];
       try {
+        if (prepare) await prepare();
         const batches = batchTranslationUnits(splitTextIntoTranslationUnits(content));
         onProgress?.({ currentBatch: 0, totalBatches: batches.length });
-        const pairs: TranslationPair[] = [];
         for (let index = 0; index < batches.length; index += 1) {
-          if (abortController.signal.aborted) break;
+          if (abortController.signal.aborted || !requestGuard.current.isCurrent(request)) break;
           onProgress?.({ currentBatch: index + 1, totalBatches: batches.length });
           let result: { pairs: TranslationPair[] };
           try {
@@ -221,33 +175,31 @@ export function useAIChat() {
             if (abortController.signal.aborted) break;
             throw err;
           }
+          if (!requestGuard.current.isCurrent(request)) return null;
           pairs.push(...result.pairs);
         }
-        const stopped = abortController.signal.aborted;
+        if (!requestGuard.current.isCurrent(request)) return null;
         const result = {
           pairs,
           translated: pairs.map((pair) => pair.translated).join("\n\n"),
         };
-        const assistantMsg: ChatMessage = {
-          id: msgId(),
-          role: "assistant",
-          content: stopped
-            ? `Sentence-by-sentence translation stopped (${pairs.length} pair${pairs.length === 1 ? "" : "s"} translated).`
-            : `Sentence-by-sentence translation complete (→ ${targetLang}).`,
-          proposedAction: { type: "replace_document", content: result.translated, reason: "translated_sentences" },
-        };
-        if (pairs.length || !stopped) {
-          setMessages((prev) => [...prev, assistantMsg]);
-        }
         return result;
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        if (abortController.signal.aborted) {
+          return {
+            pairs,
+            translated: pairs.map((pair) => pair.translated).join("\n\n"),
+          };
+        }
+        if (requestGuard.current.isCurrent(request)) {
+          setError(err instanceof Error ? err.message : String(err));
+        }
         return null;
       } finally {
         if (translationAbortRef.current === abortController) {
           translationAbortRef.current = null;
         }
-        setLoading(false);
+        if (requestGuard.current.isCurrent(request)) setLoading(false);
       }
     },
     []
@@ -262,5 +214,5 @@ export function useAIChat() {
     setError(null);
   }, []);
 
-  return { messages, loading, error, sendMessage, translate, translateSentences, cancelTranslation, clearHistory };
+  return { messages, loading, error, lastOperation, sendMessage, translate, translateSentences, cancelTranslation, clearHistory };
 }

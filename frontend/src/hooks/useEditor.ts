@@ -9,13 +9,25 @@
  */
 
 import { useState, useCallback, useRef } from "react";
-import { Files, Markdown, Export, type ExportPayload, type WordCountResult } from "@/lib/api";
-import { needsConversion } from "@/lib/supportedFormats";
+import { Files, Markdown, Export, type ExportPayload, type ProjectWorkChange, type WordCountResult } from "@/lib/api";
+import { isSupportedFile, needsConversion } from "@/lib/supportedFormats";
+import { resolveTabClose } from "@/lib/tabLifecycle.mjs";
+import { settleSavedTab } from "@/lib/save-settle.mjs";
+import { parentDirOf, resolvePreviewBaseDir } from "@/lib/preview-base-dir.mjs";
+import { createLatestRequestGuard } from "@/lib/latest-request.mjs";
 
 export type Tab = {
   id: string;
   label: string;       // Display name (filename)
   filePath: string | null;
+  /** Original path for a converted document that is not yet a Markdown file. */
+  sourceFilePath?: string;
+  /**
+   * Folder relative image paths resolve against. Normally the parent of
+   * `filePath`, but a document converted on open (html/pdf/docx) has no
+   * `filePath` yet still needs the folder it came from.
+   */
+  previewBaseDir?: string;
   browserHandle?: FileSystemFileHandle | null;
   content: string;
   dirty: boolean;
@@ -32,9 +44,18 @@ function makeTab(
   label = "Untitled",
   content = "",
   filePath: string | null = null,
-  browserHandle: FileSystemFileHandle | null = null
+  browserHandle: FileSystemFileHandle | null = null,
+  previewBaseDir?: string
 ): Tab {
-  return { id, label, content, filePath, browserHandle, dirty: false };
+  return {
+    id,
+    label,
+    content,
+    filePath,
+    previewBaseDir: previewBaseDir ?? parentDirOf(filePath),
+    browserHandle,
+    dirty: false,
+  };
 }
 
 let _tabCounter = 0;
@@ -49,32 +70,52 @@ export function useEditor() {
   const [recentFiles, setRecentFiles] = useState<string[]>([]);
   const [wordCount, setWordCount] = useState<WordCountResult | null>(null);
   const [darkMode, setDarkMode] = useState(false);
-  const [fontSize, setFontSize] = useState(14);
+  const [fontSize, setFontSize] = useState(24);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openingFilePathsRef = useRef(new Set<string>());
+  // Renders and word counts are HTTP requests that can finish out of order, so
+  // each channel only accepts the response belonging to its newest request.
+  const previewGuardRef = useRef(createLatestRequestGuard());
+  const wordCountGuardRef = useRef(createLatestRequestGuard());
 
   // ── derived state ──────────────────────────────────────────────────────────
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
 
-  // ── helpers ────────────────────────────────────────────────────────────────
-  const updateTab = useCallback((id: string, patch: Partial<Tab>) => {
-    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-  }, []);
-
   // ── preview refresh ────────────────────────────────────────────────────────
   const refreshPreview = useCallback(
     (content: string, baseDirOverride?: string) => {
-      const baseDir = baseDirOverride ?? (activeTab.filePath ? activeTab.filePath.replace(/[^/\\]+$/, "") : undefined);
+      const baseDir = resolvePreviewBaseDir(
+        baseDirOverride,
+        activeTab.previewBaseDir,
+        activeTab.filePath
+      );
+      // Every keystroke issues a render, and a big document renders slower than
+      // a small one, so responses can land out of order. Only the newest
+      // request may write previewHtml, otherwise a slow earlier render can
+      // repaint text the user has since deleted.
+      const renderToken = previewGuardRef.current.issue();
       Markdown.render({ content, base_dir: baseDir, dark_mode: darkMode, font_size: fontSize })
-        .then(({ html }) => setPreviewHtml(html))
+        .then(({ html }) => {
+          if (previewGuardRef.current.isCurrent(renderToken)) setPreviewHtml(html);
+        })
         .catch(console.error);
 
-      // Debounced word-count update
+      // Debounced word-count update, guarded the same way: the debounce limits
+      // how often a request starts, not how long one takes.
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      // Issue before scheduling the debounce. A tab switch can supersede this
+      // token before the timer runs, preventing an old document's delayed
+      // count from being applied in the tab that replaced it.
+      const countToken = wordCountGuardRef.current.issue();
       debounceRef.current = setTimeout(() => {
-        Markdown.wordCount(content).then(setWordCount).catch(console.error);
+        Markdown.wordCount(content)
+          .then((stats) => {
+            if (wordCountGuardRef.current.isCurrent(countToken)) setWordCount(stats);
+          })
+          .catch(console.error);
       }, 400);
     },
-    [activeTab.filePath, darkMode, fontSize]
+    [activeTab.previewBaseDir, activeTab.filePath, darkMode, fontSize]
   );
 
   // ── content change ─────────────────────────────────────────────────────────
@@ -98,34 +139,36 @@ export function useEditor() {
 
   // ── file ops ───────────────────────────────────────────────────────────────
   const openFile = useCallback(
-    async (filePath: string) => {
-      if (needsConversion(filePath)) {
-        try {
-          const { markdown } = await Files.convertToMarkdown({ path: filePath });
-          const label = convertedMarkdownLabel(filePath);
-          const id = nextTabId();
-          const newTab = { ...makeTab(id, label, markdown, null, null), dirty: true };
-          setTabs((prev) => [...prev, newTab]);
-          setActiveTabId(id);
-          refreshPreview(markdown);
-          Files.addRecent(filePath)
-            .then(({ entries }) => setRecentFiles(entries))
-            .catch(console.error);
-        } catch (err) {
-          console.error("Failed to convert file:", err);
-          throw err;
-        }
-        return;
-      }
-
-      // Check if already open
-      const existing = tabs.find((t) => t.filePath === filePath);
+    async (filePath: string, { convert = true }: { convert?: boolean } = {}) => {
+      const existing = tabs.find(
+        (tab) => tab.filePath === filePath || tab.sourceFilePath === filePath
+      );
       if (existing) {
         setActiveTabId(existing.id);
         refreshPreview(existing.content, filePath);
         return;
       }
+      if (openingFilePathsRef.current.has(filePath)) return;
+      openingFilePathsRef.current.add(filePath);
       try {
+        if (convert && needsConversion(filePath)) {
+          const { markdown } = await Files.convertToMarkdown({ path: filePath });
+          const label = convertedMarkdownLabel(filePath);
+          const id = nextTabId();
+          const newTab = {
+            ...makeTab(id, label, markdown, null, null, parentDirOf(filePath)),
+            sourceFilePath: filePath,
+            dirty: true,
+          };
+          setTabs((prev) => [...prev, newTab]);
+          setActiveTabId(id);
+          refreshPreview(markdown, newTab.previewBaseDir);
+          Files.addRecent(filePath)
+            .then(({ entries }) => setRecentFiles(entries))
+            .catch(console.error);
+          return;
+        }
+
         const { content } = await Files.read(filePath);
         const label = filePath.split(/[/\\]/).pop() ?? filePath;
         const id = nextTabId();
@@ -140,9 +183,40 @@ export function useEditor() {
       } catch (err) {
         console.error("Failed to open file:", err);
         throw err;
+      } finally {
+        openingFilePathsRef.current.delete(filePath);
       }
     },
     [tabs, refreshPreview]
+  );
+
+  const openProjectAsMarkdown = useCallback(
+    async (root: string) => {
+      const collectFiles = async (path: string): Promise<string[]> => {
+        const { entries } = await Files.list(path);
+        const nestedFiles = await Promise.all(
+          entries
+            .filter((entry) => entry.is_dir)
+            .map((entry) => collectFiles(entry.path))
+        );
+        return [
+          ...entries
+            .filter((entry) => !entry.is_dir && isSupportedFile(entry.name))
+            .map((entry) => entry.path),
+          ...nestedFiles.flat(),
+        ];
+      };
+
+      const filePaths = await collectFiles(root);
+      for (const filePath of filePaths) {
+        try {
+          await openFile(filePath);
+        } catch (error) {
+          console.error(`Failed to open ${filePath}:`, error);
+        }
+      }
+    },
+    [openFile]
   );
 
   const openTextAsTab = useCallback(
@@ -168,12 +242,26 @@ export function useEditor() {
       const path = filePath ?? activeTab.filePath;
 
       if (path) {
-        await Files.write(path, activeTab.content);
-        updateTab(activeTabId, {
-          dirty: false,
-          filePath: path,
-          label: path.split(/[/\\]/).pop() ?? path,
-        });
+        // Snapshot what is being written, then compare it against the buffer
+        // after the round trip: anything typed in between is not on disk and
+        // must stay marked dirty.
+        const writtenContent = activeTab.content;
+        await Files.write(path, writtenContent);
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.id === activeTabId
+              ? {
+                  ...t,
+                  ...settleSavedTab({
+                    writtenContent,
+                    currentContent: t.content,
+                    savedPath: path,
+                  }),
+                  previewBaseDir: parentDirOf(path),
+                }
+              : t
+          )
+        );
         Files.addRecent(path)
           .then(({ entries }) => setRecentFiles(entries))
           .catch(console.error);
@@ -193,13 +281,24 @@ export function useEditor() {
         if (!selected) return;
 
         const resolvedPath = Array.isArray(selected) ? selected[0] : selected;
-        await Files.write(resolvedPath, activeTab.content);
-        updateTab(activeTabId, {
-          dirty: false,
-          filePath: resolvedPath,
-          browserHandle: null,
-          label: resolvedPath.split(/[/\\]/).pop() ?? resolvedPath,
-        });
+        const writtenContent = activeTab.content;
+        await Files.write(resolvedPath, writtenContent);
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.id === activeTabId
+              ? {
+                  ...t,
+                  ...settleSavedTab({
+                    writtenContent,
+                    currentContent: t.content,
+                    savedPath: resolvedPath,
+                  }),
+                  previewBaseDir: parentDirOf(resolvedPath),
+                  browserHandle: null,
+                }
+              : t
+          )
+        );
         Files.addRecent(resolvedPath)
           .then(({ entries }) => setRecentFiles(entries))
           .catch(console.error);
@@ -211,7 +310,7 @@ export function useEditor() {
       // No explicit path available and no native save dialog capability.
       return;
     },
-    [activeTab, activeTabId, updateTab]
+    [activeTab, activeTabId]
   );
 
   const newTab = useCallback(() => {
@@ -219,24 +318,48 @@ export function useEditor() {
     setTabs((prev) => [...prev, makeTab(id)]);
     setActiveTabId(id);
     setPreviewHtml("");
+    // Retire anything still in flight, or a render of the document we just left
+    // would repaint itself into the empty tab.
+    previewGuardRef.current.supersede();
+    wordCountGuardRef.current.supersede();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = null;
   }, []);
 
   const closeTab = useCallback(
     (id: string) => {
-      setTabs((prev) => {
-        const next = prev.filter((t) => t.id !== id);
-        if (next.length === 0) {
-          const fresh = makeTab(nextTabId());
-          setActiveTabId(fresh.id);
-          return [fresh];
-        }
-        if (id === activeTabId) {
-          setActiveTabId(next[next.length - 1].id);
-        }
-        return next;
-      });
+      const { remaining, nextActiveTabId, previewTab } = resolveTabClose(tabs, activeTabId, id);
+      // Closing the active tab retires whatever it had in flight, so a response
+      // for the document being closed cannot repaint over the tab that takes its
+      // place.
+      if (id === activeTabId) {
+        previewGuardRef.current.supersede();
+        wordCountGuardRef.current.supersede();
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      if (remaining.length === 0) {
+        // Closing the last tab leaves a fresh empty tab behind, so the preview
+        // and word count of the document that was just closed must not linger.
+        const fresh = makeTab(nextTabId());
+        setTabs([fresh]);
+        setActiveTabId(fresh.id);
+        setPreviewHtml("");
+        setWordCount(null);
+        return;
+      }
+      setTabs(remaining);
+      if (nextActiveTabId) setActiveTabId(nextActiveTabId);
+      // The preview pane and the status-bar word count still show the closed
+      // document unless they are refreshed for the tab that became active.
+      if (previewTab) {
+        refreshPreview(
+          previewTab.content,
+          previewTab.previewBaseDir ?? previewTab.filePath ?? undefined
+        );
+      }
     },
-    [activeTabId]
+    [tabs, activeTabId, refreshPreview]
   );
 
   const closeAllTabs = useCallback(() => {
@@ -245,7 +368,28 @@ export function useEditor() {
     setActiveTabId(fresh.id);
     setPreviewHtml("");
     setWordCount(null);
+    previewGuardRef.current.supersede();
+    wordCountGuardRef.current.supersede();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = null;
   }, []);
+
+  const applyProjectChanges = useCallback((changes: ProjectWorkChange[]) => {
+    setTabs((previous) => {
+      const next = [...previous];
+      for (const change of changes) {
+        const index = next.findIndex((tab) => tab.filePath === change.file_path);
+        if (index >= 0) {
+          next[index] = { ...next[index], content: change.content, dirty: true };
+        } else {
+          next.push({ ...makeTab(nextTabId(), change.path, change.content, change.file_path), dirty: true });
+        }
+      }
+      return next;
+    });
+    const activeChange = changes.find((change) => change.file_path === activeTab.filePath);
+    if (activeChange) refreshPreview(activeChange.content, activeChange.file_path);
+  }, [activeTab.filePath, refreshPreview]);
 
   // ── recent files ───────────────────────────────────────────────────────────
   const loadRecentFiles = useCallback(async () => {
@@ -284,11 +428,13 @@ export function useEditor() {
     setFontSize,
     handleContentChange,
     openFile,
+    openProjectAsMarkdown,
     openTextAsTab,
     saveFile,
     newTab,
     closeTab,
     closeAllTabs,
+    applyProjectChanges,
     loadRecentFiles,
     refreshPreview,
     exportAs,

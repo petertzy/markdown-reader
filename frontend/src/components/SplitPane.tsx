@@ -5,8 +5,7 @@ import React, { useState, useCallback, useRef, useEffect } from "react";
 /**
  * SplitPane.tsx
  * =============
- * A resizable split-pane container with toggle buttons to expand
- * either side to full width.
+ * A resizable split-pane container.
  */
 
 interface SplitPaneProps {
@@ -113,67 +112,6 @@ export default function SplitPane({
         
         {/* Grabber Handle */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-6 rounded-full bg-gray-300 dark:bg-gray-600 group-hover:bg-blue-400 dark:group-hover:bg-blue-600 transition-colors" />
-
-        {/* Action Buttons */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col gap-2.5 z-40 opacity-0 group-hover:opacity-100 transition-all duration-200">
-          {/* Full Editor Button */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setSplitValue(100);
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            className={`w-8 h-8 flex items-center justify-center rounded-full bg-white dark:bg-[#333] border shadow-lg hover:scale-110 active:scale-95 transition-all pointer-events-auto ${
-              split > 99 
-                ? "border-blue-500 text-blue-500 cursor-default" 
-                : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/40"
-            }`}
-            title="Full width editor"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="9" y1="3" x2="9" y2="21"></line>
-            </svg>
-          </button>
-
-          {/* Middle / Split Button */}
-          {(split < 48 || split > 52) && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setSplitValue(50);
-              }}
-              onMouseDown={(e) => e.stopPropagation()}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-white dark:bg-[#333] border border-gray-300 dark:border-gray-600 shadow-lg hover:bg-blue-50 dark:hover:bg-blue-900/40 hover:scale-110 active:scale-95 transition-all text-gray-600 dark:text-gray-300 pointer-events-auto"
-              title="Balanced split view"
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="12" y1="3" x2="12" y2="21"></line>
-              </svg>
-            </button>
-          )}
-
-          {/* Full Preview Button */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setSplitValue(0);
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            className={`w-8 h-8 flex items-center justify-center rounded-full bg-white dark:bg-[#333] border shadow-lg hover:scale-110 active:scale-95 transition-all pointer-events-auto ${
-              split < 1 
-                ? "border-blue-500 text-blue-500 cursor-default" 
-                : "border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900/40"
-            }`}
-            title="Full width preview"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-              <line x1="15" y1="3" x2="15" y2="21"></line>
-            </svg>
-          </button>
-        </div>
       </div>
 
       {/* Right Pane (Preview) */}

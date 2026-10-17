@@ -30,6 +30,12 @@ logger = logging.getLogger(__name__)
 
 # Supported note file extensions
 NOTE_EXTENSIONS = frozenset({".md", ".markdown", ".txt"})
+
+# Notes are commonly authored or re-saved on Windows, which leaves a UTF-8 BOM.
+# "utf-8-sig" strips it when present and behaves identically to "utf-8" when it
+# is not. Without this the BOM sits in front of line 1 and breaks both the
+# frontmatter "---" check and the first-heading match.
+NOTE_READ_ENCODING = "utf-8-sig"
 MAX_KNOWLEDGE_TOP_K = 20
 
 # Directories to skip when scanning note vaults
@@ -236,25 +242,110 @@ def _init_db_schema(con: sqlite3.Connection) -> None:
 
 # ── Document Parsing & Chunking ───────────────────────────────────────────────
 
+_FRONTMATTER_DELIMITER = "---"
+
+
+def _is_frontmatter_delimiter(line: str) -> bool:
+    """Return whether a line is a bare ``---`` frontmatter delimiter.
+
+    ``rstrip`` accepts harmless trailing whitespace, including the ``\\r`` from
+    Windows ``\\r\\n`` endings, so Windows-authored notes still split. A longer
+    run is *not* a delimiter:
+    ``----`` is a thematic break, and ``--- text`` is a paragraph.
+    """
+    return line.rstrip() == _FRONTMATTER_DELIMITER
+
+
+def _split_frontmatter(text: str) -> tuple[str, str] | None:
+    """Split a leading YAML frontmatter block off a note.
+
+    Returns ``(frontmatter, remainder)``, or ``None`` when the note does not open
+    with a complete frontmatter block.
+
+    Both delimiters have to be a line of their own. Searching for the next run of
+    dashes anywhere in the text also matches one in the middle of a line, which
+    ends the block early: the rest of the metadata is then treated as body text
+    and prepended to the first indexed chunk.
+    """
+    lines = text.split("\n")
+    if not lines or not _is_frontmatter_delimiter(lines[0]):
+        return None
+    for index in range(1, len(lines)):
+        if _is_frontmatter_delimiter(lines[index]):
+            return "\n".join(lines[1:index]), "\n".join(lines[index + 1 :])
+    return None
+
+
+def _markdown_fence(
+    line: str, active: tuple[str, int] | None = None
+) -> tuple[str, int] | None:
+    stripped = line.strip()
+    if not stripped or stripped[0] not in "`~":
+        return None
+    marker = stripped[0]
+    length = len(stripped) - len(stripped.lstrip(marker))
+    if length < 3:
+        return None
+    if active is None:
+        return marker, length
+    if marker != active[0] or length < active[1] or stripped[length:].strip():
+        return None
+    return marker, length
+
+
+def _split_paragraphs(markdown: str) -> list[str]:
+    """Split *markdown* on blank lines while keeping fenced blocks whole.
+
+    A blank line between prose paragraphs separates them, but a blank line
+    inside a fenced code block is part of the code. Splitting there would
+    straddle the fence across chunks and leave one chunk with an orphaned
+    opener and the next with a stray closer. The same ``_markdown_fence``
+    rules used by the section scan apply here, so the two always agree.
+    """
+    paragraphs: list[str] = []
+    current: list[str] = []
+    active_fence: tuple[str, int] | None = None
+    for line in markdown.split("\n"):
+        fence = _markdown_fence(line, active_fence)
+        if fence:
+            active_fence = None if active_fence else fence
+        if not line.strip() and active_fence is None:
+            if current:
+                paragraphs.append("\n".join(current))
+                current = []
+        else:
+            current.append(line)
+    if current:
+        paragraphs.append("\n".join(current))
+    return paragraphs
+
 
 def extract_note_title(content: str, fallback_filename: str) -> str:
     """Extract a descriptive note title from frontmatter, first # heading, or filename."""
     # 1. Check YAML frontmatter: title: "..."
-    if content.startswith("---"):
-        end_idx = content.find("---", 3)
-        if end_idx != -1:
-            frontmatter = content[3:end_idx]
-            match = re.search(
-                r"^title:\s*[\"']?(.*?)[\"']?\s*$",
-                frontmatter,
-                re.MULTILINE | re.IGNORECASE,
-            )
-            if match and match.group(1).strip():
-                return match.group(1).strip()
+    frontmatter_split = _split_frontmatter(content)
+    if frontmatter_split is not None:
+        frontmatter = frontmatter_split[0]
+        match = re.search(
+            r"^title:\s*[\"']?(.*?)[\"']?\s*$",
+            frontmatter,
+            re.MULTILINE | re.IGNORECASE,
+        )
+        if match and match.group(1).strip():
+            return match.group(1).strip()
 
-    # 2. Check first Markdown heading
+    # 2. Check first Markdown heading, ignoring anything inside a fenced code
+    #    block (a shell/YAML comment such as "# Install deps" is not a heading).
+    active_fence: tuple[str, int] | None = None
     for line in content.splitlines():
-        line = line.strip()
+        fence = _markdown_fence(line, active_fence)
+        if fence:
+            active_fence = None if active_fence else fence
+            continue
+        if active_fence:
+            continue
+        # A '#' that starts the line is a heading; an indented '#' (four
+        # spaces) is an indented code block, exactly as the renderer treats it.
         if line.startswith("# "):
             title = line[2:].strip()
             if title:
@@ -277,7 +368,7 @@ def chunk_markdown_document(
 
     Preserves heading context for each chunk (e.g. "Section > Subsection").
     """
-    text = content.strip()
+    text = content.strip("\n").rstrip()
     if not text:
         return []
 
@@ -285,10 +376,9 @@ def chunk_markdown_document(
 
     # Strip YAML frontmatter if present for chunking
     body = text
-    if body.startswith("---"):
-        end_idx = body.find("---", 3)
-        if end_idx != -1:
-            body = body[end_idx + 3 :].strip()
+    frontmatter_split = _split_frontmatter(body)
+    if frontmatter_split is not None:
+        body = frontmatter_split[1].strip("\n").rstrip()
 
     lines = body.splitlines()
     sections: list[tuple[str, list[str]]] = []
@@ -296,9 +386,21 @@ def chunk_markdown_document(
     heading_stack: list[tuple[int, str]] = []
     current_lines: list[str] = []
 
+    active_fence: tuple[str, int] | None = None
     for line in lines:
-        stripped = line.strip()
-        heading_match = re.match(r"^(#{1,6})\s+(.+)$", stripped)
+        fence = _markdown_fence(line, active_fence)
+        if fence:
+            # A fence marker is content, never a section boundary, and the lines
+            # it wraps must not be scanned for headings.
+            active_fence = None if active_fence else fence
+            current_lines.append(line)
+            continue
+        if active_fence:
+            current_lines.append(line)
+            continue
+        # Match the raw line, not its stripped form: a '#' that is indented by
+        # four spaces opens an indented code block, not a heading.
+        heading_match = re.match(r"^(#{1,6})\s+(.+)$", line)
         if heading_match:
             if current_lines:
                 sections.append((current_section, current_lines))
@@ -320,7 +422,7 @@ def chunk_markdown_document(
     chunk_index = 0
 
     for section_name, sec_lines in sections:
-        sec_text = "\n".join(sec_lines).strip()
+        sec_text = "\n".join(sec_lines).strip("\n").rstrip()
         if not sec_text:
             continue
 
@@ -339,13 +441,14 @@ def chunk_markdown_document(
             chunk_index += 1
             continue
 
-        # Split larger section by paragraphs
-        paragraphs = re.split(r"\n\s*\n", sec_text)
+        # Split larger section by paragraphs. Blank lines inside a fenced
+        # code block are code, not paragraph boundaries.
+        paragraphs = _split_paragraphs(sec_text)
         current_chunk_parts: list[str] = []
         current_len = 0
 
         for para in paragraphs:
-            para = para.strip()
+            para = para.strip("\n").rstrip()
             if not para:
                 continue
 
@@ -475,9 +578,16 @@ def index_knowledge_base(
                         files_skipped += 1
                         continue
 
-                # Read and process note
+                # Read and process note.
+                # "utf-8-sig" rather than "utf-8": a BOM (U+FEFF) is category Cf,
+                # not whitespace, so str.strip() does not remove it. It would
+                # sit in front of the first line and break both the frontmatter
+                # "---" check and the heading match, silently falling back to the
+                # filename and injecting raw frontmatter into the chunk text.
                 try:
-                    content = note_path.read_text(encoding="utf-8", errors="replace")
+                    content = note_path.read_text(
+                        encoding=NOTE_READ_ENCODING, errors="replace"
+                    )
                 except Exception as read_err:
                     logger.warning(
                         "Could not read note file %s: %s", full_path_str, read_err
@@ -789,7 +899,7 @@ def build_knowledge_context_for_prompt(
         title = ch.get("title", rel_path)
         section = ch.get("section", "")
         sec_header = f" > {section}" if section and section != "Overview" else ""
-        content = ch.get("content", "").strip()
+        content = ch.get("content", "").strip("\n")
 
         block = f"--- [Source {i}: {rel_path} ({title}{sec_header})] ---\n{content}\n"
         if total_len + len(block) > max_chars and i > 1:

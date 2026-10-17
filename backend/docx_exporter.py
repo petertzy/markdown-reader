@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import base64
 import os
 import re
 from html import unescape
 from html.parser import HTMLParser
 from io import BytesIO
 from typing import Any
+from urllib.parse import unquote, unquote_to_bytes
 
 import requests
 from docx import Document
@@ -23,6 +25,17 @@ def _resolve_image_source(src: str, base_dir: str | None) -> tuple[str, bytes | 
     src = src.strip()
     if src.startswith("file://"):
         src = src[7:]
+    if src.lower().startswith("data:"):
+        # Inline images ("data:image/png;base64,...") have no path to open.
+        # Feed the decoded payload straight to add_picture, or the raw base64
+        # blob would be exported as the paragraph's literal text.
+        try:
+            header, _, payload = src.partition(",")
+            if header.lower().endswith(";base64"):
+                return src, base64.b64decode(payload)
+            return src, unquote_to_bytes(payload)
+        except Exception:
+            return src, None
     if re.match(r"^https?://", src, re.IGNORECASE):
         try:
             response = requests.get(src, timeout=15, allow_redirects=True)
@@ -30,9 +43,18 @@ def _resolve_image_source(src: str, base_dir: str | None) -> tuple[str, bytes | 
             return src, response.content
         except Exception:
             return src, None
-    candidates = [src]
-    if base_dir and not os.path.isabs(src):
-        candidates.insert(0, os.path.abspath(os.path.join(base_dir, src)))
+    # A Markdown image destination is a URL, so a space in the filename reaches
+    # us percent-encoded ("My%20Pic.png"). Decode it before touching the disk,
+    # or the picture is reported missing and replaced by its "[path]" fallback.
+    # The raw form stays as a fallback for a filename that holds a literal
+    # percent sequence.
+    decoded = unquote(src)
+    local_paths = [decoded] if decoded == src else [decoded, src]
+    candidates = []
+    for local_path in local_paths:
+        if base_dir and not os.path.isabs(local_path):
+            candidates.append(os.path.abspath(os.path.join(base_dir, local_path)))
+        candidates.append(local_path)
     for candidate in candidates:
         try:
             with open(candidate, "rb") as file_obj:
@@ -72,6 +94,11 @@ def _add_hyperlink(paragraph, text: str, url: str, style: dict[str, Any]) -> Non
     run.append(run_properties)
     text_element = OxmlElement("w:t")
     text_element.text = text
+    # Mirror python-docx's CT_R.add_t: preserve leading/trailing whitespace
+    # in link text, or LibreOffice/converters trim it while the identical
+    # text in a plain run is kept.
+    if len(text.strip()) < len(text):
+        text_element.set(qn("xml:space"), "preserve")
     run.append(text_element)
     hyperlink.append(run)
     paragraph._p.append(hyperlink)
@@ -106,6 +133,26 @@ def _shade_run(run, fill: str) -> None:
     _add_shading(properties, fill)
 
 
+def _add_horizontal_rule(paragraph) -> None:
+    """Give *paragraph* a bottom border, Word's horizontal rule.
+
+    Word has no "thematic break" element: a rule is an otherwise empty
+    paragraph whose bottom edge is drawn as a border. The border run must go
+    through the paragraph properties (``w:pPr/w:pBdr``) rather than through a
+    run, because a run-level border outlines the glyphs and an empty run would
+    draw nothing at all.
+    """
+    properties = paragraph._p.get_or_add_pPr()
+    borders = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+    bottom.set(qn("w:val"), "single")
+    bottom.set(qn("w:sz"), "6")
+    bottom.set(qn("w:space"), "1")
+    bottom.set(qn("w:color"), "auto")
+    borders.append(bottom)
+    properties.append(borders)
+
+
 class _DocxHtmlParser(HTMLParser):
     def __init__(self, document: Document, base_dir: str | None = None):
         super().__init__(convert_charrefs=False)
@@ -116,6 +163,9 @@ class _DocxHtmlParser(HTMLParser):
         self.current_row = None
         self.current_cell = None
         self.current_list_style: list[str] = []
+        # Open ``<li>`` elements, innermost last. Each entry is
+        # ``[paragraph style, paragraph opened for the item, claimed]``.
+        self.current_list_items: list[list[Any]] = []
         self.current_style: dict[str, Any] = {
             "bold": False,
             "italic": False,
@@ -137,7 +187,23 @@ class _DocxHtmlParser(HTMLParser):
             self.current_style["pre"] = True
             self.current_paragraph = cell.paragraphs[0]
         elif tag in ("p", "blockquote"):
-            self.current_paragraph = self.document.add_paragraph()
+            item = self.current_list_items[-1] if self.current_list_items else None
+            if item is not None and not item[2] and self.current_paragraph is item[1]:
+                # A loose list wraps each item in <p>. Reuse the paragraph the
+                # <li> opened so the bullet is not orphaned. Only reuse that
+                # exact paragraph: another block (such as a heading) may have
+                # appeared before the first <p>.
+                item[2] = True
+            elif tag == "p":
+                # Only <p> opens a paragraph. The <blockquote> tag is followed
+                # by <p> for every block it wraps, and creating a paragraph at
+                # the quote itself stranded an empty paragraph (holding only
+                # the inter-tag whitespace) before the quoted text. When a
+                # quote is the first block of a list item, the reuse check
+                # above still reserves the item's paragraph.
+                self.current_paragraph = self.document.add_paragraph(
+                    style=item[0] if item is not None else None
+                )
         elif tag == "code":
             self.current_style["code"] = True
         elif tag in ("strong", "b"):
@@ -154,8 +220,17 @@ class _DocxHtmlParser(HTMLParser):
         elif tag == "li":
             style = self.current_list_style[-1] if self.current_list_style else None
             self.current_paragraph = self.document.add_paragraph(style=style)
+            self.current_list_items.append([style, self.current_paragraph, False])
         elif tag == "br" and self.current_paragraph is not None:
             self.current_paragraph.add_run().add_break()
+        elif tag == "hr":
+            # ``render_markdown`` emits ``<hr />`` for a thematic break
+            # (``---``). Without a branch the tag was silently dropped, so
+            # every rule vanished from the Word export and the surrounding
+            # text ran together. The rule is its own empty, bordered
+            # paragraph; nothing else may append to it.
+            _add_horizontal_rule(self.document.add_paragraph())
+            self.current_paragraph = None
         elif tag == "img":
             src = attrs_dict.get("src", "")
             if not src:
@@ -184,6 +259,8 @@ class _DocxHtmlParser(HTMLParser):
         if tag in ("h1", "h2", "h3", "h4", "h5", "h6", "p", "blockquote", "li", "pre"):
             if tag == "pre":
                 self.current_style["pre"] = False
+            if tag == "li" and self.current_list_items:
+                self.current_list_items.pop()
             self.current_paragraph = None
         elif tag == "code":
             self.current_style["code"] = False

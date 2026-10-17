@@ -85,6 +85,10 @@ The development helper adds `/opt/homebrew/lib` to
 `libgobject-2.0` and related libraries. If those libraries are missing, PDF
 export falls back to PyMuPDF with simpler layout.
 
+Fuller macOS setup notes are in [docs/PrepareForMacUser.md](./docs/PrepareForMacUser.md).
+
+On Windows, WeasyPrint requires native system libraries (Cairo, Pango) that are not available by default. See [docs/PrepareForWindowsUser.md](./docs/PrepareForWindowsUser.md) for the MSYS2 setup steps.
+
 4. Configure the frontend environment file:
 
 ```bash

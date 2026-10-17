@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Linux system dependencies
         if: matrix.os == 'ubuntu-22.04'
@@ -69,7 +69,7 @@ jobs:
           workspaces: frontend/src-tauri -> target
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
@@ -91,7 +91,7 @@ jobs:
           chmod +x "$dest" || true
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -101,10 +101,52 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Import Apple certificate (macOS opt-in)
+        if: matrix.os == 'macos-14' && secrets.APPLE_CERTIFICATE != ''
+        env:
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          if base64 --help 2>&1 | grep -q -- '--decode'; then
+            printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          else
+            printf '%s' "$APPLE_CERTIFICATE" | base64 -D > certificate.p12
+          fi
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security import certificate.p12 -k build.keychain \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm certificate.p12
+
+      - name: Resolve Apple signing identity
+        id: cert
+        if: matrix.os == 'macos-14' && secrets.APPLE_CERTIFICATE != ''
+        run: |
+          CERT_ID=$(security find-identity -v -p codesigning build.keychain | \
+            awk -F'"' '/Developer ID Application/ { print $2; exit }')
+          if [ -z "$CERT_ID" ]; then
+            echo "::error::No Developer ID Application identity was imported"
+            exit 1
+          fi
+          echo "cert_id=$CERT_ID" >> "$GITHUB_OUTPUT"
+
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS signing & notarization (dormant until secrets are provisioned)
+          APPLE_SIGNING_IDENTITY: ${{ steps.cert.outputs.cert_id }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_PATH: ${{ secrets.APPLE_API_KEY_PATH }}
         with:
           projectPath: frontend
           tagName: ${{ github.ref_name }}
@@ -112,3 +154,39 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.target }}
+
+      - name: Generate release checksums
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          set -o pipefail
+          bundle_dir="frontend/src-tauri/target/${{ matrix.target }}/release/bundle"
+          out="SHA256SUMS-${{ matrix.target }}.txt"
+          : > "$out"
+          find "$bundle_dir" -type f \
+            \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \
+               -o -name '*.msi' -o -name '*.exe' -o -name '*.app.tar.gz' \) -print0 |
+          while IFS= read -r -d '' f; do
+            if command -v sha256sum >/dev/null 2>&1; then
+              sum="$(sha256sum "$f" | cut -d' ' -f1)"
+            else
+              sum="$(shasum -a 256 "$f" | cut -d' ' -f1)"
+            fi
+            printf '%s  %s\n' "$sum" "$(basename "$f")" >> "$out"
+          done
+          if [ ! -s "$out" ]; then
+            echo "::error::No bundle artifacts found in $bundle_dir — refusing to upload an empty checksum file"
+            exit 1
+          fi
+          echo "Generated $out:"
+          cat "$out"
+
+      - name: Upload checksums to release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            "SHA256SUMS-${{ matrix.target }}.txt" \
+            --clobber --repo "${{ github.repository }}"

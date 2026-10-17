@@ -12,7 +12,11 @@ import type Monaco from "monaco-editor";
 
 // Monaco must be loaded client-side only (no SSR)
 const MonacoEditor = dynamic(
-  () => import("@monaco-editor/react").then((m) => m.default),
+  () => import("@monaco-editor/react").then((m) => {
+    // Keep the editor offline and compatible with Tauri's self-only script CSP.
+    m.loader.config({ paths: { vs: "/monaco/vs" } });
+    return m.default;
+  }),
   { ssr: false }
 );
 

@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, type SetStateAction } from "react";
 import { useEditor } from "@/hooks/useEditor";
 import { useAIActions } from "@/hooks/useAIActions";
+import { useProjectWorkspace } from "@/hooks/useProjectWorkspace";
+import { useProjectWork } from "@/hooks/useProjectWork";
 import { useFileIO } from "@/hooks/useFileIO";
 import { usePanels } from "@/hooks/usePanels";
 import { useTauriBackend } from "@/hooks/useTauriBackend";
@@ -14,14 +16,17 @@ import MenuBar from "@/components/MenuBar";
 import EditorWorkspace from "@/components/EditorWorkspace";
 import PreviewPane from "@/components/PreviewPane";
 import SplitPane from "@/components/SplitPane";
-import FocusModePane from "@/components/FocusModePane";
+import FocusModePane, { type FocusEditorHandle } from "@/components/FocusModePane";
 import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
+import ProjectExplorer from "@/components/ProjectExplorer";
 import StatusBar from "@/components/StatusBar";
 import { PANELS } from "@/types/panels";
 
 export default function HomePage() {
   const editor = useEditor();
+  const project = useProjectWorkspace();
+  const projectWork = useProjectWork(editor, project.projectRoot);
   const editorWorkspace = useEditorWorkspace();
   const {
     monacoRef,
@@ -31,15 +36,34 @@ export default function HomePage() {
     reset: resetEditor,
   } = editorWorkspace;
   const [focusMode, setFocusMode] = useState(false);
-  const [showPreview] = useState(true);
-  const { activePanel, togglePanel, setShowAIPanel } = usePanels();
+  const { activePanel, togglePanel, hidePanel, setShowAIPanel } = usePanels();
+  // Focus Mode undo/redo handle (issue #341) — published by FocusModePane.
+  const focusEditorRef = useRef<FocusEditorHandle | null>(null);
   const [aiPanelInitialTab, setAiPanelInitialTab] = useState<AIPanelTab | undefined>();
   const [split, setSplit] = useState(50);
+  const [projectRefreshToken, setProjectRefreshToken] = useState(0);
   const { isDesktopRuntime, backendStatus, backendMessage, showPackagedBackendStatus } = useTauriBackend(editor);
   const fileIO = useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef });
   const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt, executeWork, isWorking } = useAIActions({
     documentId: editor.activeTab.id, documentText: editor.activeTab.content, editorRef: monacoRef, onDocumentChange: editor.handleContentChange,
   });
+  const selectPanel = useCallback((panel: NonNullable<typeof PANELS[keyof typeof PANELS]>) => {
+    togglePanel(panel);
+    setSplit(panel === PANELS.PREVIEW ? 50 : 60);
+  }, [togglePanel]);
+  const openProject = useCallback(async () => {
+    const root = await project.openProject();
+    if (!root) return;
+    hidePanel();
+    setSplit(100);
+    await editor.openProjectAsMarkdown(root);
+  }, [editor, hidePanel, project]);
+  const setShowAIPanelWithLayout = useCallback((action: SetStateAction<boolean>) => {
+    const aiVisible = activePanel === PANELS.AI;
+    const showAI = typeof action === "function" ? action(aiVisible) : action;
+    setShowAIPanel(action);
+    setSplit(showAI ? 60 : 50);
+  }, [activePanel, setShowAIPanel]);
 
   const {
     formatting,
@@ -56,9 +80,13 @@ export default function HomePage() {
     backendStatus,
     monacoRef,
     monacoReady,
-    setShowAIPanel,
+    setShowAIPanel: setShowAIPanelWithLayout,
+    focusEditorRef,
     setAiPanelInitialTab,
     setSplit,
+    onOpenProject: () => { void openProject(); },
+    onFileSaved: () => setProjectRefreshToken((token) => token + 1),
+    onShowPreview: () => selectPanel(PANELS.PREVIEW),
     executeAIPrompt,
     syncSelectedText,
   });
@@ -75,29 +103,32 @@ export default function HomePage() {
       onDragOver={fileIO.handleDragOver} onDrop={fileIO.handleDrop}>
       <input ref={fileIO.fileInputRef} type="file" accept={fileIO.fileInputAccept} className="hidden" onChange={fileIO.handleFileInputChange} />
       <MenuBar groups={menuGroups} shortcuts={shortcuts} />
-      <Toolbar onOpenFile={() => { void fileIO.handleOpenFile(); }} onSaveFile={() => { void handleSaveFile(); }}
+      <Toolbar onOpenFile={() => { void fileIO.handleOpenFile(); }} onOpenProject={() => { void openProject(); }} onSaveFile={() => { void handleSaveFile(); }}
         onExport={fileIO.handleExport} onOpenBrowserPreview={() => { void handleOpenBrowserPreview(); }}
-        onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={togglePanel}
+        onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={selectPanel}
         onToggleFocusMode={() => { setFocusMode((enabled) => !enabled); resetEditor(); }}
         darkMode={editor.darkMode} fontSize={editor.fontSize} onFontSizeChange={editor.setFontSize}
         showFocusPanel={focusMode}
-        backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null} />
+        backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null}
+        lastExportedPath={fileIO.lastExportedPath}
+        onShowInFinder={fileIO.showInFinder}
+      />
       <TabBar tabs={editor.tabs} activeTabId={editor.activeTabId} onSelect={handleTabSelect} onClose={editor.closeTab} onNew={editor.newTab} />
       <div className="flex flex-1 overflow-hidden">
+        {!focusMode && <ProjectExplorer root={project.projectRoot} onOpenFile={(path) => { void editor.openFile(path); }} onOpenProject={() => { void openProject(); }} onCloseProject={project.closeProject} refreshToken={projectRefreshToken} />}
         {focusMode ? <FocusModePane key={`${editor.activeTabId}-${revision}`} value={editor.activeTab.content}
           onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
-          slashCommands={slash.filteredCommands} onSelect={(command) => { void executeSlashCommand(command); }} /> :
-          <SplitPane split={split} onSplitChange={setSplit}
+          slashCommands={slash.filteredCommands} onSelect={(command) => { void executeSlashCommand(command); }}
+          editorRef={focusEditorRef} /> :
+          <SplitPane split={split} onSplitChange={setSplit} minSize={20}
             left={<EditorWorkspace tabId={editor.activeTab.id} value={editor.activeTab.content}
               onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
               revision={revision} monacoRef={monacoRef} onReady={markReady}
               slash={{ isOpen: slash.isOpen, filteredCommands: slash.filteredCommands, selectedIndex: slash.selectedIndex,
                 position: slashMenuPosition,
                 onSelect: (command) => { void executeSlashCommand(command); }, onClose: slash.close }} />}
-            right={showPreview ? <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
-              error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : null} />}
-        {activePanel === PANELS.AI && <AIPanel documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} />}
-        {activePanel === PANELS.CITATION && <CitationPanel onInsert={formatting.insertCitation} />}
+            right={activePanel === PANELS.PREVIEW ? <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
+              error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : activePanel === PANELS.AI ? <AIPanel projectRoot={project.projectRoot} projectWork={projectWork} documentId={editor.activeTab.id} documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} /> : <CitationPanel onInsert={formatting.insertCitation} />} />}
       </div>
       <StatusBar stats={editor.wordCount} filePath={editor.activeTab.filePath} dirty={editor.activeTab.dirty} />
     </div>

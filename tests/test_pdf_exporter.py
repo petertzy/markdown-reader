@@ -1,4 +1,5 @@
 import builtins
+import os
 import sys
 import tempfile
 import types
@@ -129,3 +130,233 @@ class TestPdfExporter(unittest.TestCase):
         # A glyph-only formula catches SVG references silently ignored by MuPDF.
         self.assertTrue(pixmap.alpha)
         self.assertGreater(sum(pixmap.samples[3::4]), 0)
+
+    _WRAPPING_OVERRIDE = (
+        "pre code { white-space: pre-wrap !important; overflow-wrap: anywhere; "
+        "word-break: break-word; }"
+    )
+
+    def _fake_pymupdf(self, captured: dict, doc=None) -> types.ModuleType:
+        """A stand-in for ``fitz`` that records the HTML handed to MuPDF."""
+
+        class FakeDocument:
+            def save(self, output_path):
+                captured["output_path"] = output_path
+
+            def close(self):
+                captured["closed"] = True
+
+        class FakeStory:
+            def __init__(self, *, html):
+                captured["html"] = html
+
+            def write_with_links(self, _rectfn):
+                return doc or FakeDocument()
+
+        fake_fitz = types.ModuleType("fitz")
+        fake_fitz.Story = FakeStory
+        fake_fitz.Rect = lambda *args: args
+        fake_fitz.Identity = None
+        return fake_fitz
+
+    def test_pymupdf_engine_applies_the_pdf_print_stylesheet(self):
+        """The fallback must honour the same overrides weasyprint gets.
+
+        The renderer sets ``white-space: pre`` on ``pre code``, so without the
+        print stylesheet MuPDF cannot break a long code line and shrinks the
+        document until it fits the text column.
+        """
+        from backend.pdf_exporter import _export_pdf_with_pymupdf
+
+        captured: dict = {}
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict(sys.modules, {"fitz": self._fake_pymupdf(captured)}):
+                _export_pdf_with_pymupdf(
+                    render_markdown("```python\nprint(1)\n```"),
+                    f"{tmp_dir}/out.pdf",
+                )
+
+        self.assertIn(self._WRAPPING_OVERRIDE, captured["html"])
+        head_end = captured["html"].lower().find("</head>")
+        self.assertNotEqual(head_end, -1, "renderer markup should carry a <head>")
+        self.assertLess(
+            captured["html"].find("pre code { white-space: pre-wrap"),
+            head_end,
+            "print stylesheet belongs in <head>, before any later stylesheet",
+        )
+
+    def test_pymupdf_engine_applies_the_print_style_to_a_fragment(self):
+        from backend.pdf_exporter import _export_pdf_with_pymupdf
+
+        captured: dict = {}
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict(sys.modules, {"fitz": self._fake_pymupdf(captured)}):
+                _export_pdf_with_pymupdf("<p>fragment</p>", f"{tmp_dir}/out.pdf")
+
+        self.assertIn(self._WRAPPING_OVERRIDE, captured["html"])
+        self.assertTrue(captured["html"].endswith("<p>fragment</p>"))
+
+    def test_pymupdf_engine_closes_the_document_when_saving_fails(self):
+        from backend.pdf_exporter import _export_pdf_with_pymupdf
+
+        class FailingDoc:
+            def save(self, _output_path):
+                raise OSError("no space left on device")
+
+            def close(self):
+                captured["closed"] = True
+
+        captured: dict = {}
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict(
+                sys.modules, {"fitz": self._fake_pymupdf(captured, FailingDoc())}
+            ):
+                with self.assertRaises(OSError):
+                    _export_pdf_with_pymupdf("<p>x</p>", f"{tmp_dir}/out.pdf")
+
+        self.assertTrue(captured.get("closed"), "document leaked when save failed")
+
+    def _fallback_body_glyph_size(self, markdown: str) -> float:
+        """Size of the body glyph in a PDF produced by the fallback engine."""
+        original_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "weasyprint":
+                raise OSError("cannot load library 'libgobject-2.0-0'")
+            return original_import(name, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = f"{tmp_dir}/fallback.pdf"
+            try:
+                builtins.__import__ = fake_import
+                export_markdown_to_pdf(render_markdown(markdown), output_path)
+            finally:
+                builtins.__import__ = original_import
+
+            with fitz.open(output_path) as document:
+                sizes = [
+                    span["size"]
+                    for block in document[0].get_text("dict")["blocks"]
+                    for line in block.get("lines", [])
+                    for span in line["spans"]
+                    if span["text"].startswith("Trailing")
+                ]
+        self.assertTrue(sizes, "body run missing from the generated PDF")
+        return sizes[0]
+
+    # One block per rule the print stylesheet has to supply: the renderer's own
+    # stylesheet resolves each of these to `white-space: pre` or to an
+    # unbreakable run, so MuPDF down-scales the document to fit the column.
+    _UNBREAKABLE_BLOCKS = {
+        "fenced code block": (
+            "```python\nresult = compute(alpha, beta, gamma, delta, epsilon, "
+            "zeta, eta, theta, iota, kappa, lambda, mu)\n```\n"
+        ),
+        "bare pre from raw html": "<pre>" + "bare_pre_line_" * 12 + "</pre>\n",
+        "long url in a link": "See https://example.com/" + "a" * 140 + " now.\n",
+        "inline code span": "`" + "inline_token_" * 14 + "`\n",
+        "long unbroken word": "supercalifragilistic" * 6 + "\n",
+    }
+
+    def test_long_document_paginates_instead_of_shrinking(self):
+        """The fallback engine must paginate, not down-scale, long documents.
+
+        `insert_htmlbox` layed every document out on a single page, so a
+        multi-thousand-word report came back as one page of tiny text. The
+        Story writer opens a fresh A4 page whenever the current one fills up.
+        """
+        original_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "weasyprint":
+                raise OSError("cannot load library 'libgobject-2.0-0'")
+            return original_import(name, *args, **kwargs)
+
+        markdown = "# Long Report\n\n" + "\n\n".join(
+            f"Paragraph {index}: " + ("lorem ipsum dolor sit amet " * 12).strip()
+            for index in range(40)
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            output_path = f"{tmp_dir}/long.pdf"
+            try:
+                builtins.__import__ = fake_import
+                export_markdown_to_pdf(render_markdown(markdown), output_path)
+            finally:
+                builtins.__import__ = original_import
+
+            with fitz.open(output_path) as document:
+                self.assertGreater(
+                    len(document), 1, "long content must span multiple pages"
+                )
+                full_text = "".join(page.get_text() for page in document)
+                for index in range(40):
+                    self.assertIn(f"Paragraph {index}", full_text)
+
+    def test_pymupdf_fallback_does_not_shrink_the_document(self):
+        """No unbreakable block may rescale the whole fallback PDF.
+
+        Every document carries the same body paragraph, so a difference in body
+        glyph size can only mean the engine shrank the document to squeeze the
+        block into the text column.
+        """
+        reference = self._fallback_body_glyph_size(
+            "# Report\n\nSome intro text.\n\nTrailing paragraph.\n"
+        )
+
+        for label, block in self._UNBREAKABLE_BLOCKS.items():
+            with self.subTest(block=label):
+                size = self._fallback_body_glyph_size(
+                    f"# Report\n\nSome intro text.\n\n{block}\nTrailing paragraph.\n"
+                )
+                self.assertAlmostEqual(
+                    size / reference,
+                    1.0,
+                    delta=0.02,
+                    msg=(
+                        f"{label} rescaled the fallback PDF to {size / reference:.1%}"
+                    ),
+                )
+
+    def test_percent_encoded_local_image_source_is_inlined(self):
+        # Markdown image destinations are URLs, so a space is percent-encoded.
+        # The PDF exporter has to decode it before opening the file, or the
+        # picture is silently left out of the generated PDF.
+        from backend.pdf_exporter import _inline_local_images
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            image_path = os.path.join(tmp_dir, "my chart.png")
+            with open(image_path, "wb") as file_obj:
+                file_obj.write(b"\x89PNG\r\n\x1a\n")
+
+            encoded_src = image_path.replace(" ", "%20")
+            inlined = _inline_local_images(f'<img src="file://{encoded_src}">', tmp_dir)
+
+            self.assertIn("data:image/png;base64,", inlined)
+            self.assertNotIn("my%20chart.png", inlined)
+
+    def test_plain_local_image_source_is_still_inlined(self):
+        from backend.pdf_exporter import _inline_local_images
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            image_path = os.path.join(tmp_dir, "plain.png")
+            with open(image_path, "wb") as file_obj:
+                file_obj.write(b"\x89PNG\r\n\x1a\n")
+
+            inlined = _inline_local_images(f'<img src="file://{image_path}">', tmp_dir)
+
+            self.assertIn("data:image/png;base64,", inlined)
+
+    def test_literal_percent_filename_is_still_inlined(self):
+        # A real filename may contain a "%XX"-looking sequence. Resolve the
+        # literal path before falling back to percent-decoding it, so such an
+        # image is not dropped.
+        from backend.pdf_exporter import _inline_local_images
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            image_path = os.path.join(tmp_dir, "50%25off.png")
+            with open(image_path, "wb") as file_obj:
+                file_obj.write(b"\x89PNG\r\n\x1a\n")
+
+            inlined = _inline_local_images(f'<img src="file://{image_path}">', tmp_dir)
+
+            self.assertIn("data:image/png;base64,", inlined)
