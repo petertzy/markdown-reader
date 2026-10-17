@@ -21,6 +21,7 @@ import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
 import ProjectExplorer from "@/components/ProjectExplorer";
 import StatusBar from "@/components/StatusBar";
+import DocumentStats from "@/components/DocumentStats";
 import { PANELS } from "@/types/panels";
 
 export default function HomePage() {
@@ -127,6 +128,7 @@ export default function HomePage() {
             right={activePanel === PANELS.PREVIEW ? <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
               error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : activePanel === PANELS.AI ? <AIPanel projectRoot={project.projectRoot} projectWork={projectWork} documentId={editor.activeTab.id} documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} /> : <CitationPanel onInsert={formatting.insertCitation} />} />}
       </div>
+      <DocumentStats stats={editor.wordCount} className="px-4 py-1 border-t" />
       <StatusBar stats={editor.wordCount} filePath={editor.activeTab.filePath} dirty={editor.activeTab.dirty} />
     </div>
   );
