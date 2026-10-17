@@ -19,6 +19,7 @@ const MAX_FONT_SIZE = 72;
 
 type Props = {
   onOpenFile: () => void;
+  onOpenProject: () => void;
   onSaveFile: () => void;
   onExport: (format: "html" | "pdf" | "docx") => void;
   onOpenBrowserPreview: () => void;
@@ -36,6 +37,7 @@ type Props = {
 
 export default function Toolbar({
   onOpenFile,
+  onOpenProject,
   onSaveFile,
   onExport,
   onOpenBrowserPreview,
@@ -86,6 +88,9 @@ export default function Toolbar({
       {/* File ops */}
       <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onOpenFile} className={buttonClass(backendDisabled)} title="Open file" disabled={backendDisabled}>
         📂 Open
+      </button>
+      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onOpenProject} className={buttonClass(backendDisabled)} title="Open project folder" disabled={backendDisabled}>
+        📁 Project
       </button>
       <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onSaveFile} className={buttonClass(backendDisabled)} title="Save (Ctrl+S)" disabled={backendDisabled}>
         💾 Save
@@ -172,6 +177,15 @@ export default function Toolbar({
         title="Focus Mode"
       >
         🧠 Focus
+      </button>
+      <button
+        onPointerDown={keepEditorFocusedOnPointerDown}
+        onMouseDown={keepEditorFocused}
+        onClick={() => onTogglePanel(PANELS.PREVIEW)}
+        className={`${btnCls} ${activePanel === PANELS.PREVIEW ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
+        title="Preview"
+      >
+        👁 Preview
       </button>
       <button
         onPointerDown={keepEditorFocusedOnPointerDown}

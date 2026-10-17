@@ -202,6 +202,24 @@ export type FileEntry = {
   extension: string;
 };
 
+export type ProjectWorkChange = {
+  path: string;
+  file_path: string;
+  content: string;
+  diff: string;
+};
+
+export type ProjectWorkTask = {
+  id: string;
+  root: string;
+  status: "running" | "review" | "failed";
+  summary: string;
+  steps: number;
+  file_count: number;
+  inspected: string[];
+  changes: ProjectWorkChange[];
+};
+
 export type ConvertToMarkdownPayload = {
   path?: string;
   filename?: string;
@@ -595,6 +613,21 @@ export const AI = {
       },
       LONG_REQUEST_TIMEOUT_MS
     ),
+
+  startProjectWork: (root: string, instruction: string, open_buffers: Record<string, string>) =>
+    apiFetch<ProjectWorkTask>("/api/ai/work/project", {
+      method: "POST",
+      body: JSON.stringify({ root, instruction, open_buffers }),
+    }, LONG_REQUEST_TIMEOUT_MS),
+
+  stepProjectWork: (id: string) =>
+    apiFetch<ProjectWorkTask>(`/api/ai/work/project/${id}/step`, { method: "POST" }, LONG_REQUEST_TIMEOUT_MS),
+
+  validateProjectWork: (id: string) =>
+    apiFetch<ProjectWorkTask>(`/api/ai/work/project/${id}/validate`, { method: "POST" }),
+
+  discardProjectWork: (id: string) =>
+    apiFetch<{ discarded: boolean }>(`/api/ai/work/project/${id}`, { method: "DELETE" }),
 
   getChatHistory: () =>
     apiFetch<{ histories: unknown[] }>("/api/ai/chat/history"),

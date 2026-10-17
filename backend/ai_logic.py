@@ -1742,6 +1742,12 @@ def process_document_work(instruction: str, content: str) -> str:
 
     user_prompt = f"Instruction: {instruction}\n\nDocument:\n{content}"
 
+    return request_work_response(system_prompt, user_prompt)
+
+
+def request_work_response(system_prompt: str, user_prompt: str) -> str:
+    """Run a Work prompt through the selected provider."""
+
     provider = _get_current_ai_provider()
     api_key, _key_slot, env_var = _get_ai_api_key_for_provider(provider)
     if provider != "local" and not api_key:

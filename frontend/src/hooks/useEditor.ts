@@ -9,8 +9,8 @@
  */
 
 import { useState, useCallback, useRef } from "react";
-import { Files, Markdown, Export, type ExportPayload, type WordCountResult } from "@/lib/api";
-import { needsConversion } from "@/lib/supportedFormats";
+import { Files, Markdown, Export, type ExportPayload, type ProjectWorkChange, type WordCountResult } from "@/lib/api";
+import { isSupportedFile, needsConversion } from "@/lib/supportedFormats";
 import { resolveTabClose } from "@/lib/tabLifecycle.mjs";
 import { settleSavedTab } from "@/lib/save-settle.mjs";
 import { parentDirOf, resolvePreviewBaseDir } from "@/lib/preview-base-dir.mjs";
@@ -20,6 +20,8 @@ export type Tab = {
   id: string;
   label: string;       // Display name (filename)
   filePath: string | null;
+  /** Original path for a converted document that is not yet a Markdown file. */
+  sourceFilePath?: string;
   /**
    * Folder relative image paths resolve against. Normally the parent of
    * `filePath`, but a document converted on open (html/pdf/docx) has no
@@ -70,6 +72,7 @@ export function useEditor() {
   const [darkMode, setDarkMode] = useState(false);
   const [fontSize, setFontSize] = useState(24);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openingFilePathsRef = useRef(new Set<string>());
   // Renders and word counts are HTTP requests that can finish out of order, so
   // each channel only accepts the response belonging to its newest request.
   const previewGuardRef = useRef(createLatestRequestGuard());
@@ -136,14 +139,25 @@ export function useEditor() {
 
   // ── file ops ───────────────────────────────────────────────────────────────
   const openFile = useCallback(
-    async (filePath: string) => {
-      if (needsConversion(filePath)) {
-        try {
+    async (filePath: string, { convert = true }: { convert?: boolean } = {}) => {
+      const existing = tabs.find(
+        (tab) => tab.filePath === filePath || tab.sourceFilePath === filePath
+      );
+      if (existing) {
+        setActiveTabId(existing.id);
+        refreshPreview(existing.content, filePath);
+        return;
+      }
+      if (openingFilePathsRef.current.has(filePath)) return;
+      openingFilePathsRef.current.add(filePath);
+      try {
+        if (convert && needsConversion(filePath)) {
           const { markdown } = await Files.convertToMarkdown({ path: filePath });
           const label = convertedMarkdownLabel(filePath);
           const id = nextTabId();
           const newTab = {
             ...makeTab(id, label, markdown, null, null, parentDirOf(filePath)),
+            sourceFilePath: filePath,
             dirty: true,
           };
           setTabs((prev) => [...prev, newTab]);
@@ -152,21 +166,9 @@ export function useEditor() {
           Files.addRecent(filePath)
             .then(({ entries }) => setRecentFiles(entries))
             .catch(console.error);
-        } catch (err) {
-          console.error("Failed to convert file:", err);
-          throw err;
+          return;
         }
-        return;
-      }
 
-      // Check if already open
-      const existing = tabs.find((t) => t.filePath === filePath);
-      if (existing) {
-        setActiveTabId(existing.id);
-        refreshPreview(existing.content, filePath);
-        return;
-      }
-      try {
         const { content } = await Files.read(filePath);
         const label = filePath.split(/[/\\]/).pop() ?? filePath;
         const id = nextTabId();
@@ -181,9 +183,40 @@ export function useEditor() {
       } catch (err) {
         console.error("Failed to open file:", err);
         throw err;
+      } finally {
+        openingFilePathsRef.current.delete(filePath);
       }
     },
     [tabs, refreshPreview]
+  );
+
+  const openProjectAsMarkdown = useCallback(
+    async (root: string) => {
+      const collectFiles = async (path: string): Promise<string[]> => {
+        const { entries } = await Files.list(path);
+        const nestedFiles = await Promise.all(
+          entries
+            .filter((entry) => entry.is_dir)
+            .map((entry) => collectFiles(entry.path))
+        );
+        return [
+          ...entries
+            .filter((entry) => !entry.is_dir && isSupportedFile(entry.name))
+            .map((entry) => entry.path),
+          ...nestedFiles.flat(),
+        ];
+      };
+
+      const filePaths = await collectFiles(root);
+      for (const filePath of filePaths) {
+        try {
+          await openFile(filePath);
+        } catch (error) {
+          console.error(`Failed to open ${filePath}:`, error);
+        }
+      }
+    },
+    [openFile]
   );
 
   const openTextAsTab = useCallback(
@@ -341,6 +374,23 @@ export function useEditor() {
     debounceRef.current = null;
   }, []);
 
+  const applyProjectChanges = useCallback((changes: ProjectWorkChange[]) => {
+    setTabs((previous) => {
+      const next = [...previous];
+      for (const change of changes) {
+        const index = next.findIndex((tab) => tab.filePath === change.file_path);
+        if (index >= 0) {
+          next[index] = { ...next[index], content: change.content, dirty: true };
+        } else {
+          next.push({ ...makeTab(nextTabId(), change.path, change.content, change.file_path), dirty: true });
+        }
+      }
+      return next;
+    });
+    const activeChange = changes.find((change) => change.file_path === activeTab.filePath);
+    if (activeChange) refreshPreview(activeChange.content, activeChange.file_path);
+  }, [activeTab.filePath, refreshPreview]);
+
   // ── recent files ───────────────────────────────────────────────────────────
   const loadRecentFiles = useCallback(async () => {
     const { entries } = await Files.getRecent();
@@ -378,11 +428,13 @@ export function useEditor() {
     setFontSize,
     handleContentChange,
     openFile,
+    openProjectAsMarkdown,
     openTextAsTab,
     saveFile,
     newTab,
     closeTab,
     closeAllTabs,
+    applyProjectChanges,
     loadRecentFiles,
     refreshPreview,
     exportAs,
