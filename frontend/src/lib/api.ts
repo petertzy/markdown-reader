@@ -338,6 +338,14 @@ export const Markdown = {
       body: JSON.stringify({ content }),
     }),
 
+  // Offline, deterministic table of contents built from the document headings.
+  // Returns an empty `toc` string when the document has no headings.
+  toc: (content: string) =>
+    apiFetch<{ toc: string }>("/api/markdown/toc", {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    }),
+
   openPreviewInBrowser: (payload: RenderPayload) =>
     apiFetch<BrowserPreviewResult>("/api/markdown/open-preview", {
       method: "POST",

@@ -7,7 +7,9 @@ class TestTemperatureCompatibility(unittest.TestCase):
     def test_supported_models_keep_default_temperature(self):
         self.assertEqual(logic._temperature_for_model("gpt-4o", 0.2), 0.2)
         self.assertEqual(logic._temperature_for_model("gpt-4o-mini", 0.4), 0.4)
-        self.assertEqual(logic._temperature_for_model("llama-3.3-70b-versatile", 0.1), 0.1)
+        self.assertEqual(
+            logic._temperature_for_model("llama-3.3-70b-versatile", 0.1), 0.1
+        )
 
     def test_reasoning_and_newer_models_omit_temperature(self):
         self.assertIsNone(logic._temperature_for_model("o1-preview", 0.2))

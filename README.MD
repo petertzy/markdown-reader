@@ -212,6 +212,7 @@ Type `/` at the start of a line (or after whitespace) in the editor to open an i
 | `/toc` | Generates a table of contents via AI |
 | `/fix-code` | Fixes code block fences via AI |
 | `/insert-table` | Inserts a Markdown table (no AI call) |
+| `/insert-toc` | Inserts a table of contents generated locally from the document headings (no AI call) |
 
 Use the arrow keys to navigate, Enter to run a command, or Escape to dismiss the menu.
 

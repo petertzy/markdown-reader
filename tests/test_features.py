@@ -348,7 +348,9 @@ class TestCountWords(unittest.TestCase):
         self.assertEqual(count, 2)
 
     def test_word_count_includes_heading_count(self):
-        payload = RenderPayload(content="# Title\n\nSome text.\n\n## Section\n\nMore text.")
+        payload = RenderPayload(
+            content="# Title\n\nSome text.\n\n## Section\n\nMore text."
+        )
         result = word_count(payload)
         self.assertEqual(result["heading_count"], 2)
         self.assertGreater(result["words"], 0)
