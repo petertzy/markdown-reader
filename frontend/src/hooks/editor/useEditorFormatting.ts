@@ -71,6 +71,13 @@ export function useEditorFormatting(
     }));
   }, [replaceSelection]);
 
+  const insertTableOfContents = useCallback(
+    (toc: string) => {
+      replaceSelection("insert-toc", () => ({ text: toc }));
+    },
+    [replaceSelection]
+  );
+
   const insertCitation = useCallback(
     (citationKey: string) => {
       replaceSelection("insert-citation", () => ({
@@ -87,6 +94,7 @@ export function useEditorFormatting(
     wrapSelection,
     applyHeading,
     insertTable,
+    insertTableOfContents,
     insertCitation,
   };
 }

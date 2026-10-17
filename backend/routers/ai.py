@@ -74,6 +74,12 @@ class WorkPayload(BaseModel):
     document_content: str
 
 
+class ProjectWorkPayload(BaseModel):
+    root: str = Field(min_length=1, max_length=4096)
+    instruction: str = Field(min_length=1, max_length=8000)
+    open_buffers: dict[str, str] = Field(default_factory=dict, max_length=100)
+
+
 class TranslatePayload(BaseModel):
     content: str
     source_language: str
@@ -96,11 +102,12 @@ class TranslateSentenceBatchPayload(BaseModel):
 
 @router.get("/settings")
 def get_ai_settings():
-    """Return all persisted AI provider settings."""
+    """Return provider settings and the storage status of each key action slot."""
     logic = _logic()
     logic.load_persisted_ai_settings()
     settings = logic._load_app_settings()
     providers = {}
+    api_key_statuses = {}
     for provider in logic.AI_PROVIDER_PRIORITY:
         key_slot = provider
         env_var = logic.get_ai_provider_env_var(provider)
@@ -108,9 +115,15 @@ def get_ai_settings():
             choice = logic.get_openai_compatible_base_url_choice()
             key_slot = logic.get_openai_compatible_storage_key_name(choice)
             env_var = logic.get_openai_compatible_env_var(choice)
-        key_configured = False
-        if provider != "local":
-            key_configured = logic.is_ai_api_key_configured(key_slot, env_var)
+            for option in logic.get_openai_compatible_base_url_options():
+                slot = logic.get_openai_compatible_storage_key_name(option["key"])
+                api_key_statuses[slot] = logic.get_ai_api_key_storage_status(slot)
+        else:
+            api_key_statuses[key_slot] = logic.get_ai_api_key_storage_status(key_slot)
+        key_configured = provider != "local" and (
+            bool(os.getenv(env_var, "").strip())
+            or api_key_statuses[key_slot] == "saved"
+        )
         providers[provider] = {
             "display_name": logic.get_ai_provider_display_name(provider),
             "env_var": env_var,
@@ -119,6 +132,7 @@ def get_ai_settings():
             "key_configured": key_configured,
         }
     settings["providers"] = providers
+    settings["api_key_statuses"] = api_key_statuses
     settings["provider_order"] = list(logic.AI_PROVIDER_PRIORITY)
     settings_provider = settings.get("ai_provider", "")
     settings["ai_provider"] = logic._normalize_provider_name(
@@ -339,6 +353,60 @@ def ai_work(payload: WorkPayload):
         raise HTTPException(status_code=500, detail=str(exc))
 
     return {"modified_content": result}
+
+
+def _project_work_operation(operation):
+    """Map project Work failures to the same useful provider errors as /work."""
+    logic = _logic()
+    try:
+        return operation()
+    except HTTPException:
+        raise
+    except logic.TranslationConfigError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except logic.ProviderRequestError as exc:
+        raise HTTPException(
+            status_code=exc.status_code or 502, detail=exc.detail
+        ) from exc
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Project Work failed.") from exc
+
+
+@router.post("/work/project")
+def start_project_work(payload: ProjectWorkPayload):
+    from backend import project_work
+
+    return _project_work_operation(
+        lambda: project_work.start(
+            payload.root, payload.instruction, payload.open_buffers
+        )
+    )
+
+
+@router.post("/work/project/{task_id}/step")
+def step_project_work(task_id: str):
+    from backend import project_work
+
+    return _project_work_operation(
+        lambda: project_work.step(task_id, _logic().request_work_response)
+    )
+
+
+@router.post("/work/project/{task_id}/validate")
+def validate_project_work(task_id: str):
+    from backend import project_work
+
+    return _project_work_operation(lambda: project_work.validate(task_id))
+
+
+@router.delete("/work/project/{task_id}")
+def discard_project_work(task_id: str):
+    from backend import project_work
+
+    project_work.discard(task_id)
+    return {"discarded": True}
 
 
 @router.get("/chat/history")

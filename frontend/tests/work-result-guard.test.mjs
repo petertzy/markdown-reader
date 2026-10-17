@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   applyWorkResultIfFresh,
+  createDocumentRequestGuard,
   isWorkResultFresh,
 } from "../src/lib/work-result-guard.mjs";
 
@@ -23,6 +24,16 @@ test("unchanged document applies the AI Work result", () => {
     true
   );
   assert.deepEqual(applied, ["AI-modified document"]);
+});
+
+test("switching tabs invalidates a pending translation request", () => {
+  const guard = createDocumentRequestGuard("file-1");
+  const request = guard.issue();
+
+  guard.setDocument("file-2");
+
+  assert.equal(guard.isCurrent(request), false);
+  assert.equal(guard.isCurrent(guard.issue()), true);
 });
 
 test("content changed during the request rejects the stale result", () => {

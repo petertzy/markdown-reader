@@ -10,13 +10,14 @@ export type SlashCommandId =
   | "format"
   | "toc"
   | "fix-code"
-  | "insert-table";
+  | "insert-table"
+  | "insert-toc";
 
 export type SlashCommand = {
   id: SlashCommandId;
   label: string;
   description: string;
-  kind: "ai" | "open-translate-tab" | "insert-table";
+  kind: "ai" | "open-translate-tab" | "insert-table" | "insert-toc";
   prompt?: string;
 };
 
@@ -27,6 +28,7 @@ const STATIC_COMMANDS: Omit<SlashCommand, "prompt">[] = [
   { id: "toc", label: "/toc", description: "Generate a table of contents with AI", kind: "ai" },
   { id: "fix-code", label: "/fix-code", description: "Fix code block fences with AI", kind: "ai" },
   { id: "insert-table", label: "/insert-table", description: "Insert a Markdown table", kind: "insert-table" },
+  { id: "insert-toc", label: "/insert-toc", description: "Insert a table of contents (offline, no AI)", kind: "insert-toc" },
 ];
 
 const TEMPLATE_ID_BY_COMMAND: Record<string, string> = {

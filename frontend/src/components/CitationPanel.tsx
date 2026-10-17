@@ -128,7 +128,7 @@ export default function CitationPanel({ onInsert }: Props) {
   }, []);
 
   return (
-    <div className="flex flex-col w-80 min-w-[280px] max-w-[380px] border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] text-sm">
+    <div className="flex h-full w-full min-w-[300px] flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] text-sm">
       <input
         ref={fileInputRef}
         type="file"
@@ -159,12 +159,12 @@ export default function CitationPanel({ onInsert }: Props) {
               if (e.key === "Enter") void handleLoadLibrary();
             }}
             placeholder="/path/to/library.bib"
-            className="flex-1 text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
+            className="min-w-0 flex-1 text-xs p-1.5 border border-gray-200 dark:border-gray-600 rounded bg-gray-50 dark:bg-[#2d2d2d] text-gray-800 dark:text-gray-100"
           />
           <button
             onClick={() => { void handleSelectLibrary(); }}
             disabled={loading}
-            className="px-2 text-xs border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded hover:bg-gray-100 dark:hover:bg-[#2d2d2d] disabled:opacity-40"
+            className="shrink-0 px-2 text-xs border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded hover:bg-gray-100 dark:hover:bg-[#2d2d2d] disabled:opacity-40"
             title="Select BibTeX file"
           >
             Select
@@ -172,7 +172,7 @@ export default function CitationPanel({ onInsert }: Props) {
           <button
             onClick={() => { void handleLoadLibrary(); }}
             disabled={loading || !pathInput.trim()}
-            className="px-2 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40"
+            className="shrink-0 px-2 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40"
           >
             Load
           </button>

@@ -23,6 +23,9 @@ export type UseEditorCommandsOptions = {
   setShowAIPanel: Dispatch<SetStateAction<boolean>>;
   setAiPanelInitialTab: Dispatch<SetStateAction<AIPanelTab | undefined>>;
   setSplit: Dispatch<SetStateAction<number>>;
+  onOpenProject: () => void;
+  onFileSaved: () => void;
+  onShowPreview: () => void;
   executeAIPrompt: (prompt: string, documentText: string) => Promise<string | null | undefined>;
   syncSelectedText: () => void;
 };
@@ -41,6 +44,9 @@ export function useEditorCommands({
   setShowAIPanel,
   setAiPanelInitialTab,
   setSplit,
+  onOpenProject,
+  onFileSaved,
+  onShowPreview,
   executeAIPrompt,
   syncSelectedText,
 }: UseEditorCommandsOptions) {
@@ -57,6 +63,9 @@ export function useEditorCommands({
     focusEditorRef,
     setShowAIPanel,
     setSplit,
+    onOpenProject,
+    onFileSaved,
+    onShowPreview,
   });
 
   // 3. Register keyboard shortcuts
@@ -69,6 +78,7 @@ export function useEditorCommands({
     monacoReady,
     slash,
     insertTable: formatting.insertTable,
+    insertTableOfContents: formatting.insertTableOfContents,
     executeAIPrompt,
     documentText: editor.activeTab.content,
     syncSelectedText,

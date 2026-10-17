@@ -37,6 +37,7 @@ Most modern writing apps force you to choose between **privacy** and **power**. 
 - ⚡ **Slash Commands**: Type `/` in the editor to trigger AI actions or insert a table inline, without opening the AI panel.
 - 🛡️ **Audit & Rollback**: Review all AI suggestions before applying them. Reject or rollback changes with a single click.
 - 🖥️ **Native Desktop Feel**: Built with Next.js and packaged with Tauri for blazing-fast performance.
+- 📊 **Document Statistics**: View word count, character count, heading count, and estimated reading time for the current document (based on 238 words per minute).
 
 ---
 
@@ -211,6 +212,7 @@ Type `/` at the start of a line (or after whitespace) in the editor to open an i
 | `/toc` | Generates a table of contents via AI |
 | `/fix-code` | Fixes code block fences via AI |
 | `/insert-table` | Inserts a Markdown table (no AI call) |
+| `/insert-toc` | Inserts a table of contents generated locally from the document headings (no AI call) |
 
 Use the arrow keys to navigate, Enter to run a command, or Escape to dismiss the menu.
 

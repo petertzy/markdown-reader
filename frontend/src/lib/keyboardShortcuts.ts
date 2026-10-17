@@ -3,6 +3,7 @@
 export type ActionId =
   | "file.new"
   | "file.open"
+  | "file.openFolder"
   | "file.save"
   | "file.closeTab"
   | "file.closeAllTabs"
@@ -23,6 +24,7 @@ export type ActionId =
   | "table.insert"
   | "view.toggleDarkMode"
   | "view.toggleAIPanel"
+  | "view.showPreview"
   | "view.openBrowserPreview"
   | "view.fullEditor"
   | "view.balancedSplit"

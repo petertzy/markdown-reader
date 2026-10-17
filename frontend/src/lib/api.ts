@@ -202,6 +202,24 @@ export type FileEntry = {
   extension: string;
 };
 
+export type ProjectWorkChange = {
+  path: string;
+  file_path: string;
+  content: string;
+  diff: string;
+};
+
+export type ProjectWorkTask = {
+  id: string;
+  root: string;
+  status: "running" | "review" | "failed";
+  summary: string;
+  steps: number;
+  file_count: number;
+  inspected: string[];
+  changes: ProjectWorkChange[];
+};
+
 export type ConvertToMarkdownPayload = {
   path?: string;
   filename?: string;
@@ -274,12 +292,13 @@ export type RenderPayload = {
   font_size?: number;
 };
 
-export type WordCountResult = {
+export interface WordCountResult {
   words: number;
   chars_with_spaces: number;
   chars_without_spaces: number;
+  heading_count: number;
   reading_time: string;
-};
+}
 
 export type BrowserPreviewResult = {
   path: string;
@@ -315,6 +334,14 @@ export const Markdown = {
 
   wordCount: (content: string) =>
     apiFetch<WordCountResult>("/api/markdown/wordcount", {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    }),
+
+  // Offline, deterministic table of contents built from the document headings.
+  // Returns an empty `toc` string when the document has no headings.
+  toc: (content: string) =>
+    apiFetch<{ toc: string }>("/api/markdown/toc", {
       method: "POST",
       body: JSON.stringify({ content }),
     }),
@@ -387,6 +414,8 @@ export type LocalAIBaseUrlOption = {
   url: string;
 };
 
+export type AIKeyStorageStatus = "saved" | "environment" | "not_saved" | "unavailable";
+
 export type AISettings = {
   ai_provider: string;
   ai_models?: Record<string, string>;
@@ -399,6 +428,7 @@ export type AISettings = {
   local_ai_custom_base_url: string;
   local_ai_base_url_options: LocalAIBaseUrlOption[];
   secure_key_storage_available: boolean;
+  api_key_statuses: Record<string, AIKeyStorageStatus>;
 };
 
 const AI_PROVIDER_ORDER = [
@@ -493,6 +523,7 @@ function normalizeAISettings(raw: PartialAISettings): AISettings {
     local_ai_base_url_options:
       raw.local_ai_base_url_options ?? LOCAL_AI_BASE_URL_OPTIONS,
     secure_key_storage_available: raw.secure_key_storage_available ?? false,
+    api_key_statuses: raw.api_key_statuses ?? {},
   };
 }
 
@@ -595,6 +626,21 @@ export const AI = {
       },
       LONG_REQUEST_TIMEOUT_MS
     ),
+
+  startProjectWork: (root: string, instruction: string, open_buffers: Record<string, string>) =>
+    apiFetch<ProjectWorkTask>("/api/ai/work/project", {
+      method: "POST",
+      body: JSON.stringify({ root, instruction, open_buffers }),
+    }, LONG_REQUEST_TIMEOUT_MS),
+
+  stepProjectWork: (id: string) =>
+    apiFetch<ProjectWorkTask>(`/api/ai/work/project/${id}/step`, { method: "POST" }, LONG_REQUEST_TIMEOUT_MS),
+
+  validateProjectWork: (id: string) =>
+    apiFetch<ProjectWorkTask>(`/api/ai/work/project/${id}/validate`, { method: "POST" }),
+
+  discardProjectWork: (id: string) =>
+    apiFetch<{ discarded: boolean }>(`/api/ai/work/project/${id}`, { method: "DELETE" }),
 
   getChatHistory: () =>
     apiFetch<{ histories: unknown[] }>("/api/ai/chat/history"),

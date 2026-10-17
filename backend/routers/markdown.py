@@ -263,11 +263,13 @@ def word_count(payload: RenderPayload):
     # from a CRLF file and a non-breaking space pasted out of a web page are
     # both spaces, and neither is a character of the document.
     chars_without = len("".join(payload.content.split()))
+    heading_count = len(_extract_outline(payload.content))
     return {
         "words": words,
         "chars_with_spaces": chars_with,
         "chars_without_spaces": chars_without,
         "reading_time": reading_time(words),
+        "heading_count": heading_count,
     }
 
 
@@ -302,3 +304,26 @@ def get_outline(payload: OutlinePayload):
     """
     outline = _extract_outline(payload.content)
     return {"outline": outline, "heading_count": len(outline)}
+
+
+@router.post("/toc")
+def generate_toc(payload: OutlinePayload):
+    """Generate a Markdown table of contents from the document's headings.
+
+    This is the offline, deterministic counterpart to the AI-powered ``/toc``
+    automation. It reuses the same heading and anchor logic
+    (``backend.ai_logic._generate_markdown_toc``) so the generated links resolve
+    against the rendered preview exactly like the AI version, but it never
+    contacts an AI provider, requires an API key, or needs a network connection.
+
+    The import is deferred to keep this lightweight router cheap to import during
+    packaged app startup, mirroring the conversion endpoints above.
+
+    :param payload: The Markdown document text to build the table of contents from.
+
+    :return: A mapping ``{"toc": <markdown>}``. ``toc`` is an empty string when
+        the document contains no headings.
+    """
+    from backend.ai_logic import _generate_markdown_toc
+
+    return {"toc": _generate_markdown_toc(payload.content)}
