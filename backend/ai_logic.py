@@ -29,6 +29,21 @@ except Exception:
 
 AI_CREDENTIAL_SERVICE = "MarkdownReader.AI"
 logger = logging.getLogger(__name__)
+
+
+def _temperature_for_model(model: str | None, default: float) -> float | None:
+    """Return a supported temperature value for an OpenAI-compatible model.
+
+    OpenAI reasoning models and GPT-5 models reject an explicitly supplied
+    temperature parameter. Other providers retain their existing defaults.
+    """
+    normalized_model = (model or "").strip().lower()
+    model_name = normalized_model.rsplit("/", 1)[-1]
+    if model_name.startswith(("o1", "o3", "gpt-5")):
+        return None
+    return default
+
+
 LOCAL_AI_DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1"
 LOCAL_AI_BASE_URL_OPTIONS = {
     "lm_studio": "http://127.0.0.1:1234/v1",
@@ -742,17 +757,20 @@ def _request_translation_from_provider(
         )
         translated = _extract_anthropic_text(response.json()).strip()
     else:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        temperature = _temperature_for_model(model, 0.2)
+        if temperature is not None:
+            payload["temperature"] = temperature
         response = _post_with_retry(
             f"{base_url}/chat/completions",
             headers=headers,
-            payload={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.2,
-            },
+            payload=payload,
         )
         translated = _extract_openai_compatible_text(response.json()).strip()
 
@@ -823,18 +841,21 @@ def _request_chat_from_provider(
         response.raise_for_status()
         answer = _extract_anthropic_text(response.json()).strip()
     else:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                *history_messages,
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        temperature = _temperature_for_model(model, 0.4)
+        if temperature is not None:
+            payload["temperature"] = temperature
         response = requests.post(
             f"{base_url}/chat/completions",
             headers=headers,
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    *history_messages,
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.4,
-            },
+            json=payload,
             timeout=60,
         )
         response.raise_for_status()
@@ -1539,17 +1560,20 @@ def _request_sentence_translation_batch_once(
         )
         response_text = _extract_anthropic_text(response.json()).strip()
     else:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        temperature = _temperature_for_model(model, 0.1)
+        if temperature is not None:
+            payload["temperature"] = temperature
         response = _post_with_retry(
             f"{base_url}/chat/completions",
             headers=headers,
-            payload={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.1,
-            },
+            payload=payload,
         )
         response_text = _extract_openai_compatible_text(response.json()).strip()
 
