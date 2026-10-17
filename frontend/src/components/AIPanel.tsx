@@ -172,6 +172,8 @@ export default function AIPanel({
   executeWork,
   isWorking,
 }: Props) {
+  const currentDocumentRef = useRef({ documentId, documentText });
+  currentDocumentRef.current = { documentId, documentText };
   const { messages, loading, error, lastOperation, sendMessage, translate, translateSentences, cancelTranslation, clearHistory } = useAIChat(documentId);
   const chatLoading = loading && lastOperation === "chat";
   const chatError = lastOperation === "chat" ? error : null;
@@ -600,9 +602,16 @@ export default function AIPanel({
     }
     if (slashCommand === "/insert-toc") {
       // Offline table of contents generated from the document headings.
+      const requestDocument = { documentId, documentText };
       try {
         const { toc } = await Markdown.toc(documentText);
-        if (toc.trim()) onApplyAction?.("replace_selection", toc);
+        if (
+          toc.trim() &&
+          currentDocumentRef.current.documentId === requestDocument.documentId &&
+          currentDocumentRef.current.documentText === requestDocument.documentText
+        ) {
+          onApplyAction?.("replace_selection", toc);
+        }
       } catch {
         // Network/backend errors are surfaced by the editor slash command path;
         // here we simply skip inserting rather than interrupting the chat.
