@@ -1,4 +1,4 @@
-type RevealItem = (path: string) => Promise<void>;
+import { revealInFileManager as revealPathInFileManager } from "./revealInFileManager.mjs";
 
 /**
  * Reveals a file in the system's file manager (Finder on macOS, Explorer on Windows).
@@ -6,11 +6,7 @@ type RevealItem = (path: string) => Promise<void>;
  */
 export async function revealInFileManager(
   filePath: string,
-  reveal?: RevealItem,
 ): Promise<void> {
-  if (!filePath) {
-    throw new Error("No file path provided to reveal.");
-  }
-  const revealItem = reveal ?? (await import("@tauri-apps/plugin-opener")).revealItemInDir;
-  await revealItem(filePath);
+  const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
+  await revealPathInFileManager(filePath, revealItemInDir);
 }

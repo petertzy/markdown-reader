@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { revealInFileManager } = await import("../src/utils/revealInFileManager.ts");
+const { revealInFileManager } = await import("../src/utils/revealInFileManager.mjs");
 
 test("reveals a POSIX path", async () => {
   const revealed = [];
