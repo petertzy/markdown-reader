@@ -172,7 +172,11 @@ export default function AIPanel({
   executeWork,
   isWorking,
 }: Props) {
-  const { messages, loading, error, sendMessage, translate, translateSentences, cancelTranslation, clearHistory } = useAIChat(documentId);
+  const { messages, loading, error, lastOperation, sendMessage, translate, translateSentences, cancelTranslation, clearHistory } = useAIChat(documentId);
+  const chatLoading = loading && lastOperation === "chat";
+  const chatError = lastOperation === "chat" ? error : null;
+  const translationLoading = loading && lastOperation === "translation";
+  const translationError = lastOperation === "translation" ? error : null;
   const [tab, setTab] = useState<Tab>(initialTab ?? "chat");
 
   useEffect(() => {
@@ -612,14 +616,14 @@ export default function AIPanel({
   const handleTranslate = async () => {
     const requestDocumentId = documentId;
     const content = translateScope === "selection" && selectedText ? selectedText : documentText;
-    if (!content.trim()) return;
+    if (!content.trim() || loading) return;
     setTranslatedPreview(null);
     setTranslationPairs([]);
     setTranslationProgress(null);
-    if (provider === "local") {
+    const prepare = provider === "local" ? async () => {
       await AI.setProvider(provider);
       await AI.setLocalAIBaseUrlChoice(localBaseUrlChoice, localBaseUrl);
-    }
+    } : undefined;
     if (translationDocumentRef.current !== requestDocumentId) return;
     const normalizedSourceLang = sourceLang === "Auto Detect" ? "auto" : sourceLang;
     if (translationMode === "sentences") {
@@ -627,16 +631,17 @@ export default function AIPanel({
         content,
         normalizedSourceLang,
         targetLang,
-        setTranslationProgress
+        setTranslationProgress,
+        prepare
       );
       if (result && translationDocumentRef.current === requestDocumentId) {
         setTranslatedPreview(result.translated);
         setTranslationPairs(result.pairs);
       }
-      setTranslationProgress(null);
+      if (translationDocumentRef.current === requestDocumentId) setTranslationProgress(null);
       return;
     }
-    const result = await translate(content, normalizedSourceLang, targetLang);
+    const result = await translate(content, normalizedSourceLang, targetLang, prepare);
     if (result && translationDocumentRef.current === requestDocumentId) setTranslatedPreview(result);
   };
 
@@ -838,13 +843,13 @@ export default function AIPanel({
                 )}
               </div>
             ))}
-            {loading && (
+            {chatLoading && (
               <div className="flex items-start">
                 <div className="px-3 py-2 rounded-lg text-xs bg-gray-100 dark:bg-[#2d2d2d] text-gray-500">Thinking…</div>
               </div>
             )}
-            {error && (
-              <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">{error}</div>
+            {chatError && (
+              <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">{chatError}</div>
             )}
             <div ref={bottomRef} />
           </div>
@@ -977,10 +982,10 @@ export default function AIPanel({
             disabled={loading || !(translateScope === "selection" && selectedText ? selectedText : documentText).trim()}
             className="py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-40"
           >
-            {loading ? "Translating…" : "Translate"}
+            {translationLoading ? "Translating…" : "Translate"}
           </button>
 
-          {translationMode === "sentences" && (translationProgress || loading) && (
+          {translationMode === "sentences" && (translationProgress || translationLoading) && (
             <div className="flex flex-col gap-1 rounded border border-blue-100 bg-blue-50 p-2 text-xs text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
               <div className="flex items-center justify-between">
                 <span>{translationProgress ? "Translating batches" : "Preparing translation"}</span>
@@ -1013,8 +1018,8 @@ export default function AIPanel({
             </div>
           )}
 
-          {error && (
-            <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">{error}</div>
+          {translationError && (
+            <div className="text-xs text-red-500 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">{translationError}</div>
           )}
 
           {translationMode === "sentences" && translationPairs.length > 0 ? (
