@@ -855,8 +855,8 @@ export default function AIPanel({
           <div className="text-xs text-gray-500 dark:text-gray-400">
             {workScope === "document" ? "Describe a task, and the AI will directly modify the active document." : "Describe a task across the open project, then review every proposed file change."}
           </div>
-          <label className="text-xs">Work scope
-            <select className="ml-2 rounded border p-1 dark:bg-gray-800" value={workScope} disabled={isWorking || projectWork.busy}
+          <label className="text-xs text-gray-700 dark:text-gray-200">Work scope
+            <select className="ml-2 rounded border border-gray-300 bg-white p-1 text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" value={workScope} disabled={isWorking || projectWork.busy}
               onChange={(event) => setWorkScope(event.target.value as "document" | "project")}>
               <option value="document">Active document</option>
               <option value="project">Open project</option>
