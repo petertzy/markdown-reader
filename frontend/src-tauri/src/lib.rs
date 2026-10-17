@@ -209,6 +209,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(BackendPort(port_state))
         .manage(BackendToken(token_state))
         .manage(BackendRequestCancels(Mutex::new(HashMap::new())))

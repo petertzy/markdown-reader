@@ -1,14 +1,19 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode } from "react";
 import { useAIChat, type TranslationPair, type TranslationProgress } from "@/hooks/useAIChat";
 import { AI, getDefaultAISettings, type AISettings, Knowledge, type KnowledgeStatus } from "@/lib/api";
 import { tokenizeInlineMarkdown } from "@/lib/inline-markdown.mjs";
+import ProjectWorkReview from "@/components/ProjectWorkReview";
+import type { useProjectWork } from "@/hooks/useProjectWork";
 
 export type AIPanelTab = "chat" | "translate" | "settings" | "work";
 type Tab = AIPanelTab;
 
 type Props = {
+  projectRoot: string | null;
+  projectWork: ReturnType<typeof useProjectWork>;
+  documentId: string;
   documentText: string;
   selectedText?: string;
   onApplyAction?: (type: string, content: string) => void;
@@ -157,6 +162,9 @@ function ChatMessageContent({ content }: { content: string }) {
 }
 
 export default function AIPanel({
+  projectRoot,
+  projectWork,
+  documentId,
   documentText,
   selectedText = "",
   onApplyAction,
@@ -164,7 +172,7 @@ export default function AIPanel({
   executeWork,
   isWorking,
 }: Props) {
-  const { messages, loading, error, sendMessage, translate, translateSentences, cancelTranslation, clearHistory } = useAIChat();
+  const { messages, loading, error, sendMessage, translate, translateSentences, cancelTranslation, clearHistory } = useAIChat(documentId);
   const [tab, setTab] = useState<Tab>(initialTab ?? "chat");
 
   useEffect(() => {
@@ -172,6 +180,7 @@ export default function AIPanel({
   }, [initialTab]);
 
   const [input, setInput] = useState("");
+  const [workScope, setWorkScope] = useState<"document" | "project">("document");
   const [sourceLang, setSourceLang] = useState("Auto Detect");
   const [targetLang, setTargetLang] = useState("English");
   const [translateScope, setTranslateScope] = useState<"selection" | "document">("document");
@@ -179,6 +188,7 @@ export default function AIPanel({
   const [translatedPreview, setTranslatedPreview] = useState<string | null>(null);
   const [translationPairs, setTranslationPairs] = useState<TranslationPair[]>([]);
   const [translationProgress, setTranslationProgress] = useState<TranslationProgress | null>(null);
+  const translationDocumentRef = useRef(documentId);
   const [settings, setSettings] = useState<AISettings>(() => getDefaultAISettings());
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -206,6 +216,13 @@ export default function AIPanel({
   const keySlot =
     provider === "openai_compatible" ? `openai_compatible_${baseUrlChoice}` : provider;
   const keyStatus = settings.api_key_statuses[keySlot] ?? "unavailable";
+
+  useLayoutEffect(() => {
+    translationDocumentRef.current = documentId;
+    setTranslatedPreview(null);
+    setTranslationPairs([]);
+    setTranslationProgress(null);
+  }, [documentId]);
 
   const currentLocalBaseUrl = () => {
     const choice = localBaseUrlChoiceRef.current;
@@ -593,6 +610,7 @@ export default function AIPanel({
   };
 
   const handleTranslate = async () => {
+    const requestDocumentId = documentId;
     const content = translateScope === "selection" && selectedText ? selectedText : documentText;
     if (!content.trim()) return;
     setTranslatedPreview(null);
@@ -602,6 +620,7 @@ export default function AIPanel({
       await AI.setProvider(provider);
       await AI.setLocalAIBaseUrlChoice(localBaseUrlChoice, localBaseUrl);
     }
+    if (translationDocumentRef.current !== requestDocumentId) return;
     const normalizedSourceLang = sourceLang === "Auto Detect" ? "auto" : sourceLang;
     if (translationMode === "sentences") {
       const result = await translateSentences(
@@ -610,7 +629,7 @@ export default function AIPanel({
         targetLang,
         setTranslationProgress
       );
-      if (result) {
+      if (result && translationDocumentRef.current === requestDocumentId) {
         setTranslatedPreview(result.translated);
         setTranslationPairs(result.pairs);
       }
@@ -618,7 +637,7 @@ export default function AIPanel({
       return;
     }
     const result = await translate(content, normalizedSourceLang, targetLang);
-    if (result) setTranslatedPreview(result);
+    if (result && translationDocumentRef.current === requestDocumentId) setTranslatedPreview(result);
   };
 
   const sentencePairApplyContent = () =>
@@ -654,7 +673,7 @@ export default function AIPanel({
   };
 
   return (
-    <div className="flex flex-col w-80 min-w-[280px] max-w-[380px] border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] text-sm">
+    <div className="flex h-full w-full min-w-[300px] flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1e1e1e] text-sm">
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-700 shrink-0">
         <div className="flex gap-1">
           {(["chat", "work", "translate", "settings"] as Tab[]).map((t) => (
@@ -852,26 +871,37 @@ export default function AIPanel({
       ) : tab === "work" ? (
         <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
           <div className="text-xs text-gray-500 dark:text-gray-400">
-            Describe a task, and the AI will directly modify the active document.
+            {workScope === "document" ? "Describe a task, and the AI will directly modify the active document." : "Describe a task across the open project, then review every proposed file change."}
           </div>
-          <textarea 
+          <label className="text-xs text-gray-700 dark:text-gray-200">Work scope
+            <select className="ml-2 rounded border border-gray-300 bg-white p-1 text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100" value={workScope} disabled={isWorking || projectWork.busy}
+              onChange={(event) => setWorkScope(event.target.value as "document" | "project")}>
+              <option value="document">Active document</option>
+              <option value="project">Open project</option>
+            </select>
+          </label>
+          {workScope === "project" && <ProjectWorkReview projectRoot={projectRoot} work={projectWork} />}
+          <textarea
             className="w-full h-32 p-2 text-sm border rounded resize-none dark:bg-gray-800 dark:border-gray-600 dark:text-white"
             placeholder="e.g., 'Rewrite this document to be more professional' or 'Fix all typos'"
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
-          <button 
+          <button
             className="w-full bg-blue-600 text-white py-1.5 px-3 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
             onClick={() => {
-              if (executeWork) {
+              if (workScope === "project") {
+                void projectWork.run(input.trim());
+                setInput("");
+              } else if (executeWork) {
                 const instruction = input.trim();
                 setInput("");
                 void executeWork(instruction);
               }
             }}
-            disabled={!input.trim() || isWorking}
+            disabled={!input.trim() || isWorking || projectWork.busy || (workScope === "project" && (!projectRoot || !!projectWork.task))}
           >
-            {isWorking ? "Working..." : "Apply Changes"}
+            {isWorking || projectWork.busy ? "Working..." : workScope === "project" ? "Plan Project Changes" : "Apply Changes"}
           </button>
         </div>
       ) : tab === "translate" ? (
