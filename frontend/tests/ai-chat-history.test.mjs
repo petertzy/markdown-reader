@@ -4,6 +4,7 @@ import { test } from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
 import { splitTextIntoTranslationUnits } from "../src/lib/translation-units.mjs";
+import { createDocumentRequestGuard } from "../src/lib/work-result-guard.mjs";
 
 const source = readFileSync(new URL("../src/hooks/useAIChat.ts", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, {
@@ -46,6 +47,9 @@ function harness(fixtures = {}) {
       }
       return slots[index].callback;
     },
+    useLayoutEffect(callback) {
+      callback();
+    },
   };
   const calls = { chat: [], translate: [], sentences: [] };
   const AI = {
@@ -76,6 +80,7 @@ function harness(fixtures = {}) {
       if (name === "react") return react;
       if (name === "@/lib/api") return { AI };
       if (name === "@/lib/translation-units.mjs") return { splitTextIntoTranslationUnits };
+      if (name === "@/lib/work-result-guard.mjs") return { createDocumentRequestGuard };
       throw new Error(`Unexpected hook dependency: ${name}`);
     },
   }, { filename: "useAIChat.ts", timeout: 1000 });
