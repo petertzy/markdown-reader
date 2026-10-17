@@ -402,3 +402,157 @@ class TestTranslateRouterStatus(unittest.TestCase):
             )
         self.assertEqual(response.status_code, 429)
         self.assertIn("quota", response.json()["detail"])
+
+
+def _raw_content_payload(text: str) -> dict:
+    """A provider reply whose content is raw text, not necessarily clean JSON."""
+    return {"choices": [{"message": {"content": text}}]}
+
+
+def _json_batch_reply(*units: str) -> str:
+    return json.dumps(
+        {"pairs": [{"source": unit, "translated": unit + "!"} for unit in units]}
+    )
+
+
+class TestUnusableSentenceReplyRecovery(unittest.TestCase):
+    """A reply that cannot be read as sentence pairs is retried, then reported.
+
+    Free and smaller models occasionally answer with prose around the JSON, with
+    the JSON cut short, or with something that is not JSON at all. Such a reply
+    used to abort the whole translation with an unhandled error (HTTP 500), so a
+    single bad reply lost every batch of the document.
+    """
+
+    def setUp(self) -> None:
+        self.patcher = patch.object(logic.time, "sleep")
+        self.patcher.start()
+        self.addCleanup(self.patcher.stop)
+
+    def _run_batch(self, responses, units):
+        """Run one sentence batch and return ``(pairs, mock_post)``."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            settings_file = Path(tmp_dir) / "settings.json"
+            with (
+                patch.object(logic, "APP_SETTINGS_FILE_PATH", settings_file),
+                patch.object(logic, "keyring", None),
+                patch.dict(
+                    os.environ,
+                    {
+                        "AI_PROVIDER": "openrouter",
+                        "OPENROUTER_API_KEY": "test-key",
+                        "OPENROUTER_MODEL": "nvidia/nemotron-3.5-lightning:free",
+                    },
+                ),
+                patch.object(
+                    logic.requests, "post", side_effect=responses
+                ) as mock_post,
+            ):
+                pairs = logic.translate_markdown_sentence_batch_with_ai(
+                    units, "English", "German"
+                )
+        return pairs, mock_post
+
+    def test_prose_wrapped_json_reply_is_accepted(self) -> None:
+        content = (
+            "Here is the translation:\n"
+            "```json\n" + _json_batch_reply("A", "B") + "\n```\n"
+            "Let me know if you need anything else."
+        )
+        responses = [_FakeResponse(200, _raw_content_payload(content))]
+        pairs, mock_post = self._run_batch(responses, ["A", "B"])
+        self.assertEqual([pair["translated"] for pair in pairs], ["A!", "B!"])
+        self.assertEqual(mock_post.call_count, 1)
+
+    def test_unreadable_reply_splits_the_batch(self) -> None:
+        responses = [
+            _FakeResponse(200, _raw_content_payload("I cannot translate this.")),
+            _FakeResponse(200, _raw_content_payload(_json_batch_reply("A", "B"))),
+            _FakeResponse(200, _raw_content_payload(_json_batch_reply("C", "D"))),
+        ]
+        pairs, mock_post = self._run_batch(responses, ["A", "B", "C", "D"])
+        self.assertEqual([pair["source"] for pair in pairs], ["A", "B", "C", "D"])
+        self.assertEqual(mock_post.call_count, 3)
+
+    def test_truncated_reply_splits_the_batch(self) -> None:
+        truncated = _json_batch_reply("A", "B", "C", "D")[:-12]
+        responses = [
+            _FakeResponse(200, _raw_content_payload(truncated)),
+            _FakeResponse(200, _raw_content_payload(_json_batch_reply("A", "B"))),
+            _FakeResponse(200, _raw_content_payload(_json_batch_reply("C", "D"))),
+        ]
+        pairs, mock_post = self._run_batch(responses, ["A", "B", "C", "D"])
+        self.assertEqual(len(pairs), 4)
+        self.assertEqual(mock_post.call_count, 3)
+
+    def test_incomplete_pair_list_splits_the_batch(self) -> None:
+        responses = [
+            _FakeResponse(200, _raw_content_payload(_json_batch_reply("A"))),
+            _FakeResponse(200, _raw_content_payload(_json_batch_reply("A", "B"))),
+            _FakeResponse(200, _raw_content_payload(_json_batch_reply("C", "D"))),
+        ]
+        pairs, mock_post = self._run_batch(responses, ["A", "B", "C", "D"])
+        self.assertEqual(len(pairs), 4)
+        self.assertEqual(mock_post.call_count, 3)
+
+    def test_single_unit_unreadable_reply_is_a_provider_error(self) -> None:
+        responses = [
+            _FakeResponse(200, _raw_content_payload("I cannot translate this."))
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            settings_file = Path(tmp_dir) / "settings.json"
+            with (
+                patch.object(logic, "APP_SETTINGS_FILE_PATH", settings_file),
+                patch.object(logic, "keyring", None),
+                patch.dict(
+                    os.environ,
+                    {
+                        "AI_PROVIDER": "openrouter",
+                        "OPENROUTER_API_KEY": "test-key",
+                        "OPENROUTER_MODEL": "nvidia/nemotron-3.5-lightning:free",
+                    },
+                ),
+                patch.object(
+                    logic.requests, "post", side_effect=responses
+                ) as mock_post,
+            ):
+                with self.assertRaises(ProviderRequestError) as ctx:
+                    logic.translate_markdown_sentence_batch_with_ai(
+                        ["A"], "English", "German"
+                    )
+        self.assertEqual(ctx.exception.status_code, 502)
+        self.assertIn("could not be read", ctx.exception.detail)
+        self.assertEqual(mock_post.call_count, 1)
+
+    def test_batch_endpoint_reports_a_readable_error(self) -> None:
+        app = FastAPI()
+        app.include_router(ai_router.router)
+        responses = [
+            _FakeResponse(200, _raw_content_payload("I cannot translate this."))
+        ]
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            settings_file = Path(tmp_dir) / "settings.json"
+            with (
+                patch.object(logic, "APP_SETTINGS_FILE_PATH", settings_file),
+                patch.object(logic, "keyring", None),
+                patch.dict(
+                    os.environ,
+                    {
+                        "AI_PROVIDER": "openrouter",
+                        "OPENROUTER_API_KEY": "test-key",
+                        "OPENROUTER_MODEL": "nvidia/nemotron-3.5-lightning:free",
+                    },
+                ),
+                patch.object(logic.requests, "post", side_effect=responses),
+            ):
+                client = TestClient(app)
+                response = client.post(
+                    "/translate/sentences/batch",
+                    json={
+                        "items": ["A"],
+                        "source_language": "English",
+                        "target_language": "German",
+                    },
+                )
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("could not be read", response.json()["detail"])

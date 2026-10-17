@@ -1457,28 +1457,55 @@ def _first_char_after(line: str, index: int) -> str | None:
     return line[index] if index < len(line) else None
 
 
-def _strip_json_code_fence(text: str) -> str:
-    stripped = text.strip()
-    if not stripped.startswith("```"):
-        return stripped
-    stripped = re.sub(r"^```(?:json)?\s*", "", stripped, flags=re.IGNORECASE)
-    stripped = re.sub(r"\s*```$", "", stripped)
-    return stripped.strip()
+class _UnusableSentenceReplyError(RuntimeError):
+    """A sentence-translation reply that cannot be read as translation pairs.
+
+    Raised for a reply that is not JSON, is JSON without pairs, or is missing a
+    translation for one of the requested units. The caller retries the batch in
+    smaller pieces before giving up on it.
+    """
+
+
+_FENCED_BLOCK_PATTERN = re.compile(
+    r"```(?:json)?\s*(.*?)\s*```", re.DOTALL | re.IGNORECASE
+)
+
+
+def _extract_json_object(text: str) -> str:
+    """Return the JSON object inside a provider reply, ignoring surrounding text.
+
+    Models — free ones especially — wrap the JSON in a fenced block, prefix it
+    with a sentence, or append a closing remark. Only the object itself parses,
+    so a fenced block wins; otherwise the outermost ``{...}`` span is used. Text
+    holding neither is returned unchanged, so the caller still reports the raw
+    reply as unusable instead of silently accepting it.
+    """
+    stripped = (text or "").strip()
+    fenced = _FENCED_BLOCK_PATTERN.search(stripped)
+    if fenced:
+        stripped = fenced.group(1).strip()
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start != -1 and end > start:
+        return stripped[start : end + 1]
+    return stripped
 
 
 def _coerce_translation_pairs(
     response_text: str, source_units: list[str]
 ) -> list[dict[str, str]]:
     try:
-        data = json.loads(_strip_json_code_fence(response_text))
+        data = json.loads(_extract_json_object(response_text))
     except json.JSONDecodeError as exc:
-        raise RuntimeError(
+        raise _UnusableSentenceReplyError(
             "AI provider returned invalid sentence translation JSON."
         ) from exc
 
     raw_pairs = data.get("pairs") if isinstance(data, dict) else data
     if not isinstance(raw_pairs, list):
-        raise RuntimeError("AI provider did not return sentence translation pairs.")
+        raise _UnusableSentenceReplyError(
+            "AI provider did not return sentence translation pairs."
+        )
 
     pairs: list[dict[str, str]] = []
     for index, source in enumerate(source_units):
@@ -1492,7 +1519,9 @@ def _coerce_translation_pairs(
         pairs.append({"source": source, "translated": translated.strip()})
 
     if any(not pair["translated"] for pair in pairs):
-        raise RuntimeError("AI provider returned incomplete sentence translations.")
+        raise _UnusableSentenceReplyError(
+            "AI provider returned incomplete sentence translations."
+        )
     return pairs
 
 
@@ -1578,7 +1607,9 @@ def _request_sentence_translation_batch_once(
         response_text = _extract_openai_compatible_text(response.json()).strip()
 
     if not response_text:
-        raise RuntimeError("AI provider returned an empty sentence translation.")
+        raise _UnusableSentenceReplyError(
+            "AI provider returned an empty sentence translation."
+        )
     return _coerce_translation_pairs(response_text, source_units)
 
 
@@ -1590,14 +1621,18 @@ def _request_sentence_translation_batch_from_provider(
     source_language: str,
     target_language: str,
 ) -> list[dict[str, str]]:
-    """Translate a batch, shrinking it when the provider runs out of context.
+    """Translate a batch, shrinking it when the reply cannot be used.
 
     A single sentence far below the batch limit can still trip a provider's
     context limit once the system and user prompts are included. When the
     provider reports ``context_length_exceeded`` (or an equivalent message),
     the batch is split in half and each half is retried recursively so only
-    the offending units keep shrinking. A single unit that still fails is
-    surfaced as a fatal error, since there is nothing left to shrink.
+    the offending units keep shrinking. A reply that cannot be read as
+    translation pairs — invalid JSON, no pairs, or a missing translation, which
+    free and smaller models produce intermittently — is treated the same way,
+    because a smaller prompt is usually answered correctly. A single unit that
+    still fails is surfaced as a provider error with a message the user can act
+    on, since there is nothing left to shrink.
     """
     try:
         return _request_sentence_translation_batch_once(
@@ -1608,6 +1643,13 @@ def _request_sentence_translation_batch_from_provider(
             source_language,
             target_language,
         )
+    except _UnusableSentenceReplyError as exc:
+        if len(source_units) <= 1:
+            raise ProviderRequestError(
+                502,
+                "The AI provider returned a sentence translation that could not "
+                "be read. Please try again, or choose a different model.",
+            ) from exc
     except ProviderRequestError as exc:
         if not _is_context_length_error(exc.detail) or len(source_units) <= 1:
             raise
