@@ -263,11 +263,13 @@ def word_count(payload: RenderPayload):
     # from a CRLF file and a non-breaking space pasted out of a web page are
     # both spaces, and neither is a character of the document.
     chars_without = len("".join(payload.content.split()))
+    heading_count = len(_extract_outline(payload.content))
     return {
         "words": words,
         "chars_with_spaces": chars_with,
         "chars_without_spaces": chars_without,
         "reading_time": reading_time(words),
+        "heading_count": heading_count,
     }
 
 

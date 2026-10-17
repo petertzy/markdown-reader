@@ -6,6 +6,7 @@ import { flushSync } from "react-dom";
 import type { editor as MonacoEditor } from "monaco-editor";
 import type { useEditor } from "@/hooks/useEditor";
 import { Export, Files, type ExportPayload } from "@/lib/api";
+import { revealInFileManager } from "@/utils/revealInFileManager";
 import {
   isSupportedFile,
   MARKITDOWN_EXTENSIONS,
@@ -56,6 +57,7 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
   const lastDroppedPathsRef = useRef<{ signature: string; at: number } | null>(null);
   const dragCounterRef = useRef(0);
   const [universalImportAvailable, setUniversalImportAvailable] = useState(true);
+  const [lastExportedPath, setLastExportedPath] = useState<string | null>(null);
 
   const fileInputAccept = universalImportAvailable
     ? OPEN_FILE_ACCEPT
@@ -171,12 +173,21 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
       }
       const result = await editor.exportAs(format, outputPath, content);
       if (result) {
-        alert(`Exported to:\n${result.path}`);
+        setLastExportedPath(result.path);
       }
     } catch (error) {
       alert(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }, [editor, monacoRef]);
+
+  const showInFinder = useCallback(async () => {
+    if (!lastExportedPath) return;
+    try {
+      await revealInFileManager(lastExportedPath);
+    } catch (err) {
+      console.error("Failed to reveal exported file:", err);
+    }
+  }, [lastExportedPath]);
 
   const openDroppedPaths = useCallback(async (paths: string[]) => {
     const supportedPaths = paths.filter(isSupportedFile);
@@ -276,6 +287,7 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
   return {
     fileInputRef,
     fileInputAccept,
+    lastExportedPath,
     handleOpenFile,
     handleFileInputChange,
     handleExport,
@@ -283,5 +295,6 @@ export function useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef }
     handleDragLeave,
     handleDragOver,
     handleDrop,
+    showInFinder,
   };
 }

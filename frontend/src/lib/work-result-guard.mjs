@@ -36,3 +36,27 @@ export function applyWorkResultIfFresh(
   onApply(modifiedContent);
   return true;
 }
+
+/**
+ * Tracks the document that owns an asynchronous AI request. Moving to another
+ * tab invalidates every request issued for the previous document.
+ */
+export function createDocumentRequestGuard(documentId) {
+  let currentDocumentId = documentId;
+  let generation = 0;
+
+  return {
+    setDocument(documentId) {
+      if (currentDocumentId === documentId) return false;
+      currentDocumentId = documentId;
+      generation += 1;
+      return true;
+    },
+    issue() {
+      return { documentId: currentDocumentId, generation };
+    },
+    isCurrent(request) {
+      return request.documentId === currentDocumentId && request.generation === generation;
+    },
+  };
+}

@@ -29,6 +29,21 @@ except Exception:
 
 AI_CREDENTIAL_SERVICE = "MarkdownReader.AI"
 logger = logging.getLogger(__name__)
+
+
+def _temperature_for_model(model: str | None, default: float) -> float | None:
+    """Return a supported temperature value for an OpenAI-compatible model.
+
+    OpenAI reasoning models and GPT-5 models reject an explicitly supplied
+    temperature parameter. Other providers retain their existing defaults.
+    """
+    normalized_model = (model or "").strip().lower()
+    model_name = normalized_model.rsplit("/", 1)[-1]
+    if model_name.startswith(("o1", "o3", "gpt-5")):
+        return None
+    return default
+
+
 LOCAL_AI_DEFAULT_BASE_URL = "http://127.0.0.1:1234/v1"
 LOCAL_AI_BASE_URL_OPTIONS = {
     "lm_studio": "http://127.0.0.1:1234/v1",
@@ -412,28 +427,47 @@ def resolve_ai_api_key_for_slot(key_slot: str) -> str:
     )
 
 
+def get_ai_api_key_storage_status(provider: str, timeout_seconds: float = 1.0) -> str:
+    """Check a slot without treating a failed or timed-out read as absence.
+
+    Environment keys are clearable through the existing fallback only when
+    secure storage is unavailable.
+    """
+    storage = keyring
+    if storage is None:
+        return (
+            "environment"
+            if os.getenv(_get_key_slot_env_var(provider), "").strip()
+            else "not_saved"
+        )
+
+    result = {"status": "unavailable"}
+
+    def check_keyring() -> None:
+        try:
+            result["status"] = (
+                "saved"
+                if storage.get_password(AI_CREDENTIAL_SERVICE, provider)
+                else "not_saved"
+            )
+        except KeyringError:
+            result["status"] = "unavailable"
+
+    thread = threading.Thread(target=check_keyring, daemon=True)
+    thread.start()
+    thread.join(timeout_seconds)
+    return result["status"] if not thread.is_alive() else "unavailable"
+
+
 def is_ai_api_key_configured(
     provider: str, env_var: str = "", timeout_seconds: float = 1.0
 ) -> bool:
     if env_var and os.getenv(env_var, "").strip():
         return True
-    if keyring is None:
-        return bool(os.getenv(_get_key_slot_env_var(provider), "").strip())
-
-    result = {"configured": False}
-
-    def check_keyring() -> None:
-        try:
-            result["configured"] = bool(
-                keyring.get_password(AI_CREDENTIAL_SERVICE, provider)
-            )
-        except KeyringError:
-            result["configured"] = False
-
-    thread = threading.Thread(target=check_keyring, daemon=True)
-    thread.start()
-    thread.join(timeout_seconds)
-    return result["configured"] if not thread.is_alive() else False
+    return get_ai_api_key_storage_status(provider, timeout_seconds) in (
+        "saved",
+        "environment",
+    )
 
 
 def set_secure_ai_api_key(provider: str, api_key: str) -> None:
@@ -723,17 +757,20 @@ def _request_translation_from_provider(
         )
         translated = _extract_anthropic_text(response.json()).strip()
     else:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        temperature = _temperature_for_model(model, 0.2)
+        if temperature is not None:
+            payload["temperature"] = temperature
         response = _post_with_retry(
             f"{base_url}/chat/completions",
             headers=headers,
-            payload={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.2,
-            },
+            payload=payload,
         )
         translated = _extract_openai_compatible_text(response.json()).strip()
 
@@ -804,18 +841,21 @@ def _request_chat_from_provider(
         response.raise_for_status()
         answer = _extract_anthropic_text(response.json()).strip()
     else:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                *history_messages,
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        temperature = _temperature_for_model(model, 0.4)
+        if temperature is not None:
+            payload["temperature"] = temperature
         response = requests.post(
             f"{base_url}/chat/completions",
             headers=headers,
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    *history_messages,
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.4,
-            },
+            json=payload,
             timeout=60,
         )
         response.raise_for_status()
@@ -1520,17 +1560,20 @@ def _request_sentence_translation_batch_once(
         )
         response_text = _extract_anthropic_text(response.json()).strip()
     else:
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+        temperature = _temperature_for_model(model, 0.1)
+        if temperature is not None:
+            payload["temperature"] = temperature
         response = _post_with_retry(
             f"{base_url}/chat/completions",
             headers=headers,
-            payload={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.1,
-            },
+            payload=payload,
         )
         response_text = _extract_openai_compatible_text(response.json()).strip()
 
@@ -1741,6 +1784,12 @@ def process_document_work(instruction: str, content: str) -> str:
     )
 
     user_prompt = f"Instruction: {instruction}\n\nDocument:\n{content}"
+
+    return request_work_response(system_prompt, user_prompt)
+
+
+def request_work_response(system_prompt: str, user_prompt: str) -> str:
+    """Run a Work prompt through the selected provider."""
 
     provider = _get_current_ai_provider()
     api_key, _key_slot, env_var = _get_ai_api_key_for_provider(provider)
