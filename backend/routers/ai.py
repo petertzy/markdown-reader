@@ -74,6 +74,12 @@ class WorkPayload(BaseModel):
     document_content: str
 
 
+class ProjectWorkPayload(BaseModel):
+    root: str = Field(min_length=1, max_length=4096)
+    instruction: str = Field(min_length=1, max_length=8000)
+    open_buffers: dict[str, str] = Field(default_factory=dict, max_length=100)
+
+
 class TranslatePayload(BaseModel):
     content: str
     source_language: str
@@ -339,6 +345,60 @@ def ai_work(payload: WorkPayload):
         raise HTTPException(status_code=500, detail=str(exc))
 
     return {"modified_content": result}
+
+
+def _project_work_operation(operation):
+    """Map project Work failures to the same useful provider errors as /work."""
+    logic = _logic()
+    try:
+        return operation()
+    except HTTPException:
+        raise
+    except logic.TranslationConfigError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except logic.ProviderRequestError as exc:
+        raise HTTPException(
+            status_code=exc.status_code or 502, detail=exc.detail
+        ) from exc
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Project Work failed.") from exc
+
+
+@router.post("/work/project")
+def start_project_work(payload: ProjectWorkPayload):
+    from backend import project_work
+
+    return _project_work_operation(
+        lambda: project_work.start(
+            payload.root, payload.instruction, payload.open_buffers
+        )
+    )
+
+
+@router.post("/work/project/{task_id}/step")
+def step_project_work(task_id: str):
+    from backend import project_work
+
+    return _project_work_operation(
+        lambda: project_work.step(task_id, _logic().request_work_response)
+    )
+
+
+@router.post("/work/project/{task_id}/validate")
+def validate_project_work(task_id: str):
+    from backend import project_work
+
+    return _project_work_operation(lambda: project_work.validate(task_id))
+
+
+@router.delete("/work/project/{task_id}")
+def discard_project_work(task_id: str):
+    from backend import project_work
+
+    project_work.discard(task_id)
+    return {"discarded": True}
 
 
 @router.get("/chat/history")

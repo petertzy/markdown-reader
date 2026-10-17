@@ -5,6 +5,8 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "shell:default",
+    "dialog:default",
     "opener:allow-reveal-item-in-dir"
   ]
 }
