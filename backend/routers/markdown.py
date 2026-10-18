@@ -55,7 +55,12 @@ class OutlinePayload(BaseModel):
 class OpenPreviewPayload(RenderPayload):
     """Input for opening the rendered Markdown preview in a browser."""
 
+class PublicationFile(BaseModel):
+    path: str
+    content: str
 
+class PublicationPayload(BaseModel):
+    files: list[PublicationFile]
 # ── Heading helpers ───────────────────────────────────────────────────────────
 
 from backend.heading_anchor import (
@@ -327,3 +332,18 @@ def generate_toc(payload: OutlinePayload):
     from backend.ai_logic import _generate_markdown_toc
 
     return {"toc": _generate_markdown_toc(payload.content)}
+
+@router.post("/publication/prepare")
+def prepare_publication(payload: PublicationPayload):
+    combined_parts = []
+    toc_entries = []
+    for i, f in enumerate(payload.files, start=1):
+        outline = _extract_outline(f.content)
+        toc_entries.extend(outline)
+        combined_parts.append(f"<!-- file: {f.path} -->\n{f.content}")
+    combined = "\n\n---\n\n".join(combined_parts)
+    return {
+        "combined": combined,
+        "toc": toc_entries,
+        "file_count": len(payload.files),
+    }
