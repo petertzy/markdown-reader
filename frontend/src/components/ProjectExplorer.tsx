@@ -53,13 +53,7 @@ export default function ProjectExplorer({ root, onOpenFile, onOpenProject, onClo
 
   if (collapsed) {
     return <aside className="flex h-full w-10 shrink-0 flex-col border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-[#252526]">
-      <button
-        onClick={() => setCollapsed(false)}
-        title="Show Explorer"
-        aria-label="Show Explorer"
-        aria-expanded={false}
-        className="flex items-center justify-center rounded p-1 text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:bg-[#3a3d41] dark:hover:text-gray-100"
-      >
+      <button onClick={() => setCollapsed(false)} title="Show Explorer" aria-label="Show Explorer" aria-expanded={false} className="flex items-center justify-center rounded p-1 text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-[#3a3d41] dark:hover:text-gray-100">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
           <path fillRule="evenodd" clipRule="evenodd" d="M10.072 8.024L5.715 3.667l.618-.62L11 8.024l-4.667 4.667-.618-.62 4.357-4.047z" />
         </svg>
@@ -71,13 +65,7 @@ export default function ProjectExplorer({ root, onOpenFile, onOpenProject, onClo
     <div className="flex items-center justify-between border-b border-gray-200 px-2 py-2 dark:border-gray-700">
       <span className="truncate text-xs font-semibold uppercase tracking-wide">Explorer</span>
       <div className="flex items-center gap-1"><button onClick={onOpenProject} title="Open project" className="px-1 hover:text-blue-500">+</button>
-      <button
-        onClick={() => setCollapsed(true)}
-        title="Hide Explorer"
-        aria-label="Hide Explorer"
-        aria-expanded={true}
-        className="flex items-center justify-center rounded p-1 text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-400 dark:hover:bg-[#3a3d41] dark:hover:text-gray-100"
-      >
+      <button onClick={() => setCollapsed(true)} title="Hide Explorer" aria-label="Hide Explorer" aria-expanded={true} className="flex items-center justify-center rounded p-1 text-gray-500 transition-colors hover:bg-gray-200 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-[#3a3d41] dark:hover:text-gray-100">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
           <path fillRule="evenodd" clipRule="evenodd" d="M5.928 8.024L10.285 3.667l-.618-.62L5 8.024l4.667 4.667.618-.62-4.357-4.047z" />
         </svg>
