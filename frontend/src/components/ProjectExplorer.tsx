@@ -51,31 +51,79 @@ export default function ProjectExplorer({ root, onOpenFile, onOpenProject, onClo
   const name = root?.split(/[\\/]/).filter(Boolean).pop() || "Project";
   const [collapsed, setCollapsed] = useState(false);
 
-  if (collapsed) {
-    return <aside className="flex h-full w-10 shrink-0 flex-col border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-[#252526]">
-      <button onClick={() => setCollapsed(false)} title="Show Explorer" aria-label="Show Explorer" className="flex items-center justify-center p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-[#333] dark:hover:text-gray-100">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path fillRule="evenodd" clipRule="evenodd" d="M13.5 1h-11l-.5.5v13l.5.5h11l.5-.5v-13l-.5-.5zm-.5 13H3V2h10v12zm-5-3H4v-1h4v1zm3-2H4V8h7v1zm0-2H4V6h7v1zm0-2H4V4h7v1z" />
-        </svg>
-      </button>
-    </aside>;
-  }
+    if (collapsed) {
+      return (
+        <aside className="flex h-full w-12 shrink-0 flex-col items-center border-r border-gray-200 bg-gray-50 py-2 dark:border-[#333] dark:bg-[#333333]">
+          <button
+            onClick={() => setCollapsed(false)}
+            title="Explorer"
+            aria-label="Explorer"
+            className="flex h-12 w-12 items-center justify-center text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white"
+          >
+            <svg fill="none" xmlns="http://www.w3.org/2000/svg" width="auto" height="auto" viewBox="0 0 16 16"><path d="M5 1C3.89543 1 3 1.89543 3 3V13C3 14.1046 3.89543 15 5 15H11C12.1046 15 13 14.1046 13 13V5.41421C13 5.01639 12.842 4.63486 12.5607 4.35355L9.64645 1.43934C9.36514 1.15804 8.98361 1 8.58579 1H5ZM4 3C4 2.44772 4.44772 2 5 2H8V4.5C8 5.32843 8.67157 6 9.5 6H12V13C12 13.5523 11.5523 14 11 14H5C4.44772 14 4 13.5523 4 13V3ZM11.7929 5H9.5C9.22386 5 9 4.77614 9 4.5V2.20711L11.7929 5Z" fill="currentColor"/></svg>
+          </button>
+        </aside>
+      );
+    }
 
-  return <aside className="flex h-full w-56 shrink-0 flex-col border-r border-gray-200 bg-gray-50 text-sm text-gray-800 dark:border-gray-700 dark:bg-[#252526] dark:text-gray-200">
-    <div className="flex items-center justify-between border-b border-gray-200 px-2 py-2 dark:border-gray-700">
-      <span className="truncate text-xs font-semibold uppercase tracking-wide">Explorer</span>
-      <div className="flex items-center gap-1"><button onClick={onOpenProject} title="Open project" className="px-1 hover:text-blue-500">+</button>
-      <button onClick={() => setCollapsed(true)} title="Hide Explorer" aria-label="Hide Explorer" className="flex items-center gap-2 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path fillRule="evenodd" clipRule="evenodd" d="M13.5 1h-11l-.5.5v13l.5.5h11l.5-.5v-13l-.5-.5zm-.5 13H3V2h10v12zm-5-3H4v-1h4v1zm3-2H4V8h7v1zm0-2H4V6h7v1zm0-2H4V4h7v1z" />
-        </svg>
-        Explorer
-      </button>
-    </div>
-    </div>
-    {!root ? <div className="p-3 text-xs text-gray-500 dark:text-gray-400"><p>No project folder is open.</p><button onClick={onOpenProject} className="mt-2 text-blue-600 hover:underline dark:text-blue-400">Open Project Folder</button></div> : <>
-      <div className="flex items-center justify-between border-b border-gray-200 px-2 py-2 text-xs font-medium dark:border-gray-700"><span className="truncate" title={root}>{name}</span><button onClick={onCloseProject} title="Close project" className="text-gray-500 hover:text-red-500 dark:text-gray-400">×</button></div>
-      <div className="min-h-0 flex-1 overflow-auto"><Tree key={`${root}-${refreshToken}`} path={root} depth={0} onOpenFile={onOpenFile} /></div>
-    </>}
-  </aside>;
+    return (
+      <div className="flex h-full shrink-0">
+        {/* BARRA IZQUIERDA: Siempre visible */}
+        <div className="flex w-12 shrink-0 flex-col items-center border-r border-gray-200 bg-gray-50 py-2 dark:border-[#333] dark:bg-[#333333]">
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            title="Explorer"
+            aria-label="Explorer"
+            className={`flex h-12 w-12 items-center justify-center border-l-2 transition-colors ${
+              !collapsed
+                ? "border-blue-500 text-black dark:text-white" // Activo (como VS Code)
+                : "border-transparent text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white" // Inactivo
+            }`}
+          >
+            {/* SVG EXACTO: Documento doble con esquina doblada */}
+            <svg fill="none" xmlns="http://www.w3.org/2000/svg" width="auto" height="auto" viewBox="0 0 16 16"><path d="M5 1C3.89543 1 3 1.89543 3 3V13C3 14.1046 3.89543 15 5 15H11C12.1046 15 13 14.1046 13 13V5.41421C13 5.01639 12.842 4.63486 12.5607 4.35355L9.64645 1.43934C9.36514 1.15804 8.98361 1 8.58579 1H5ZM4 3C4 2.44772 4.44772 2 5 2H8V4.5C8 5.32843 8.67157 6 9.5 6H12V13C12 13.5523 11.5523 14 11 14H5C4.44772 14 4 13.5523 4 13V3ZM11.7929 5H9.5C9.22386 5 9 4.77614 9 4.5V2.20711L11.7929 5Z" fill="currentColor"/></svg>
+          </button>
+        </div>
+
+        {/* PANEL DERECHO: Solo se muestra si NO está colapsado */}
+        {!collapsed && (
+          <aside className="flex h-full w-56 shrink-0 flex-col border-r border-gray-200 bg-gray-50 text-sm text-gray-800 dark:border-gray-700 dark:bg-[#252526] dark:text-gray-200">
+            
+            {/* Cabecera: EXPLORER y botones de acción */}
+            <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2 dark:border-gray-700">
+              <span className="truncate text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
+                Explorer
+              </span>
+              <div className="flex items-center gap-1">
+                <button onClick={onOpenProject} title="Open project" className="rounded p-1 text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-[#3a3d41]">
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* Contenido: Árbol de archivos o mensaje vacío */}
+            {!root ? (
+              <div className="p-3 text-xs text-gray-500 dark:text-gray-400">
+                <p>No project folder is open.</p>
+                <button onClick={onOpenProject} className="mt-2 text-blue-600 hover:underline dark:text-blue-400">
+                  Open Project Folder
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between border-b border-gray-200 px-2 py-2 text-xs font-medium dark:border-gray-700">
+                  <span className="truncate" title={root}>{name}</span>
+                  <button onClick={onCloseProject} title="Close project" className="text-gray-500 hover:text-red-500 dark:text-gray-400">
+                    ×
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-auto">
+                  <Tree key={`${root}-${refreshToken}`} path={root} depth={0} onOpenFile={onOpenFile} />
+                </div>
+              </>
+            )}
+          </aside>
+        )}
+      </div>
+    );
 }
