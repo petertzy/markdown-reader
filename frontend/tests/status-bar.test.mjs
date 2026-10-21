@@ -38,6 +38,7 @@ test("renders the heading count with the other document statistics", () => {
     reading_time: "6 min read",
   });
 
+  
   assert.match(html, /1250 words/);
   assert.match(html, /7430 chars/);
   assert.match(html, /16 headings/);
