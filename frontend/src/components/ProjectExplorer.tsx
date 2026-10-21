@@ -53,9 +53,9 @@ export default function ProjectExplorer({ root, onOpenFile, onOpenProject, onClo
 
   if (collapsed) {
     return <aside className="flex h-full w-10 shrink-0 flex-col border-r border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-[#252526]">
-      <button onClick={() => setCollapsed(false)} title="Show Explorer" aria-label="Show Explorer" className="flex items-center justify-center rounded p-1 text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-[#3a3d41]">
+      <button onClick={() => setCollapsed(false)} title="Show Explorer" aria-label="Show Explorer" className="flex items-center justify-center p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-[#333] dark:hover:text-gray-100">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path fillRule="evenodd" clipRule="evenodd" d="M10.072 8.024L5.715 3.667l.618-.62L11 8.024l-4.667 4.667-.618-.62 4.357-4.047z" />
+          <path fillRule="evenodd" clipRule="evenodd" d="M13.5 1h-11l-.5.5v13l.5.5h11l.5-.5v-13l-.5-.5zm-.5 13H3V2h10v12zm-5-3H4v-1h4v1zm3-2H4V8h7v1zm0-2H4V6h7v1zm0-2H4V4h7v1z" />
         </svg>
       </button>
     </aside>;
@@ -65,10 +65,11 @@ export default function ProjectExplorer({ root, onOpenFile, onOpenProject, onClo
     <div className="flex items-center justify-between border-b border-gray-200 px-2 py-2 dark:border-gray-700">
       <span className="truncate text-xs font-semibold uppercase tracking-wide">Explorer</span>
       <div className="flex items-center gap-1"><button onClick={onOpenProject} title="Open project" className="px-1 hover:text-blue-500">+</button>
-      <button onClick={() => setCollapsed(true)} title="Hide Explorer" aria-label="Hide Explorer" className="flex items-center justify-center rounded p-1 text-gray-500 hover:bg-gray-200 dark:text-gray-400 dark:hover:bg-[#3a3d41]">
+      <button onClick={() => setCollapsed(true)} title="Hide Explorer" aria-label="Hide Explorer" className="flex items-center gap-2 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path fillRule="evenodd" clipRule="evenodd" d="M5.928 8.024L10.285 3.667l-.618-.62L5 8.024l4.667 4.667.618-.62-4.357-4.047z" />
+          <path fillRule="evenodd" clipRule="evenodd" d="M13.5 1h-11l-.5.5v13l.5.5h11l.5-.5v-13l-.5-.5zm-.5 13H3V2h10v12zm-5-3H4v-1h4v1zm3-2H4V8h7v1zm0-2H4V6h7v1zm0-2H4V4h7v1z" />
         </svg>
+        Explorer
       </button>
     </div>
     </div>
