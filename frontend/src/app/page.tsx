@@ -46,7 +46,7 @@ export default function HomePage() {
   const [projectRefreshToken, setProjectRefreshToken] = useState(0);
   const { isDesktopRuntime, backendStatus, backendMessage, showPackagedBackendStatus } = useTauriBackend(editor);
   const showPreview = true;
-  const projectRoot: string | null = null; // placeholder hasta conectar openProject
+  const projectRoot = project.projectRoot;
   const fileIO = useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef });
   const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt, executeWork, isWorking } = useAIActions({
     documentId: editor.activeTab.id, documentText: editor.activeTab.content, editorRef: monacoRef, onDocumentChange: editor.handleContentChange,
@@ -150,9 +150,11 @@ export default function HomePage() {
         )}
         {activePanel === PANELS.EXPLORER && (
           <ProjectExplorer
-            rootPath={projectRoot ?? ""}   /* ✅ string */
+            root={projectRoot}
+            onOpenFile={(path) => { void editor.openFile(path); }}
+            onOpenProject={() => { void openProject(); }}
+            onCloseProject={project.closeProject}
             refreshToken={projectRefreshToken}
-            onClose={() => togglePanel(PANELS.EXPLORER)}
           />
         )}
       </div>
