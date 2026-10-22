@@ -86,3 +86,20 @@ test("clicking each active toolbar panel again closes it", () => {
     assert.equal(rendered.activePanel, null);
   }
 });
+
+test("closing the active panel hides its content and gives the editor full width", () => {
+  const { getPanelContent, getPanelSplitAfterToggle } = load(
+    compile("../frontend/src/types/panels.ts"),
+    {},
+  );
+  const contents = {
+    [PANELS.PREVIEW]: { name: "preview" },
+    [PANELS.AI]: { name: "ai" },
+    [PANELS.CITATION]: { name: "citation" },
+  };
+
+  assert.equal(getPanelContent(null, contents), null);
+  assert.strictEqual(getPanelContent(PANELS.AI, contents), contents[PANELS.AI]);
+  assert.equal(getPanelSplitAfterToggle(PANELS.AI, PANELS.AI), 100);
+  assert.equal(getPanelSplitAfterToggle(null, PANELS.AI), 60);
+});

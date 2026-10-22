@@ -21,7 +21,7 @@ import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
 import ProjectExplorer from "@/components/ProjectExplorer";
 import StatusBar from "@/components/StatusBar";
-import { PANELS } from "@/types/panels";
+import { getPanelContent, getPanelSplitAfterToggle, PANELS } from "@/types/panels";
 
 export default function HomePage() {
   const editor = useEditor();
@@ -49,8 +49,8 @@ export default function HomePage() {
   });
   const selectPanel = useCallback((panel: NonNullable<typeof PANELS[keyof typeof PANELS]>) => {
     togglePanel(panel);
-    setSplit(panel === PANELS.PREVIEW ? 50 : 60);
-  }, [togglePanel]);
+    setSplit(getPanelSplitAfterToggle(activePanel, panel));
+  }, [activePanel, togglePanel]);
   const openProject = useCallback(async () => {
     const root = await project.openProject();
     if (!root) return;
@@ -127,8 +127,12 @@ export default function HomePage() {
               slash={{ isOpen: slash.isOpen, filteredCommands: slash.filteredCommands, selectedIndex: slash.selectedIndex,
                 position: slashMenuPosition,
                 onSelect: (command) => { void executeSlashCommand(command); }, onClose: slash.close }} />}
-            right={activePanel === PANELS.PREVIEW ? <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
-              error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : activePanel === PANELS.AI ? <AIPanel projectRoot={project.projectRoot} projectWork={projectWork} documentId={editor.activeTab.id} documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} /> : <CitationPanel onInsert={formatting.insertCitation} />} />}
+            right={getPanelContent(activePanel, {
+              [PANELS.PREVIEW]: <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
+                error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} />,
+              [PANELS.AI]: <AIPanel projectRoot={project.projectRoot} projectWork={projectWork} documentId={editor.activeTab.id} documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} />,
+              [PANELS.CITATION]: <CitationPanel onInsert={formatting.insertCitation} />,
+            })} />}
       </div>
       <StatusBar stats={editor.wordCount} filePath={editor.activeTab.filePath} dirty={editor.activeTab.dirty} />
     </div>
