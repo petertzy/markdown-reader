@@ -135,6 +135,18 @@ echo "   Backend is ${BACKEND_URL} in debug mode"
 echo ""
 
 cd "$FRONTEND"
+
+set +e
+
 MARKDOWN_READER_BACKEND_PORT="${BACKEND_PORT}" \
 NEXT_PUBLIC_API_BASE_URL="${BACKEND_URL}" \
 npx tauri dev -- "$@"
+
+TAURI_EXIT_CODE=$?
+
+echo ""
+echo "================================="
+echo "Tauri exited with code: ${TAURI_EXIT_CODE}"
+echo "================================="
+
+exit "$TAURI_EXIT_CODE"
