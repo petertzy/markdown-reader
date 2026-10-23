@@ -18,9 +18,9 @@ import { PANELS, type PanelId } from "@/types/panels";
 export function usePanels() {
   const [activePanel, setActivePanel] = useState<PanelId>(PANELS.PREVIEW);
 
-  /** Select one right-side panel. Selecting it again keeps it visible. */
+  /** Toggle one right-side panel, closing it when selected again. */
   const togglePanel = useCallback((panelId: PanelId) => {
-    if (panelId) setActivePanel(panelId);
+    if (panelId) setActivePanel((prevPanel) => prevPanel === panelId ? null : panelId);
   }, []);
 
   const hidePanel = useCallback(() => setActivePanel(null), []);
