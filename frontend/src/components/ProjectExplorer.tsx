@@ -60,11 +60,17 @@ export default function ProjectExplorer({ root, onOpenFile, onOpenProject, onClo
             aria-label="Explorer"
             className="flex h-12 w-12 items-center justify-center text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white"
           >
-            <svg 
-              fill="#000000" 
-              viewBox="-3 0 30 30" 
-              xmlns="http://www.w3.org/2000/svg">
-                <path d="M21,8.94a1.31,1.31,0,0,0-.06-.27l0-.09a1.07,1.07,0,0,0-.19-.28h0l-6-6h0a1.07,1.07,0,0,0-.28-.19.32.32,0,0,0-.09,0A.88.88,0,0,0,14.05,2H10A3,3,0,0,0,7,5V6H6A3,3,0,0,0,3,9V19a3,3,0,0,0,3,3h8a3,3,0,0,0,3-3V18h1a3,3,0,0,0,3-3V9S21,9,21,8.94ZM15,5.41,17.59,8H16a1,1,0,0,1-1-1ZM15,19a1,1,0,0,1-1,1H6a1,1,0,0,1-1-1V9A1,1,0,0,1,6,8H7v7a3,3,0,0,0,3,3h5Zm4-4a1,1,0,0,1-1,1H10a1,1,0,0,1-1-1V5a1,1,0,0,1,1-1h3V7a3,3,0,0,0,3,3h3Z"/>
+            <svg xmlns="http://www.w3.org/2000/svg"
+                width="35" height="35" viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.1"
+                stroke-linecap="round"
+                stroke-linejoin="round">
+              <path d="M8 8V4.5A1.5 1.5 0 0 1 9.5 3H16l4 4v10.5A1.5 1.5 0 0 1 18.5 19H16"/>
+              <path d="M16 3v3a1 1 0 0 0 1 1h3"/>
+              <path d="M8 7H5.5A1.5 1.5 0 0 0 4 8.5v11A1.5 1.5 0 0 0 5.5 21h8A1.5 1.5 0 0 0 15 19.5V19"/>
+              <path d="M 8 5 V 16 Q 8 19 11 19 H 16" />
             </svg>
           </button>
         </aside>
@@ -86,11 +92,17 @@ export default function ProjectExplorer({ root, onOpenFile, onOpenProject, onClo
             }`}
           >
             {/* SVG EXACTO: Documento doble con esquina doblada */}
-            <svg 
-              fill="#000000" 
-              viewBox="-3 0 30 30" 
-              xmlns="http://www.w3.org/2000/svg">
-                <path d="M21,8.94a1.31,1.31,0,0,0-.06-.27l0-.09a1.07,1.07,0,0,0-.19-.28h0l-6-6h0a1.07,1.07,0,0,0-.28-.19.32.32,0,0,0-.09,0A.88.88,0,0,0,14.05,2H10A3,3,0,0,0,7,5V6H6A3,3,0,0,0,3,9V19a3,3,0,0,0,3,3h8a3,3,0,0,0,3-3V18h1a3,3,0,0,0,3-3V9S21,9,21,8.94ZM15,5.41,17.59,8H16a1,1,0,0,1-1-1ZM15,19a1,1,0,0,1-1,1H6a1,1,0,0,1-1-1V9A1,1,0,0,1,6,8H7v7a3,3,0,0,0,3,3h5Zm4-4a1,1,0,0,1-1,1H10a1,1,0,0,1-1-1V5a1,1,0,0,1,1-1h3V7a3,3,0,0,0,3,3h3Z"/>
+            <svg xmlns="http://www.w3.org/2000/svg"
+                width="35" height="35" viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.1"
+                stroke-linecap="round"
+                stroke-linejoin="round">
+              <path d="M8 8V4.5A1.5 1.5 0 0 1 9.5 3H16l4 4v10.5A1.5 1.5 0 0 1 18.5 19H16"/>
+              <path d="M16 3v3a1 1 0 0 0 1 1h3"/>
+              <path d="M8 7H5.5A1.5 1.5 0 0 0 4 8.5v11A1.5 1.5 0 0 0 5.5 21h8A1.5 1.5 0 0 0 15 19.5V19"/>
+              <path d="M 8 5 V 16 Q 8 19 11 19 H 16" />
             </svg>
           </button>
         </div>
