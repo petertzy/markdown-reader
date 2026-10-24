@@ -23,7 +23,7 @@ import PublicationPanel from "@/components/PublicationPanel";
 import ProjectExplorer from "@/components/ProjectExplorer";
 import DocumentStats from "@/components/DocumentStats";
 import StatusBar from "@/components/StatusBar";
-import { PANELS } from "@/types/panels";
+import { getPanelContent, getPanelSplitAfterToggle, PANELS } from "@/types/panels";
 
 export default function HomePage() {
   const editor = useEditor();
@@ -53,8 +53,8 @@ export default function HomePage() {
   });
   const selectPanel = useCallback((panel: NonNullable<typeof PANELS[keyof typeof PANELS]>) => {
     togglePanel(panel);
-    setSplit(panel === PANELS.PREVIEW ? 50 : 60);
-  }, [togglePanel]);
+    setSplit(getPanelSplitAfterToggle(activePanel, panel));
+  }, [activePanel, togglePanel]);
   const openProject = useCallback(async () => {
     const root = await project.openProject();
     if (!root) return;
@@ -157,6 +157,12 @@ export default function HomePage() {
             refreshToken={projectRefreshToken}
           />
         )}
+            right={getPanelContent(activePanel, {
+              [PANELS.PREVIEW]: <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
+                error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} />,
+              [PANELS.AI]: <AIPanel projectRoot={project.projectRoot} projectWork={projectWork} documentId={editor.activeTab.id} documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} />,
+              [PANELS.CITATION]: <CitationPanel onInsert={formatting.insertCitation} />,
+            })} />}
       </div>
       <DocumentStats content={editor.activeTab.content} className="px-4 py-1 border-t" />
       <StatusBar stats={editor.wordCount} filePath={editor.activeTab.filePath} dirty={editor.activeTab.dirty} />
