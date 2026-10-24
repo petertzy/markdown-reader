@@ -300,6 +300,17 @@ export interface WordCountResult {
   reading_time: string;
 }
 
+export interface PublicationFile {
+  path: string;
+  content: string;
+}
+
+export interface PublicationResult {
+  combined: string;
+  toc: Array<{ level: number; text: string; line: number }>;
+  file_count: number;
+}
+
 export type BrowserPreviewResult = {
   path: string;
   url: string;
@@ -350,6 +361,12 @@ export const Markdown = {
     apiFetch<BrowserPreviewResult>("/api/markdown/open-preview", {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+
+  preparePublication: (files: PublicationFile[]) =>
+    apiFetch<PublicationResult>("/api/markdown/publication/prepare", {
+      method: "POST",
+      body: JSON.stringify({ files }),
     }),
 };
 

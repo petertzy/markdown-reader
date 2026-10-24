@@ -17,9 +17,9 @@ export default function StatusBar({ stats, filePath, dirty }: Props) {
       </span>
       {stats && (
         <span className="flex gap-4 opacity-90">
-          <span>{stats.words.toLocaleString()} words</span>
-          <span>{stats.chars_with_spaces.toLocaleString()} chars</span>
-          <span>{stats.heading_count.toLocaleString()} headings</span>
+          <span>{stats.words} words</span>
+          <span>{stats.chars_with_spaces} chars</span>
+          <span>{stats.heading_count} headings</span>
           <span>{stats.reading_time}</span>
         </span>
       )}

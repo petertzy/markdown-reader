@@ -19,7 +19,9 @@ import SplitPane from "@/components/SplitPane";
 import FocusModePane, { type FocusEditorHandle } from "@/components/FocusModePane";
 import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
+import PublicationPanel from "@/components/PublicationPanel";
 import ProjectExplorer from "@/components/ProjectExplorer";
+import DocumentStats from "@/components/DocumentStats";
 import StatusBar from "@/components/StatusBar";
 import { getPanelContent, getPanelSplitAfterToggle, PANELS } from "@/types/panels";
 
@@ -43,6 +45,8 @@ export default function HomePage() {
   const [split, setSplit] = useState(50);
   const [projectRefreshToken, setProjectRefreshToken] = useState(0);
   const { isDesktopRuntime, backendStatus, backendMessage, showPackagedBackendStatus } = useTauriBackend(editor);
+  const showPreview = true;
+  const projectRoot = project.projectRoot;
   const fileIO = useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef });
   const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt, executeWork, isWorking } = useAIActions({
     documentId: editor.activeTab.id, documentText: editor.activeTab.content, editorRef: monacoRef, onDocumentChange: editor.handleContentChange,
@@ -103,30 +107,56 @@ export default function HomePage() {
       onDragOver={fileIO.handleDragOver} onDrop={fileIO.handleDrop}>
       <input ref={fileIO.fileInputRef} type="file" accept={fileIO.fileInputAccept} className="hidden" onChange={fileIO.handleFileInputChange} />
       <MenuBar groups={menuGroups} shortcuts={shortcuts} />
-      <Toolbar onOpenFile={() => { void fileIO.handleOpenFile(); }} onOpenProject={() => { void openProject(); }} onSaveFile={() => { void handleSaveFile(); }}
+      <Toolbar onOpenFile={() => { void fileIO.handleOpenFile(); }} onSaveFile={() => { void handleSaveFile(); }}
+        onOpenProject={() => { void openProject(); }}
         onExport={fileIO.handleExport} onOpenBrowserPreview={() => { void handleOpenBrowserPreview(); }}
-        onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={selectPanel}
+        onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={togglePanel}
         onToggleFocusMode={() => { setFocusMode((enabled) => !enabled); resetEditor(); }}
         darkMode={editor.darkMode} fontSize={editor.fontSize} onFontSizeChange={editor.setFontSize}
         showFocusPanel={focusMode}
         backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null}
-        lastExportedPath={fileIO.lastExportedPath}
-        onShowInFinder={fileIO.showInFinder}
-      />
+        lastExportedPath={fileIO.lastExportedPath} onShowInFinder={fileIO.showInFinder} />
       <TabBar tabs={editor.tabs} activeTabId={editor.activeTabId} onSelect={handleTabSelect} onClose={editor.closeTab} onNew={editor.newTab} />
       <div className="flex flex-1 overflow-hidden">
-        {!focusMode && <ProjectExplorer root={project.projectRoot} onOpenFile={(path) => { void editor.openFile(path); }} onOpenProject={() => { void openProject(); }} onCloseProject={project.closeProject} refreshToken={projectRefreshToken} />}
         {focusMode ? <FocusModePane key={`${editor.activeTabId}-${revision}`} value={editor.activeTab.content}
           onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
           slashCommands={slash.filteredCommands} onSelect={(command) => { void executeSlashCommand(command); }}
           editorRef={focusEditorRef} /> :
-          <SplitPane split={split} onSplitChange={setSplit} minSize={20}
+          <SplitPane split={split} onSplitChange={setSplit}
             left={<EditorWorkspace tabId={editor.activeTab.id} value={editor.activeTab.content}
               onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
               revision={revision} monacoRef={monacoRef} onReady={markReady}
               slash={{ isOpen: slash.isOpen, filteredCommands: slash.filteredCommands, selectedIndex: slash.selectedIndex,
                 position: slashMenuPosition,
                 onSelect: (command) => { void executeSlashCommand(command); }, onClose: slash.close }} />}
+            right={showPreview ? <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
+              error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : null} />}
+        {activePanel === PANELS.AI && (
+          <AIPanel
+            documentText={editor.activeTab.content}
+            selectedText={selectedText}
+            onApplyAction={handleAIApplyAction}
+            initialTab={aiPanelInitialTab}
+            executeWork={executeWork}
+            isWorking={isWorking}
+            documentId={editor.activeTab.id}      /* <-- nuevo */
+            projectRoot={projectRoot}             /* <-- nuevo */
+            projectWork={projectWork}            
+          />
+        )}
+        {activePanel === PANELS.CITATION && <CitationPanel onInsert={formatting.insertCitation} />}
+        {activePanel === PANELS.PUBLICATION && (
+          <PublicationPanel tabs={editor.tabs} onClose={() => togglePanel(PANELS.PUBLICATION)} />
+        )}
+        {activePanel === PANELS.EXPLORER && (
+          <ProjectExplorer
+            root={projectRoot}
+            onOpenFile={(path) => { void editor.openFile(path); }}
+            onOpenProject={() => { void openProject(); }}
+            onCloseProject={project.closeProject}
+            refreshToken={projectRefreshToken}
+          />
+        )}
             right={getPanelContent(activePanel, {
               [PANELS.PREVIEW]: <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
                 error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} />,
@@ -134,7 +164,9 @@ export default function HomePage() {
               [PANELS.CITATION]: <CitationPanel onInsert={formatting.insertCitation} />,
             })} />}
       </div>
+      <DocumentStats content={editor.activeTab.content} className="px-4 py-1 border-t" />
       <StatusBar stats={editor.wordCount} filePath={editor.activeTab.filePath} dirty={editor.activeTab.dirty} />
     </div>
   );
 }
+
