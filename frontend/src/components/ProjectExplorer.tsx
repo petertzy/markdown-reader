@@ -64,9 +64,9 @@ export default function ProjectExplorer({ root, onOpenFile, onOpenProject, onClo
                 width="35" height="35" viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                stroke-width="1.1"
-                stroke-linecap="round"
-                stroke-linejoin="round">
+                strokeWidth="1.1"
+                strokeLinecap="round"
+                strokeLinejoin="round">
               <path d="M8 8V4.5A1.5 1.5 0 0 1 9.5 3H16l4 4v10.5A1.5 1.5 0 0 1 18.5 19H16"/>
               <path d="M16 3v3a1 1 0 0 0 1 1h3"/>
               <path d="M8 7H5.5A1.5 1.5 0 0 0 4 8.5v11A1.5 1.5 0 0 0 5.5 21h8A1.5 1.5 0 0 0 15 19.5V19"/>
@@ -96,9 +96,9 @@ export default function ProjectExplorer({ root, onOpenFile, onOpenProject, onClo
                 width="35" height="35" viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                stroke-width="1.1"
-                stroke-linecap="round"
-                stroke-linejoin="round">
+                strokeWidth="1.1"
+                strokeLinecap="round"
+                strokeLinejoin="round">
               <path d="M8 8V4.5A1.5 1.5 0 0 1 9.5 3H16l4 4v10.5A1.5 1.5 0 0 1 18.5 19H16"/>
               <path d="M16 3v3a1 1 0 0 0 1 1h3"/>
               <path d="M8 7H5.5A1.5 1.5 0 0 0 4 8.5v11A1.5 1.5 0 0 0 5.5 21h8A1.5 1.5 0 0 0 15 19.5V19"/>
