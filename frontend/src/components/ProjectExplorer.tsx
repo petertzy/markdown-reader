@@ -79,7 +79,7 @@ export default function ProjectExplorer({ root, onOpenFile, onOpenProject, onClo
             title="Hide Explorer"
             aria-label="Hide Explorer"
             aria-expanded="true"
-            className="flex h-8 w-8 items-center justify-center rounded border-l-2 border-blue-500 text-gray-900 transition-colors duration-150 hover:bg-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 dark:text-white dark:hover:bg-[#3a3d41] dark:focus-visible:ring-offset-[#252526]"
+            className="flex h-8 w-8 items-center justify-center rounded text-gray-900 transition-colors duration-150 hover:bg-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 dark:text-white dark:hover:bg-[#3a3d41] dark:focus-visible:ring-offset-[#252526]"
           >
             <ExplorerIcon />
           </button>
