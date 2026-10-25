@@ -87,7 +87,6 @@ export default function ProjectExplorer({ root, onOpenFile, onOpenProject, onClo
 
         {!collapsed && (
           <aside className="flex h-full w-56 shrink-0 flex-col border-r border-gray-200 bg-gray-50 text-sm text-gray-800 dark:border-gray-700 dark:bg-[#252526] dark:text-gray-200">
-            
             <div className="flex items-center justify-between border-b border-gray-200 px-3 py-2 dark:border-gray-700">
               <span className="truncate text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400">
                 Explorer
