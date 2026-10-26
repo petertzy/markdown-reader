@@ -149,7 +149,7 @@ export default function HomePage() {
           <PublicationPanel
             tabs={editor.tabs}
             onClose={() => togglePanel(PANELS.PUBLICATION)}
-            onExport={async (content: any, format: string) => {
+            onExport={async (content: string, format: "html" | "pdf") => {
               const blob = new Blob([content], { type: "text/markdown" });
               const url = URL.createObjectURL(blob);
               const a = document.createElement("a");
@@ -202,7 +202,7 @@ export default function HomePage() {
                 <PublicationPanel
                   tabs={editor.tabs}
                   onClose={() => togglePanel(PANELS.PUBLICATION)}
-                  onExport={async (content: any, format: string) => {
+                  onExport={async (content: string, format: "html" | "pdf") => {
                     // Puedes usar fileIO.handleExport si acepta contenido, 
                     // o simplemente crear un blob y descargarlo
                     const blob = new Blob([content], { type: "text/markdown" });
