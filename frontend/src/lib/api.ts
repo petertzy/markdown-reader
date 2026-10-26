@@ -363,10 +363,10 @@ export const Markdown = {
       body: JSON.stringify(payload),
     }),
 
-  preparePublication: (files: PublicationFile[]) =>
+  preparePublication: (files: PublicationFile[], useAI: boolean = false) =>
     apiFetch<PublicationResult>("/api/markdown/publication/prepare", {
       method: "POST",
-      body: JSON.stringify({ files }),
+      body: JSON.stringify({ files, useAI }),
     }),
 };
 

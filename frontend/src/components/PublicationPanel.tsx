@@ -12,6 +12,7 @@ interface Tab {
 interface PublicationPanelProps {
   tabs: Tab[];
   onClose: () => void;
+  onExport: (content: string, format: "html" | "pdf") => Promise<void>;
 }
 
 interface SelectedFile {
@@ -20,11 +21,12 @@ interface SelectedFile {
   content: string;
 }
 
-export default function PublicationPanel({ tabs, onClose }: PublicationPanelProps) {
+export default function PublicationPanel({ tabs, onClose, onExport }: PublicationPanelProps) {
   const [selected, setSelected] = useState<SelectedFile[]>([]);
   const [result, setResult] = useState<PublicationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [useAI, setUseAI] = useState(false);
 
   const toggleFile = (tab: Tab) => {
     setSelected((prev) => {
@@ -53,17 +55,18 @@ export default function PublicationPanel({ tabs, onClose }: PublicationPanelProp
     setError(null);
     try {
       const payload: PublicationFile[] = selected.map((f) => ({ path: f.path, content: f.content }));
-      const data = await Markdown.preparePublication(payload);
+      // Asumiendo que actualizaste Markdown.preparePublication para aceptar useAI
+      const data = await Markdown.preparePublication(payload, useAI);
       setResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to prepare publication");
     } finally {
       setLoading(false);
     }
-  }, [selected]);
+  }, [selected, useAI]);
 
   return (
-    <aside className="w-96 border-l border-gray-200 bg-white dark:border-[#333] dark:bg-[#252526] flex flex-col">
+    <aside className="w-96 border-l border-gray-200 bg-white dark:border-[#333] dark:bg-[#252526] flex flex-col h-full shrink-0">
       <header className="flex items-center justify-between border-b border-gray-200 px-4 py-2 dark:border-[#333]">
         <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Publication</h2>
         <button
@@ -119,23 +122,35 @@ export default function PublicationPanel({ tabs, onClose }: PublicationPanelProp
           })}
         </ul>
 
-        <button
-          onClick={handlePrepare}
-          disabled={!selected.length || loading}
-          className="w-full rounded bg-blue-600 px-3 py-2 text-white disabled:opacity-50 hover:bg-blue-700"
-        >
-          {loading ? "Preparing…" : "Preview publication"}
-        </button>
+        <div className="mt-4 space-y-3">
+          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+            <input 
+              type="checkbox" 
+              checked={useAI} 
+              onChange={(e) => setUseAI(e.target.checked)} 
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            Use AI to normalize chapter structure
+          </label>
+
+          <button
+            onClick={handlePrepare}
+            disabled={!selected.length || loading}
+            className="w-full rounded bg-blue-600 px-3 py-2 text-white disabled:opacity-50 hover:bg-blue-700 transition-colors"
+          >
+            {loading ? "Preparing…" : "Preview publication"}
+          </button>
+        </div>
 
         {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
 
         {result && (
-          <div className="mt-4">
-            <details open>
-              <summary className="cursor-pointer text-xs font-semibold">
+          <div className="mt-5 border-t border-gray-200 pt-4 dark:border-gray-700">
+            <details open className="mb-3">
+              <summary className="cursor-pointer text-xs font-semibold text-gray-700 dark:text-gray-300">
                 Table of contents ({result.toc.length})
               </summary>
-              <ul className="ml-3 mt-1 text-xs">
+              <ul className="ml-3 mt-2 text-xs text-gray-600 dark:text-gray-400">
                 {result.toc.map((h, i) => (
                   <li key={i} style={{ marginLeft: (h.level - 1) * 8 }}>
                     {h.text}
@@ -143,12 +158,28 @@ export default function PublicationPanel({ tabs, onClose }: PublicationPanelProp
                 ))}
               </ul>
             </details>
-            <details className="mt-2">
-              <summary className="cursor-pointer text-xs font-semibold">Combined preview</summary>
-              <pre className="mt-1 max-h-64 overflow-auto rounded bg-gray-50 p-2 text-xs dark:bg-[#1e1e1e]">
+            
+            <details className="mb-4">
+              <summary className="cursor-pointer text-xs font-semibold text-gray-700 dark:text-gray-300">Combined preview</summary>
+              <pre className="mt-2 max-h-48 overflow-auto rounded bg-gray-50 p-2 text-xs border border-gray-100 dark:border-[#333] dark:bg-[#1e1e1e]">
                 {result.combined}
               </pre>
             </details>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => onExport(result.combined, "html")}
+                className="flex-1 rounded bg-green-600 px-3 py-2 text-white hover:bg-green-700 transition-colors"
+              >
+                Export HTML
+              </button>
+              <button
+                onClick={() => onExport(result.combined, "pdf")}
+                className="flex-1 rounded bg-red-600 px-3 py-2 text-white hover:bg-red-700 transition-colors"
+              >
+                Export PDF
+              </button>
+            </div>
           </div>
         )}
       </div>

@@ -61,6 +61,7 @@ class PublicationFile(BaseModel):
 
 class PublicationPayload(BaseModel):
     files: list[PublicationFile]
+    use_ai: bool = False
 # ── Heading helpers ───────────────────────────────────────────────────────────
 
 from backend.heading_anchor import (
@@ -342,6 +343,28 @@ def prepare_publication(payload: PublicationPayload):
         toc_entries.extend(outline)
         combined_parts.append(f"<!-- file: {f.path} -->\n{f.content}")
     combined = "\n\n---\n\n".join(combined_parts)
+    return {
+        "combined": combined,
+        "toc": toc_entries,
+        "file_count": len(payload.files),
+    }
+
+@router.post("/publication/prepare")
+def prepare_publication(payload: PublicationPayload):
+    combined_parts = []
+    toc_entries = []
+    for i, f in enumerate(payload.files, start=1):
+        outline = _extract_outline(f.content)
+        toc_entries.extend(outline)
+        combined_parts.append(f"<!-- file: {f.path} -->\n{f.content}")
+    combined = "\n\n---\n\n".join(combined_parts)
+    
+    # Lógica de IA básica (si se pide)
+    if payload.use_ai:
+        from backend.ai_client import generate_text # Usa tu cliente de IA existente
+        prompt = f"Normalize the heading structure of this combined Markdown. Ensure top-level chapters use '#', sections use '##'. Keep code blocks intact.\n\n{combined}"
+        combined = generate_text(prompt) # Ajusta esto a cómo llame tu backend a la IA
+
     return {
         "combined": combined,
         "toc": toc_entries,

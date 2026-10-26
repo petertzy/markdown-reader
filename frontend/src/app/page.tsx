@@ -146,7 +146,18 @@ export default function HomePage() {
         )}
         {activePanel === PANELS.CITATION && <CitationPanel onInsert={formatting.insertCitation} />}
         {activePanel === PANELS.PUBLICATION && (
-          <PublicationPanel tabs={editor.tabs} onClose={() => togglePanel(PANELS.PUBLICATION)} />
+          <PublicationPanel
+            tabs={editor.tabs}
+            onClose={() => togglePanel(PANELS.PUBLICATION)}
+            onExport={async (content: any, format: string) => {
+              const blob = new Blob([content], { type: "text/markdown" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `publication.${format === "html" ? "html" : "md"}`;
+              a.click();
+            }}
+          />
         )}
         {activePanel === PANELS.EXPLORER && (
           <ProjectExplorer
@@ -158,11 +169,59 @@ export default function HomePage() {
           />
         )}
             right={getPanelContent(activePanel, {
-              [PANELS.PREVIEW]: <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
-                error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} />,
-              [PANELS.AI]: <AIPanel projectRoot={project.projectRoot} projectWork={projectWork} documentId={editor.activeTab.id} documentText={editor.activeTab.content} selectedText={selectedText} onApplyAction={handleAIApplyAction} initialTab={aiPanelInitialTab} executeWork={executeWork} isWorking={isWorking} />,
-              [PANELS.CITATION]: <CitationPanel onInsert={formatting.insertCitation} />,
-            })} />}
+              [PANELS.PREVIEW]: (
+                <PreviewPane
+                  html={editor.previewHtml}
+                  loading={
+                    showPackagedBackendStatus && backendStatus === "starting"
+                  }
+                  error={
+                    showPackagedBackendStatus && backendStatus === "error"
+                      ? backendMessage
+                      : null
+                  }
+                />
+              ),
+              [PANELS.AI]: (
+                <AIPanel
+                  projectRoot={project.projectRoot}
+                  projectWork={projectWork}
+                  documentId={editor.activeTab.id}
+                  documentText={editor.activeTab.content}
+                  selectedText={selectedText}
+                  onApplyAction={handleAIApplyAction}
+                  initialTab={aiPanelInitialTab}
+                  executeWork={executeWork}
+                  isWorking={isWorking}
+                />
+              ),
+              [PANELS.CITATION]: (
+                <CitationPanel onInsert={formatting.insertCitation} />
+              ),
+              [PANELS.PUBLICATION]: (
+                <PublicationPanel
+                  tabs={editor.tabs}
+                  onClose={() => togglePanel(PANELS.PUBLICATION)}
+                  onExport={async (content: any, format: string) => {
+                    // Puedes usar fileIO.handleExport si acepta contenido, 
+                    // o simplemente crear un blob y descargarlo
+                    const blob = new Blob([content], { type: "text/markdown" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `publication.${format === "html" ? "html" : "md"}`;
+                    a.click();
+                  }}
+                />
+              ),
+              [PANELS.EXPLORER]: <ProjectExplorer
+                root={projectRoot}
+                onOpenFile={(path) => { void editor.openFile(path); }}
+                onOpenProject={() => { void openProject(); }}
+                onCloseProject={project.closeProject}
+                refreshToken={projectRefreshToken}
+              />,
+            })}
       </div>
       <DocumentStats content={editor.activeTab.content} className="px-4 py-1 border-t" />
       <StatusBar stats={editor.wordCount} filePath={editor.activeTab.filePath} dirty={editor.activeTab.dirty} />
