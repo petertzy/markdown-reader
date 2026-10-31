@@ -56,6 +56,15 @@ class OpenPreviewPayload(RenderPayload):
     """Input for opening the rendered Markdown preview in a browser."""
 
 
+class PublicationFile(BaseModel):
+    path: str
+    content: str
+
+
+class PublicationPayload(BaseModel):
+    files: list[PublicationFile]
+
+
 # ── Heading helpers ───────────────────────────────────────────────────────────
 
 from backend.heading_anchor import (
@@ -327,3 +336,43 @@ def generate_toc(payload: OutlinePayload):
     from backend.ai_logic import _generate_markdown_toc
 
     return {"toc": _generate_markdown_toc(payload.content)}
+
+
+@router.post("/publication/prepare")
+def prepare_publication(payload: PublicationPayload):
+    """Build a non-destructive, consistently formatted publication draft.
+
+    This endpoint intentionally performs only deterministic work. Editorial AI
+    operations belong to the existing AI workflow, where provider settings and
+    review of generated text are explicit.
+    """
+    if not payload.files:
+        raise HTTPException(
+            status_code=422, detail="Select at least one Markdown file."
+        )
+
+    from backend.ai_logic import (
+        _apply_markdown_formatting_rules,
+        _generate_markdown_toc,
+    )
+    from backend.render_helpers import fix_image_paths
+
+    combined_parts = []
+    for publication_file in payload.files:
+        content = _apply_markdown_formatting_rules(publication_file.content).strip()
+        # Each source file can live in a different directory. Resolve its
+        # relative image references before the files are combined so preview
+        # and export do not incorrectly use the first file's directory.
+        source_dir = os.path.dirname(publication_file.path)
+        if source_dir:
+            content = fix_image_paths(content, source_dir)
+        combined_parts.append(f"<!-- source: {publication_file.path} -->\n{content}")
+    body = "\n\n---\n\n".join(combined_parts).strip()
+    toc_markdown = _generate_markdown_toc(body)
+    combined = f"{toc_markdown}\n{body}" if toc_markdown else body
+
+    return {
+        "combined": combined,
+        "toc": _extract_outline(body),
+        "file_count": len(payload.files),
+    }

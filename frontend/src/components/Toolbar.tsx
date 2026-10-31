@@ -214,6 +214,14 @@ export default function Toolbar({
       >
         📚 Cite
       </button>
+      <button
+        onClick={() => onTogglePanel(PANELS.PUBLICATION)}
+        title="Publication"
+        aria-pressed={activePanel === PANELS.PUBLICATION}
+        className={`rounded p-1.5 ${activePanel === PANELS.PUBLICATION ? "bg-blue-100 text-blue-700" : "text-gray-600 hover:bg-gray-100"} dark:${activePanel === PANELS.PUBLICATION ? "bg-[#333] text-blue-400" : "text-gray-300 dark:hover:bg-[#333]"}`}
+      >
+        📝Publication
+      </button>
       <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onToggleDark} className={btnCls} title="Toggle dark mode">
         {darkMode ? "☀️" : "🌙"}
       </button>
