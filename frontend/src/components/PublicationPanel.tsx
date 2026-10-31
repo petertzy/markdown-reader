@@ -26,7 +26,6 @@ export default function PublicationPanel({ tabs, onClose, onExport }: Publicatio
   const [result, setResult] = useState<PublicationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [useAI, setUseAI] = useState(false);
 
   const toggleFile = (tab: Tab) => {
     setSelected((prev) => {
@@ -55,15 +54,24 @@ export default function PublicationPanel({ tabs, onClose, onExport }: Publicatio
     setError(null);
     try {
       const payload: PublicationFile[] = selected.map((f) => ({ path: f.path, content: f.content }));
-      // Asumiendo que actualizaste Markdown.preparePublication para aceptar useAI
-      const data = await Markdown.preparePublication(payload, useAI);
+      const data = await Markdown.preparePublication(payload);
       setResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to prepare publication");
     } finally {
       setLoading(false);
     }
-  }, [selected, useAI]);
+  }, [selected]);
+
+  const handleExport = useCallback(async (format: "html" | "pdf") => {
+    if (!result) return;
+    setError(null);
+    try {
+      await onExport(result.combined, format);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export failed");
+    }
+  }, [onExport, result]);
 
   return (
     <aside className="w-96 border-l border-gray-200 bg-white dark:border-[#333] dark:bg-[#252526] flex flex-col h-full shrink-0">
@@ -123,16 +131,9 @@ export default function PublicationPanel({ tabs, onClose, onExport }: Publicatio
         </ul>
 
         <div className="mt-4 space-y-3">
-          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-            <input 
-              type="checkbox" 
-              checked={useAI} 
-              onChange={(e) => setUseAI(e.target.checked)} 
-              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-            />
-            Use AI to normalize chapter structure
-          </label>
-
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            The draft is formatted deterministically. Use the AI panel for editorial changes before exporting.
+          </p>
           <button
             onClick={handlePrepare}
             disabled={!selected.length || loading}
@@ -168,13 +169,13 @@ export default function PublicationPanel({ tabs, onClose, onExport }: Publicatio
 
             <div className="flex gap-2">
               <button
-                onClick={() => onExport(result.combined, "html")}
+                onClick={() => { void handleExport("html"); }}
                 className="flex-1 rounded bg-green-600 px-3 py-2 text-white hover:bg-green-700 transition-colors"
               >
                 Export HTML
               </button>
               <button
-                onClick={() => onExport(result.combined, "pdf")}
+                onClick={() => { void handleExport("pdf"); }}
                 className="flex-1 rounded bg-red-600 px-3 py-2 text-white hover:bg-red-700 transition-colors"
               >
                 Export PDF

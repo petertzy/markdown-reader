@@ -24,6 +24,7 @@ import ProjectExplorer from "@/components/ProjectExplorer";
 import DocumentStats from "@/components/DocumentStats";
 import StatusBar from "@/components/StatusBar";
 import { getPanelContent, getPanelSplitAfterToggle, PANELS } from "@/types/panels";
+import { Export } from "@/lib/api";
 
 export default function HomePage() {
   const editor = useEditor();
@@ -45,7 +46,6 @@ export default function HomePage() {
   const [split, setSplit] = useState(50);
   const [projectRefreshToken, setProjectRefreshToken] = useState(0);
   const { isDesktopRuntime, backendStatus, backendMessage, showPackagedBackendStatus } = useTauriBackend(editor);
-  const showPreview = true;
   const projectRoot = project.projectRoot;
   const fileIO = useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef });
   const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt, executeWork, isWorking } = useAIActions({
@@ -99,6 +99,35 @@ export default function HomePage() {
     const tab = editor.tabs.find((item) => item.id === id);
     if (tab) editor.refreshPreview(tab.content, tab.filePath ?? undefined);
   }, [editor]);
+  const handlePublicationExport = useCallback(async (content: string, format: "html" | "pdf") => {
+    const extension = format === "html" ? "html" : "pdf";
+    const payload = {
+      content,
+      dark_mode: editor.darkMode,
+      font_size: editor.fontSize,
+    };
+    if (!isDesktopRuntime) {
+      if (format !== "html") {
+        throw new Error("PDF export requires the desktop app.");
+      }
+      const blob = await Export.downloadHtml(payload);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "publication.html";
+      link.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    const outputPath = await save({
+      defaultPath: `publication.${extension}`,
+      filters: [{ name: `${extension.toUpperCase()} files`, extensions: [extension] }],
+    });
+    if (!outputPath) return;
+    if (format === "html") await Export.toHtml({ ...payload, output_path: outputPath });
+    else await Export.toPdf({ ...payload, output_path: outputPath });
+  }, [editor.darkMode, editor.fontSize, isDesktopRuntime]);
 
   return (
     <div className={`flex flex-col h-screen overflow-hidden ${editor.darkMode ? "dark" : ""}`}
@@ -129,45 +158,6 @@ export default function HomePage() {
               slash={{ isOpen: slash.isOpen, filteredCommands: slash.filteredCommands, selectedIndex: slash.selectedIndex,
                 position: slashMenuPosition,
                 onSelect: (command) => { void executeSlashCommand(command); }, onClose: slash.close }} />}
-            right={showPreview ? <PreviewPane html={editor.previewHtml} loading={showPackagedBackendStatus && backendStatus === "starting"}
-              error={showPackagedBackendStatus && backendStatus === "error" ? backendMessage : null} /> : null} />}
-        {activePanel === PANELS.AI && (
-          <AIPanel
-            documentText={editor.activeTab.content}
-            selectedText={selectedText}
-            onApplyAction={handleAIApplyAction}
-            initialTab={aiPanelInitialTab}
-            executeWork={executeWork}
-            isWorking={isWorking}
-            documentId={editor.activeTab.id}      /* <-- nuevo */
-            projectRoot={projectRoot}             /* <-- nuevo */
-            projectWork={projectWork}            
-          />
-        )}
-        {activePanel === PANELS.CITATION && <CitationPanel onInsert={formatting.insertCitation} />}
-        {activePanel === PANELS.PUBLICATION && (
-          <PublicationPanel
-            tabs={editor.tabs}
-            onClose={() => togglePanel(PANELS.PUBLICATION)}
-            onExport={async (content: string, format: "html" | "pdf") => {
-              const blob = new Blob([content], { type: "text/markdown" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `publication.${format === "html" ? "html" : "md"}`;
-              a.click();
-            }}
-          />
-        )}
-        {activePanel === PANELS.EXPLORER && (
-          <ProjectExplorer
-            root={projectRoot}
-            onOpenFile={(path) => { void editor.openFile(path); }}
-            onOpenProject={() => { void openProject(); }}
-            onCloseProject={project.closeProject}
-            refreshToken={projectRefreshToken}
-          />
-        )}
             right={getPanelContent(activePanel, {
               [PANELS.PREVIEW]: (
                 <PreviewPane
@@ -202,16 +192,7 @@ export default function HomePage() {
                 <PublicationPanel
                   tabs={editor.tabs}
                   onClose={() => togglePanel(PANELS.PUBLICATION)}
-                  onExport={async (content: string, format: "html" | "pdf") => {
-                    // Puedes usar fileIO.handleExport si acepta contenido, 
-                    // o simplemente crear un blob y descargarlo
-                    const blob = new Blob([content], { type: "text/markdown" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `publication.${format === "html" ? "html" : "md"}`;
-                    a.click();
-                  }}
+                  onExport={handlePublicationExport}
                 />
               ),
               [PANELS.EXPLORER]: <ProjectExplorer
@@ -222,6 +203,7 @@ export default function HomePage() {
                 refreshToken={projectRefreshToken}
               />,
             })}
+	          />}
       </div>
       <DocumentStats content={editor.activeTab.content} className="px-4 py-1 border-t" />
       <StatusBar stats={editor.wordCount} filePath={editor.activeTab.filePath} dirty={editor.activeTab.dirty} />

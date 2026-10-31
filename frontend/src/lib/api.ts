@@ -307,7 +307,7 @@ export interface PublicationFile {
 
 export interface PublicationResult {
   combined: string;
-  toc: Array<{ level: number; text: string; line: number }>;
+  toc: Array<{ level: number; text: string; anchor: string; line: number }>;
   file_count: number;
 }
 
@@ -363,10 +363,10 @@ export const Markdown = {
       body: JSON.stringify(payload),
     }),
 
-  preparePublication: (files: PublicationFile[], useAI: boolean = false) =>
+  preparePublication: (files: PublicationFile[]) =>
     apiFetch<PublicationResult>("/api/markdown/publication/prepare", {
       method: "POST",
-      body: JSON.stringify({ files, useAI }),
+      body: JSON.stringify({ files }),
     }),
 };
 
