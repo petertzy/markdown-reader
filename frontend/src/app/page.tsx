@@ -139,7 +139,7 @@ export default function HomePage() {
       <Toolbar onOpenFile={() => { void fileIO.handleOpenFile(); }} onSaveFile={() => { void handleSaveFile(); }}
         onOpenProject={() => { void openProject(); }}
         onExport={fileIO.handleExport} onOpenBrowserPreview={() => { void handleOpenBrowserPreview(); }}
-        onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={togglePanel}
+        onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={selectPanel}
         onToggleFocusMode={() => { setFocusMode((enabled) => !enabled); resetEditor(); }}
         darkMode={editor.darkMode} fontSize={editor.fontSize} onFontSizeChange={editor.setFontSize}
         showFocusPanel={focusMode}
@@ -147,11 +147,20 @@ export default function HomePage() {
         lastExportedPath={fileIO.lastExportedPath} onShowInFinder={fileIO.showInFinder} />
       <TabBar tabs={editor.tabs} activeTabId={editor.activeTabId} onSelect={handleTabSelect} onClose={editor.closeTab} onNew={editor.newTab} />
       <div className="flex flex-1 overflow-hidden">
+        {!focusMode && (
+          <ProjectExplorer
+            root={projectRoot}
+            onOpenFile={(path) => { void editor.openFile(path); }}
+            onOpenProject={() => { void openProject(); }}
+            onCloseProject={project.closeProject}
+            refreshToken={projectRefreshToken}
+          />
+        )}
         {focusMode ? <FocusModePane key={`${editor.activeTabId}-${revision}`} value={editor.activeTab.content}
           onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
           slashCommands={slash.filteredCommands} onSelect={(command) => { void executeSlashCommand(command); }}
           editorRef={focusEditorRef} /> :
-          <SplitPane split={split} onSplitChange={setSplit}
+          <SplitPane split={split} onSplitChange={setSplit} minSize={20}
             left={<EditorWorkspace tabId={editor.activeTab.id} value={editor.activeTab.content}
               onChange={editor.handleContentChange} darkMode={editor.darkMode} fontSize={editor.fontSize}
               revision={revision} monacoRef={monacoRef} onReady={markReady}
@@ -195,13 +204,6 @@ export default function HomePage() {
                   onExport={handlePublicationExport}
                 />
               ),
-              [PANELS.EXPLORER]: <ProjectExplorer
-                root={projectRoot}
-                onOpenFile={(path) => { void editor.openFile(path); }}
-                onOpenProject={() => { void openProject(); }}
-                onCloseProject={project.closeProject}
-                refreshToken={projectRefreshToken}
-              />,
             })}
 	          />}
       </div>
