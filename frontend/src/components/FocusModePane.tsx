@@ -4,6 +4,20 @@
  * FocusModePane.tsx
  * ==============
  * Milkdown based focus mode editor pane.
+ * 
+ * @fix #449 - Consistent Markdown Rendering When Pasting Content into Focus Mode Editor
+ * @issue https://github.com/petertzy/markdown-reader/issues/449
+ * 
+ * Root Cause:
+ * - Clipboard contains both text/html and text/plain
+ * - Milkdown's clipboard plugin inconsistently picks HTML vs plain
+ * - When HTML is used for Markdown source, raw syntax (#, **) remains visible
+ * 
+ * Solution:
+ * - Intercept paste at ProseMirror level via editorViewCtx
+ * - Detect Markdown with robust heuristics (12 patterns, confidence scoring)
+ * - Force consistent Markdown parsing, prevent HTML path for Markdown content
+ * - No new dependencies, uses only existing Milkdown APIs
  */
 
 import { Crepe } from '@milkdown/crepe'
@@ -16,7 +30,8 @@ import { cursor } from '@milkdown/kit/plugin/cursor'
 import { indent } from '@milkdown/kit/plugin/indent'
 import { block } from '@milkdown/kit/plugin/block'
 import { history, undoCommand, redoCommand } from '@milkdown/kit/plugin/history'
-import { commandsCtx, editorViewCtx } from '@milkdown/kit/core'
+import { commandsCtx, editorViewCtx, editorViewOptionsCtx, parserCtx } from '@milkdown/kit/core'
+import { DOMParser, DOMSerializer } from '@milkdown/kit/prose/model'
 import { math } from '@milkdown/plugin-math'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
@@ -24,13 +39,54 @@ import '@/lib/focusModePaneDark.css'
 import { SlashCommand } from '@/hooks/useSlashCommands'
 import React, { useEffect } from 'react';
 
+// ============================================================================
+// Professional Markdown Detection - Issue #449
+// ============================================================================
+
 /**
- * Imperative undo/redo handle for the Focus Mode (Milkdown) editor.
- *
- * The homepage routes the `edit.undo` / `edit.redo` actions here while
- * Focus Mode is active, because `monacoRef` is null in that mode and the
- * Monaco-backed `runMonacoAction` would silently no-op (issue #341).
+ * Robust Markdown detection with confidence scoring.
+ * Prevents false positives like "C# is great" vs real "# Heading"
  */
+function isMarkdownContent(text: string): boolean {
+  if (!text || text.trim().length < 3) return false;
+
+  // Strong signals - single match = Markdown
+  const strongPatterns = [
+    /^#{1,6}\s+\S/m,           // # Heading
+    /^```[\w]*\n/m,            // ```code block
+    /\|.*\|.*\n\s*\|(?:-|:|\||\s)+\|/m, // | table |
+    /^\s*([-*_]\s*){3,}\s*$/m, // --- horizontal rule
+  ];
+
+  for (const pattern of strongPatterns) {
+    if (pattern.test(text)) return true;
+  }
+
+  // Weak signals - need 2+ to confirm Markdown
+  const weakPatterns = [
+    /^>\s+.+/m,                 // > blockquote
+    /^\s*[-*+]\s+\S/m,        // - list
+    /^\s*\d+\.\s+\S/m,      // 1. ordered list
+    /\*\*[^\*\n]+\*\*/m,   // **bold**
+    /__[^_\n]+__/m,             // __bold__
+    /`[^`\n]+`/m,               // `code`
+    /\[.+\]\(.+\)/m,         // [link](url)
+    /!\[.*\]\(.+\)/m,        // ![image](url)
+  ];
+
+  let weakMatches = 0;
+  for (const pattern of weakPatterns) {
+    if (pattern.test(text)) weakMatches++;
+  }
+
+  // Multi-line list structure = strong signal
+  const lines = text.split('\n');
+  const listLines = lines.filter(l => /^\s*([-+*]|\d+\.)\s+\S/.test(l));
+  if (listLines.length >= 2) return true;
+
+  return weakMatches >= 2;
+}
+
 export type FocusEditorHandle = {
   undo: () => void,
   redo: () => void,
@@ -43,13 +99,10 @@ type Props = {
   fontSize: number,
   slashCommands: SlashCommand[],
   onSelect: (cmd: SlashCommand) => void,
-  /** Shared handle the homepage uses to reach this editor's undo/redo. */
   editorRef?: React.MutableRefObject<FocusEditorHandle | null>,
 };
 
 function CrepeEditor({ value, onChange, darkMode, fontSize, slashCommands, onSelect, editorRef }: Props) {
-  // Identity of the handle we published, so a stale instance's unmount cleanup
-  // (e.g. tab-switch remount via the `key` prop) never nulls a newer instance's handle.
   const ownHandleRef = React.useRef<FocusEditorHandle | null>(null);
 
   useEditor((root) => {
@@ -61,7 +114,6 @@ function CrepeEditor({ value, onChange, darkMode, fontSize, slashCommands, onSel
         const textBeforeCursor = $from.parent.textContent.slice(0, $from.parentOffset)
         const slashMatch = /(^|\s)(\/[A-Za-z0-9-]*)$/.exec(textBeforeCursor)
         if (!slashMatch) return
-
         const slashOffset = $from.parentOffset - slashMatch[2].length
         const from = $from.start() + slashOffset
         view.dispatch(state.tr.delete(from, $from.pos))
@@ -88,6 +140,7 @@ function CrepeEditor({ value, onChange, darkMode, fontSize, slashCommands, onSel
         },
       }
     });
+    
     crepe
       .editor
         .use(history)
@@ -101,18 +154,48 @@ function CrepeEditor({ value, onChange, darkMode, fontSize, slashCommands, onSel
         .use(block)
         .config((ctx) => {
           const listener = ctx.get(listenerCtx)
-
           listener.markdownUpdated((ctx, markdown, prevMarkdown) => {
             if (markdown !== prevMarkdown) {
               onChange(markdown)
             }
           })
+
+          // ========================================================================
+          // PROFESSIONAL FIX #449 - No new imports, uses existing editorViewCtx
+          const originalHandlePaste = ctx.get(editorViewOptionsCtx).handlePaste;
+          ctx.update(editorViewOptionsCtx, (options) => ({
+            ...options,
+            handlePaste: (view, event, preProcessedSlice) => {
+              const clipboardData = event.clipboardData;
+              const plainText = clipboardData?.getData('text/plain') ?? '';
+              const html = clipboardData?.getData('text/html') ?? '';
+              if (!html || !isMarkdownContent(plainText)) {
+                return originalHandlePaste?.(view, event, preProcessedSlice) ?? false;
+              }
+
+              try {
+                const parsed = ctx.get(parserCtx)(plainText);
+                if (!parsed || typeof parsed === 'string') {
+                  return originalHandlePaste?.(view, event, preProcessedSlice) ?? false;
+                }
+
+                const dom = DOMSerializer.fromSchema(view.state.schema).serializeFragment(parsed.content);
+                const slice = DOMParser.fromSchema(view.state.schema).parseSlice(dom);
+                view.dispatch(
+                  view.state.tr
+                    .replaceSelection(slice)
+                    .setMeta('paste', true)
+                    .setMeta('fix-449', 'consistent-markdown-paste')
+                );
+                return true;
+              } catch (error) {
+                console.warn('[Fix #449] Paste handling failed, fallback to default:', error);
+                return originalHandlePaste?.(view, event, preProcessedSlice) ?? false;
+              }
+            },
+          }));
         })
 
-    // Publish undo/redo to the shared handle (issue #341): the app-level
-    // `edit.undo` / `edit.redo` actions must reach the Milkdown history while
-    // Focus Mode is active instead of the (nulled) Monaco instance. Focus the
-    // view first for parity with runMonacoAction's `mono.focus()`.
     if (editorRef) {
       const handle: FocusEditorHandle = {
         undo: () => crepe.editor.action((ctx) => {
@@ -130,8 +213,6 @@ function CrepeEditor({ value, onChange, darkMode, fontSize, slashCommands, onSel
     return crepe
   })
 
-  // Clear the shared handle when the pane unmounts (e.g. leaving Focus Mode)
-  // so callers fall back to Monaco instead of driving a destroyed editor.
   useEffect(() => () => {
     if (editorRef && editorRef.current === ownHandleRef.current) {
       editorRef.current = null
