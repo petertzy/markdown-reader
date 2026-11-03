@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import tempfile
 import threading
 import uuid
@@ -44,6 +45,10 @@ _AUTOLINK_RE = re.compile(r"^<(?:https?://|mailto:)[^>\s]+>", re.IGNORECASE)
 _SCALAR_RE = re.compile(
     r"^(?:~|null|true|false|yes|no|on|off|\d+(?:\.\d+)?|https?://\S+|\S+)$",
     re.IGNORECASE,
+)
+_ASSET_DESTINATION_RE = re.compile(
+    r"(?:!?\[[^\]\n]*\]\(|^\s*\[[^\]\n]+\]:\s*)(<?[^\s)>]+>?)",
+    re.MULTILINE,
 )
 
 _lock = threading.Lock()
@@ -437,7 +442,34 @@ def _translate_one(
         original, source_language, target_language, translator
     )
     _write_output(path, root, output_dir, translated)
+    _copy_relative_assets(original, path, root, output_dir)
     return "unchanged" if translated == original else "translated"
+
+
+def _copy_relative_assets(
+    markdown: str, source: Path, root: Path, output_dir: Path
+) -> None:
+    """Copy local non-Markdown link targets so translated documents still resolve."""
+    for match in _ASSET_DESTINATION_RE.finditer(markdown):
+        destination = match.group(1).strip("<>")
+        if (
+            not destination
+            or destination.startswith(("#", "/", "http://", "https://", "mailto:"))
+        ):
+            continue
+        asset = (source.parent / destination).resolve()
+        if (
+            not asset.is_relative_to(root.resolve())
+            or asset.is_symlink()
+            or not asset.is_file()
+            or asset.suffix.lower() in MARKDOWN_EXTENSIONS
+        ):
+            continue
+        copied = (output_dir / asset.relative_to(root.resolve())).resolve()
+        if not copied.is_relative_to(output_dir.resolve()):
+            raise ProjectTranslationError("Refusing to copy an asset outside the output directory.")
+        copied.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(asset, copied)
 
 
 def _write_output(source: Path, root: Path, output_dir: Path, content: str) -> None:
@@ -576,9 +608,12 @@ def _protect_body(text: str, mask: _Mask) -> None:
             fence = opened
             block = [piece]
             continue
-        if line.strip() == "$$":
+        if line.strip() == "$":
             math_block = True
             block = [piece]
+            continue
+        if line.startswith(("    ", "\t")):
+            mask.add_protected(piece)
             continue
         _protect_inline(line, mask)
         mask.add_text(ending)
@@ -706,6 +741,9 @@ def _consume_link(line: str, start: int, mask: _Mask) -> int:
         reference_end = _find_unescaped(line, "]", following + 1)
         if reference_end < 0:
             return start
+        if reference_end == following + 1:
+            mask.add_protected(line[start : reference_end + 1])
+            return reference_end + 1
         _protect_link_label(line, label_start, label_end, image, mask)
         mask.add_text("[")
         mask.add_protected(line[following + 1 : reference_end])
