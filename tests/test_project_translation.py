@@ -202,3 +202,42 @@ def test_output_directory_cannot_contain_the_project(tmp_path: Path):
         )
 
 
+
+
+def test_indented_code_and_implicit_references_are_not_translated():
+    source = (
+        "Hello\n\n"
+        "    print('Hello')\n\n"
+        "[Hello][] and [World].\n\n"
+        "[Hello]: ./guide.md\n"
+        "[World]: ./world.md\n"
+    )
+    translated = translate_markdown_document(source, "English", "French", _french)
+    assert "print('Hello')" in translated
+    assert "[Hello][]" in translated
+    assert "[World]." in translated
+    assert "[Hello]: ./guide.md" in translated
+    assert "[World]: ./world.md" in translated
+
+
+def test_relative_image_assets_are_copied_with_translated_markdown(tmp_path: Path):
+    (tmp_path / "images").mkdir()
+    (tmp_path / "images" / "diagram.png").write_bytes(b"image-bytes")
+    (tmp_path / "guide.md").write_text(
+        "Hello ![Diagram](images/diagram.png)\n", encoding="utf-8"
+    )
+
+    output = tmp_path / "translated"
+    result = run_project_translation(
+        root=tmp_path,
+        source_language="English",
+        target_language="French",
+        translator=_french,
+        output_dir=output,
+    )
+
+    assert result["translated"] == 1
+    assert (output / "guide.md").read_text(encoding="utf-8") == (
+        "Bonjour ![Diagram](images/diagram.png)\n"
+    )
+    assert (output / "images" / "diagram.png").read_bytes() == b"image-bytes"
