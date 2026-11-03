@@ -97,6 +97,13 @@ class TranslateSentenceBatchPayload(BaseModel):
     target_language: str
 
 
+class ProjectTranslatePayload(BaseModel):
+    root: str = Field(min_length=1, max_length=4096)
+    source_language: str = "auto"
+    target_language: str = Field(min_length=1, max_length=100)
+    output_dir: str | None = None
+
+
 # ── Settings endpoints ─────────────────────────────────────────────────────────
 
 
@@ -535,3 +542,44 @@ def translate_sentence_batch(payload: TranslateSentenceBatchPayload):
         "pairs": pairs,
         "translated": "\n\n".join(pair["translated"] for pair in pairs),
     }
+
+
+@router.post("/translate/project")
+def start_project_translation(payload: ProjectTranslatePayload):
+    """Start a cancellable translation task that keeps source files unchanged."""
+    from backend.project_translation import (
+        ProjectTranslationError,
+        start_project_translation as start_task,
+    )
+
+    try:
+        return start_task(
+            root=payload.root,
+            source_language=payload.source_language,
+            target_language=payload.target_language,
+            output_dir=payload.output_dir,
+        )
+    except ProjectTranslationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/translate/project/{task_id}")
+def project_translation_status(task_id: str):
+    """Return project translation progress and per-file results."""
+    from backend.project_translation import get_project_translation
+
+    snapshot = get_project_translation(task_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Unknown translation task.")
+    return snapshot
+
+
+@router.post("/translate/project/{task_id}/cancel")
+def cancel_project_translation(task_id: str):
+    """Request cancellation between files."""
+    from backend.project_translation import cancel_project_translation as cancel_task
+
+    snapshot = cancel_task(task_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Unknown translation task.")
+    return snapshot
