@@ -21,7 +21,6 @@ import AIPanel, { type AIPanelTab } from "@/components/AIPanel";
 import CitationPanel from "@/components/CitationPanel";
 import PublicationPanel from "@/components/PublicationPanel";
 import ProjectExplorer from "@/components/ProjectExplorer";
-import DocumentStats from "@/components/DocumentStats";
 import StatusBar from "@/components/StatusBar";
 import { getPanelContent, getPanelSplitAfterToggle, PANELS } from "@/types/panels";
 import { Export } from "@/lib/api";
@@ -207,7 +206,6 @@ export default function HomePage() {
             })}
 	          />}
       </div>
-      <DocumentStats content={editor.activeTab.content} className="px-4 py-1 border-t" />
       <StatusBar stats={editor.wordCount} filePath={editor.activeTab.filePath} dirty={editor.activeTab.dirty} />
     </div>
   );
