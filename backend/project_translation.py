@@ -720,7 +720,8 @@ def _consume_link(line: str, start: int, mask: _Mask) -> int:
         return start
     following = label_end + 1
     if following >= len(line):
-        return start
+        mask.add_protected(line[start : label_end + 1])
+        return label_end + 1
 
     if line[following] == "(":
         destination_end = _link_destination_end(line, following + 1)
@@ -762,7 +763,8 @@ def _consume_link(line: str, start: int, mask: _Mask) -> int:
         _protect_inline(remainder, mask)
         return len(line)
 
-    return start
+    mask.add_protected(line[start : label_end + 1])
+    return label_end + 1
 
 
 def _protect_link_label(
