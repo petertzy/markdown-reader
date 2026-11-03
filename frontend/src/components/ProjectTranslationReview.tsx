@@ -1,27 +1,34 @@
 "use client";
 
-import { useState } from "react";
 import { useProjectTranslation } from "@/hooks/useProjectTranslation";
 
-export default function ProjectTranslationReview({ projectRoot }: { projectRoot: string | null }) {
-  const [sourceLanguage, setSourceLanguage] = useState("auto");
-  const [targetLanguage, setTargetLanguage] = useState("German");
+type Props = {
+  projectRoot: string | null;
+  sourceLanguage: string;
+  targetLanguage: string;
+};
+
+export default function ProjectTranslationReview({
+  projectRoot,
+  sourceLanguage,
+  targetLanguage,
+}: Props) {
   const translation = useProjectTranslation(projectRoot);
   const task = translation.task;
+  const source = sourceLanguage === "Auto Detect" ? "auto" : sourceLanguage;
 
   if (!projectRoot) return null;
 
   return <section className="space-y-2 border-t pt-2 dark:border-gray-700">
     <p className="font-medium">Translate project</p>
-    <p className="text-gray-500 dark:text-gray-400">Translations preserve source files and are written to a separate output tree.</p>
+    <p className="text-gray-500 dark:text-gray-400">
+      Uses the language settings below. Translations preserve source files and are written to a separate output tree.
+    </p>
+    <p className="text-xs text-gray-500 dark:text-gray-400">
+      {sourceLanguage} → {targetLanguage}
+    </p>
     <div className="flex gap-2">
-      <input aria-label="Source language" value={sourceLanguage} onChange={(event) => setSourceLanguage(event.target.value)}
-        className="min-w-0 flex-1 rounded border px-2 py-1 dark:border-gray-600 dark:bg-[#242424]" />
-      <input aria-label="Target language" value={targetLanguage} onChange={(event) => setTargetLanguage(event.target.value)}
-        className="min-w-0 flex-1 rounded border px-2 py-1 dark:border-gray-600 dark:bg-[#242424]" />
-    </div>
-    <div className="flex gap-2">
-      <button onClick={() => void translation.start(sourceLanguage, targetLanguage)}
+      <button onClick={() => void translation.start(source, targetLanguage)}
         disabled={task?.status === "running" || !targetLanguage.trim()}
         className="rounded bg-blue-600 px-2 py-1 text-white disabled:opacity-50">
         {task?.status === "running" ? "Translating..." : "Translate project"}
