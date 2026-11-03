@@ -77,17 +77,19 @@ cd frontend && npm install && cd ..
 On macOS, PDF export through WeasyPrint also requires Homebrew native libraries:
 
 ```bash
-brew install glib pango cairo libffi
+brew install glib pango cairo gdk-pixbuf libffi
 ```
 
 The development helper adds `/opt/homebrew/lib` to
-`DYLD_FALLBACK_LIBRARY_PATH` automatically so WeasyPrint can locate
-`libgobject-2.0` and related libraries. If those libraries are missing, PDF
-export falls back to PyMuPDF with simpler layout.
+`DYLD_FALLBACK_LIBRARY_PATH` automatically on Apple Silicon Homebrew installs
+so WeasyPrint can locate `libgobject-2.0` and related libraries. For Intel
+Homebrew installs or manual backend launches, follow the platform-specific
+[macOS setup guide](./docs/PrepareForMacUser.md). If WeasyPrint is unavailable,
+PDF export falls back to PyMuPDF with simpler layout.
 
 Fuller macOS setup notes are in [docs/PrepareForMacUser.md](./docs/PrepareForMacUser.md).
 
-On Windows, WeasyPrint requires native system libraries (Cairo, Pango) that are not available by default. See [docs/PrepareForWindowsUser.md](./docs/PrepareForWindowsUser.md) for the MSYS2 setup steps.
+On Windows, WeasyPrint requires native system libraries that are not available by default. See [docs/PrepareForWindowsUser.md](./docs/PrepareForWindowsUser.md) for MSYS2 UCRT64 installation and the `WEASYPRINT_DLL_DIRECTORIES` setting.
 
 4. Configure the frontend environment file:
 
@@ -110,6 +112,8 @@ Use the project helper for normal desktop development:
 ```bash
 ./scripts/dev-tauri.sh
 ```
+
+On Windows, use `.\scripts\dev-tauri.ps1` from PowerShell. The wrapper invokes Git Bash at `C:\Program Files\Git\bin\bash.exe`; install Git for Windows at that location or run the shell script directly from Git Bash.
 
 This starts the FastAPI backend and launches the Tauri desktop shell. The
 backend URL is printed by the script. When it uses the default port, the API

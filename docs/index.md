@@ -1,341 +1,40 @@
-# Markdown Reader
+# Documentation Index
 
-Markdown Reader is a modern Markdown editor/reader with real-time preview support, AI-assisted editing, and desktop packaging through Tauri. It uses a Next.js frontend with a local FastAPI backend.
+Use this page to find the right guide. User-facing instructions describe workflows present in the current application. Feasibility studies, strategy notes, and cost comparisons may describe proposals or historical snapshots rather than the current implementation.
 
----
+## Start here
 
-## Features
+- [Main README](../README.MD): project overview, desktop downloads, source setup, and links to detailed guides.
+- [User Guide](./UserGuide.md): editor modes, file handling, AI assistance, importing, citations, and export.
+- [AI Panel and Notes Context](./ProjectAIWorkflows.md): Chat, active-document Work, project Work, local note indexing, and provider/data handling.
+- [Project Workflows](./ProjectWorkflows.md): project translation, multi-file AI changes, and publication drafts.
+- [Keyboard Shortcuts](./KeyboardShortcuts.md): default application and editor shortcuts.
+- [Contributing Guide](../CONTRIBUTING.md): prerequisites, development setup, validation, and contribution workflow.
 
-* Tabbed Markdown editing with real-time HTML preview.
-* **AI-Powered Translation**: Translate Markdown documents while preserving formatting (supports OpenAI Compatible, OpenRouter, OpenAI, and Anthropic).
-* **Built-in AI Agent Chat**: A dockable in-app chat panel can read current document context and suggest/apply edits.
-* **AI Task Automation Templates**: Run reusable templates for formatting, TOC generation, summaries, and code-block cleanup.
-* **Approval/Reject Workflow**: Every AI-proposed change can be explicitly applied or rejected from the panel.
-* **AI Audit Trail**: Proposed/applied/rejected/undone AI actions are logged for auditing and rollback tracking.
-* **API Key Management**: Missing or rejected provider keys trigger an in-app dialog, and keys are saved in the OS credential store.
-* **Progressive Translation Rendering**: Long translations are split into smaller chunks, inserted into the editor as they complete, auto-scrolled into view, and tracked with a progress bar.
-* Dark mode toggle.
-* **Advanced Table Editor**: Interactive table insertion with customizable rows and columns.
-* **Dual PDF Conversion**: Fast PyMuPDF mode or advanced [Docling](https://github.com/docling-project/docling) mode for complex documents.
-* Built with Next.js, Tauri, and a local FastAPI backend.
-* Opens preview automatically and avoids multiple browser tabs for a smoother experience.
-* Multi-provider AI failover: Automatically switches to fallback providers on rate-limit/auth/server errors.
+## User and platform guides
 
----
+- [Prepare for macOS](./PrepareForMacUser.md): Homebrew libraries used by WeasyPrint for PDF export.
+- [Prepare for Windows](./PrepareForWindowsUser.md): MSYS2 UCRT64 libraries and DLL discovery for WeasyPrint.
+- [Math Rendering Test File](./MathRenderingTestFile.md): sample content for checking mathematical notation rendering.
 
-## Editor Overview
+## Architecture and implementation
 
-<img width="1428" height="737" alt="Image" src="https://github.com/user-attachments/assets/4f584f5b-dd1a-4d74-9a99-ca2cd90a9994" />
+- [Technical Documentation](./TECHNICAL.md): architecture, local backend security, desktop content security policy, PDF export dependencies, and local packaging.
+- [Code Signing and Distribution](./CodeSigningAndDistribution.md): current release workflow status and platform-signing research.
 
----
+## Project governance
 
-## Preview Overview
+- [Project Roles](./ProjectRoles.md): project responsibilities and role assignments.
 
-<img width="1417" height="474" alt="Image" src="https://github.com/user-attachments/assets/9a0006ed-d269-428b-a41f-e512cc7ba9c9" />
+## Hosting and planning notes
 
----
+- [Hosting Strategy](./HostingStrategy.md): historical Cloudflare Pages proposal, with a note on the current GitHub Pages distribution deployment.
+- [AI Work Panel Feasibility Study](./AIWorkPanelFeasibilityStudy.md): design exploration, not a guarantee that each proposal is implemented.
+- [Project Extensions Feasibility Study](./ProjectExtensionsFeasibilityStudy.md): extension concepts and planning notes.
 
-## Installation & Usage
+## Maintenance notes
 
-#### 1. Clone the repository
-
-```bash
-git clone https://github.com/petertzy/markdown-reader.git
-cd markdown-reader
-```
-
-#### 2. Create a virtual environment (recommended)
-
-```bash
-python -m venv .venv
-source .venv/bin/activate  # macOS/Linux
-# .\.venv\Scripts\activate  # Windows (cmd/powershell)
-```
-
-#### 3. Install dependencies
-
-For Mac users, you should first complete the preparation steps described in the [PrepareForMacUser](./doc/PrepareForMacUser.md) file.
-
-For Windows users, WeasyPrint requires additional system libraries. Complete the preparation steps described in the [PrepareForWindowsUser](./doc/PrepareForWindowsUser.md) file before installing dependencies.
-
-With [uv](https://docs.astral.sh/uv/) (recommended):
-
-```bash
-uv sync --python 3.14
-source .venv/bin/activate
-```
-
-If you update dependencies in `pyproject.toml`, regenerate and commit the lockfile:
-
-```bash
-uv lock
-```
-
-CI uses `uv sync --locked --extra dev`, so `uv.lock` must stay in sync with `pyproject.toml`.
-
-Or with pip:
-
-```bash
-pip install .
-```
-
-#### 4. Install pre-commit hooks (recommended)
-
-This project uses [pre-commit](https://pre-commit.com/) to automatically fix import sorting and code formatting on every commit. Run this once after cloning:
-
-```bash
-pre-commit install
-```
-
-After this, `ruff --fix` and `ruff-format` will run automatically on staged files whenever you `git commit`.
-
----
-
-## Running the Application
-
-```bash
-uv run ./scripts/dev-tauri.sh
-```
-
-### How to Use
-
-* **Open File**: Choose `.md`, `.markdown`, `.html`, `.htm`, or `.pdf` from the "File → Open File" menu.
-* **Open with Double-Click**: Double-clicking a `.md` file opens it directly with the app and displays the document with a real-time preview.
-* **Editor-Only Mode**: To open a `.md` file in the editor without automatically generating a web preview, configure the double-click behavior via "Settings → Open Behavior → Editor Only".
-* **Dark Mode**: Toggle via "View → Toggle Dark Mode".
-* **Preview**: Automatically opens in your web browser, only one tab is opened per session.
-* **AI Translation**: 
-  - Translate selected text: "Edit → Translate with AI → Translate Selected Text with AI"
-  - Translate full document: "Edit → Translate with AI → Translate Full Document with AI"
-  - Select source and target languages from dropdown menus
-  - Configure provider/model/API keys: "Settings → AI Provider & API Keys..."
-  - If a key is missing or rejected, the app prompts for the correct provider key and stores it in the OS credential store
-  - Large translations appear progressively in the editor with automatic scrolling and a visible progress bar
-* **AI Agent Chat Panel**:
-  - Show/hide: "View → Show AI Agent Panel"
-  - You can type natural-language requests directly in the chat box; no special command syntax is required
-  - The AI agent can automatically prepare edit suggestions for tasks such as summaries, formatting, TOC generation, and code-block fixes
-  - Typical chat requests:
-    - `generate summary`
-    - `generate table of contents`
-    - `format this section`
-    - `format code blocks and correct syntax`
-  - Supports commands like "format this section", "generate summary", and "generate table of contents"
-  - Built-in automation templates can trigger repetitive editor tasks quickly
-  - Can format and fix Markdown code blocks (including unclosed fences)
-  - Context scope toggle: "Full document" or "Selection only"
-  - Uses current document and/or selected text as context based on the selected scope
-  - Workflow: send a natural-language request -> review AI preview -> click "Apply Suggestion" to apply
-  - AI suggestions can be applied or rejected with confirmation and validation checks
-  - "Undo AI Task" allows one-click rollback of the latest applied AI change
-  - "Audit Log" shows recent AI automation events for traceability
-  - Chat history is stored per document and restored automatically
-* **Table Insertion**: Use "Table → Insert Table" to create custom tables with interactive cell editing.
-* **PDF Conversion Modes**: 
-  - Fast mode (default): Uses PyMuPDF for quick extraction
-  - Advanced mode: Enable "Tools → Use Advanced PDF Conversion (Docling)" for complex documents
-  - View mode info: "Tools → PDF Converter Info"
-
----
-
-## Packaging as a macOS App (Optional)
-
-Build the backend sidecar and Tauri desktop bundle:
-
-```bash
-uv run pyinstaller markdown-reader-backend.spec
-cd frontend
-npm run tauri build
-```
-
-The generated desktop artifacts are produced by Tauri under `frontend/src-tauri/target/release/bundle/`.
-
----
-
-## Exit the Virtual Environment
-```bash
-deactivate
-```
-
-## Code Formatting (Ruff)
-
-This project uses **Ruff** to ensure consistent code formatting across all contributions.
-
-Before submitting changes, please check and format your code.
-
-### Check formatting
-
-```bash
-uv run ruff format --check .
-```
-
-If any files are not properly formatted, you will see output like:
-
-```text
-Would reformat: some_file.py
-```
-
-This means the file does not match the required formatting style.
-
-### Fix formatting
-
-To automatically format all files:
-
-```bash
-uv run ruff format .
-```
-
-## Running Tests
-
-The project uses Python's built-in `unittest` framework. Tests live in the `tests/` directory and cover AI automation logic, UI helper methods, provider configuration, and agent interaction workflows.
-
-Run the full test suite:
-
-```bash
-uv run python -m unittest discover -s tests
-```
-
-Or with pip:
-
-```bash
-python -m unittest discover -s tests
-```
-
-Run a single test file:
-
-```bash
-uv run python -m unittest tests/test_ai_automation_logic.py
-```
-
-### Test coverage overview
-
-| Test file | What it covers |
-|---|---|
-| `test_ai_automation_logic.py` | Offline fallback logic for TOC generation, summarization, code-block formatting, and task template listing |
-| `test_ai_provider_config_logic.py` | Provider configuration and API key management logic |
-
-Tests run automatically on every push and pull request via GitHub Actions (see `.github/workflows/python-ci.yml`).
-
-> **macOS note:** PDF export uses WeasyPrint, which requires native system libraries (pango, cairo, gdk-pixbuf). If you see an `OSError: cannot load library 'libgobject-2.0-0'` error, follow the steps in [PrepareForMacUser.md](./PrepareForMacUser.md) first.
-
----
-
-## Development Workflow: uv vs. pip / requirements.txt
-
-This project previously used a `requirements.txt` file and standard `pip` commands. It has since migrated to [`uv`](https://docs.astral.sh/uv/) with `pyproject.toml`. Here is what changed and why.
-
-### The old approach (requirements.txt + pip)
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-`requirements.txt` is a flat list of pinned packages. It works, but has limitations:
-
-- No distinction between direct dependencies and transitive ones — everything is listed together.
-- No separation of dev-only dependencies (linters, test runners) from runtime dependencies.
-- No built-in lockfile mechanism — the file must be manually regenerated and tends to drift.
-- `pip` resolves the full dependency graph from scratch on every install, which is slow.
-
-### The new approach (pyproject.toml + uv)
-
-```bash
-uv sync           # install all runtime dependencies from the lockfile
-uv sync --locked --extra dev   # also install dev tools (ruff, ty, pre-commit)
-```
-
-`pyproject.toml` is the modern Python packaging standard (PEP 517/518/621). It consolidates project metadata, runtime dependencies, and tool configuration in one file. Key benefits over `requirements.txt`:
-
-- **Dependency groups**: runtime deps go under `[project.dependencies]`; dev-only tools (Ruff, ty, pre-commit) go under `[project.optional-dependencies] dev`; docs tools under `docs`. You only install what you need.
-- **Lockfile (`uv.lock`)**: records exact versions of every direct and transitive package. `uv sync --locked` guarantees identical environments across all machines and in CI — no more "works on my machine" surprises.
-- **Speed**: `uv` is written in Rust and resolves and installs packages significantly faster than `pip`.
-- **Single source of truth**: tool configuration for Ruff, ty, and isort also lives in `pyproject.toml`, eliminating separate config files.
-
-### When to update the lockfile
-
-If you add or change a dependency in `pyproject.toml`, regenerate the lockfile and commit it:
-
-```bash
-uv lock
-git add pyproject.toml uv.lock
-git commit -m "chore: update dependencies"
-```
-
-CI runs `uv sync --locked`, so a stale `uv.lock` will fail the build — this is intentional and keeps the lockfile honest.
-
----
-
-## Submit Changes to Git
-```bash
-git add .
-git commit -m "Update"  # Replace "Update" with a meaningful commit message
-git push
-```
-
-## Technical Details
-
-* Frontend: Next.js and Tauri
-* Backend: FastAPI sidecar process
-* Markdown Engine: `markdown2`
-* HTML Preview: Rendered in the desktop UI
-* File Conversion: `html2text` for HTML, `PyMuPDF` and `docling` for PDF import (`pypdf` is used as a fallback when PyMuPDF is unavailable)
-* PDF Export: `weasyprint`
-* AI Translation: `requests` for API communication with OpenAI Compatible, OpenRouter, OpenAI, and Anthropic
-* Configuration: Per-user settings JSON for provider/model (macOS `~/Library/Application Support/MarkdownReader/settings.json`; Windows `%APPDATA%/MarkdownReader/settings.json`; Linux `~/.config/markdown-reader/settings.json`) plus OS credential storage for API keys (`keyring`)
-* Auto-failover: Automatically switches AI providers when the primary provider returns rate-limit/auth/server errors
-
----
-
-## System Requirements:
-Python >= 3.10
-
----
-
-## AI-powered translation:
-To enable AI-powered translation features, you need to set up API keys:
-
-1. Open `Settings -> AI Provider & API Keys...`.
-2. Choose provider and model.
-3. Enter API key and save.
-4. If you choose `OpenAI Compatible`, you can also choose a Base URL option (`NVIDIA` or `Groq`).
-
-The app stores provider and model in a per-user JSON file:
-
-- macOS: `~/Library/Application Support/MarkdownReader/settings.json`
-- Windows: `%APPDATA%/MarkdownReader/settings.json`
-- Linux: `~/.config/markdown-reader/settings.json`
-
-**How to get API keys:**
-- **OpenRouter** (recommended for free tier): [openrouter.ai](https://openrouter.ai/)
-- **OpenAI**: [platform.openai.com](https://platform.openai.com/)
-- **Anthropic**: [console.anthropic.com](https://console.anthropic.com/)
-- **OpenAI Compatible**: Create an API key from your chosen compatible provider console, then select the matching Base URL preset in this app:
-  - **NVIDIA preset**: [NVIDIA Integrate](https://build.nvidia.com/)
-  - **Groq preset**: [Groq Console](https://console.groq.com/keys)
-
-API keys are saved in the OS credential store (Keychain on macOS, Credential Manager on Windows, Secret Service/KWallet on Linux when available).
-
-The app will automatically switch to a fallback provider when the primary provider returns rate-limit/auth/server errors.
-
----
-
-## License
-
-This project is licensed under the **MIT License**.  
-See the [LICENSE](LICENSE.md) file for the full text.
-
----
-
-## Contributing
-
-All contributions are welcome, including:
-
-- Bug reports
-- Feature suggestions
-- Pull requests
-- Documentation improvements
-- Distribution and hosting setup: see [HostingStrategy](./HostingStrategy.md)
-
-Please see our [CONTRIBUTING](CONTRIBUTING.md) guide for more details on how to get started, submit changes, or report issues.
+- Keep user instructions aligned with visible controls and implemented backend behavior.
+- Update the detailed guide closest to a changed workflow, then update README only when the change belongs in the concise overview.
+- Link to one source of truth rather than duplicating long procedures.
+- Clearly label planning, feasibility, or historical research so it is not mistaken for shipped behavior.

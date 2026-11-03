@@ -1,8 +1,10 @@
 ## Hosting & Distribution Strategy
 
+> **Current implementation status (2026-11-04):** this file records an earlier proposal to use Cloudflare Pages. The repository currently deploys the `distribution/` directory to **GitHub Pages** through [`.github/workflows/deploy-distribution.yml`](../.github/workflows/deploy-distribution.yml). That workflow is triggered by relevant changes on `main` or manually. The Cloudflare steps below are historical planning notes, not instructions for the currently deployed site. Provider limits, pricing, and product details in the proposal are time-sensitive and should be re-checked before making a hosting decision.
+
 > Addresses: [Issue #186](https://github.com/petertzy/markdown-reader/issues/186) · [Issue #189](https://github.com/petertzy/markdown-reader/issues/189)
 
-### Recommended Stack
+### Historical proposal: GitHub Releases + Cloudflare Pages
 
 **GitHub Releases + Cloudflare Pages** — fully free, production-grade, zero maintenance overhead.
 
