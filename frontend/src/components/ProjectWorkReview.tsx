@@ -1,6 +1,7 @@
 "use client";
 
 import type { useProjectWork } from "@/hooks/useProjectWork";
+import ProjectTranslationReview from "@/components/ProjectTranslationReview";
 
 type Props = { projectRoot: string | null; work: ReturnType<typeof useProjectWork> };
 
@@ -25,5 +26,6 @@ export default function ProjectWorkReview({ projectRoot, work }: Props) {
       </>}
       <button onClick={work.discard} className="ml-2 text-gray-500 underline dark:text-gray-400">{work.busy ? "Cancel task" : "Discard proposal"}</button>
     </div>}
+    <ProjectTranslationReview projectRoot={projectRoot} />
   </div>;
 }
