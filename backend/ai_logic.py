@@ -726,12 +726,15 @@ def _request_translation_from_provider(
     content: str,
     source_language: str,
     target_language: str,
+    extra_rules: str = "",
 ) -> str:
     system_prompt = (
         "Translate Markdown while preserving Markdown structure, front matter, "
         "links, tables, code fences, inline code, math, and HTML. Return only the "
         "translated Markdown."
     )
+    if extra_rules.strip():
+        system_prompt = f"{system_prompt} {extra_rules.strip()}"
     user_prompt = (
         f"Source language: {source_language or 'auto'}\n"
         f"Target language: {target_language}\n\n"
