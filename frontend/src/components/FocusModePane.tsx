@@ -31,7 +31,7 @@ import { indent } from '@milkdown/kit/plugin/indent'
 import { block } from '@milkdown/kit/plugin/block'
 import { history, undoCommand, redoCommand } from '@milkdown/kit/plugin/history'
 import { commandsCtx, editorViewCtx, editorViewOptionsCtx, parserCtx } from '@milkdown/kit/core'
-import { DOMParser, DOMSerializer } from '@milkdown/kit/prose/model'
+import { Slice } from '@milkdown/kit/prose/model'
 import { math } from '@milkdown/plugin-math'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
@@ -39,52 +39,38 @@ import '@/lib/focusModePaneDark.css'
 import { SlashCommand } from '@/hooks/useSlashCommands'
 import React, { useEffect } from 'react';
 
-// ============================================================================
-// Professional Markdown Detection - Issue #449
-// ============================================================================
+/**
+ * Returns true for Markdown syntax that should be parsed when pasted as plain
+ * text. A single complete construct is sufficient: common editors expose
+ * standalone emphasis, links, and list items as a single plain-text value.
+ */
+export function isMarkdownContent(text: string): boolean {
+  const value = text.trim()
+  if (!value) return false
+
+  return [
+    /^#{1,6}\s+\S/m,
+    /^```[^\n]*\n[\s\S]*?\n```\s*$/m,
+    /^\s*>\s+\S/m,
+    /^\s*(?:[-+*]|\d+\.)\s+\S/m,
+    /^\s*([-*_]\s*){3,}$/m,
+    /\*\*[^*\n]+\*\*|__[^_\n]+__/,
+    /(?<!\*)\*[^*\n]+\*(?!\*)|(?<!_)_[^_\n]+_(?!_)/,
+    /`[^`\n]+`/,
+    /!?\[[^\]\n]+\]\([^\s)]+(?:\s+["'][^"']*["'])?\)/,
+    /^\s*\|.+\|\s*\n\s*\|\s*:?-{3,}:?\s*\|/m,
+  ].some((pattern) => pattern.test(value))
+}
 
 /**
- * Robust Markdown detection with confidence scoring.
- * Prevents false positives like "C# is great" vs real "# Heading"
+ * Rich clipboard HTML is authoritative. Only override the browser's normal
+ * HTML paste path when HTML is absent or is merely a plain-text wrapper.
  */
-function isMarkdownContent(text: string): boolean {
-  if (!text || text.trim().length < 3) return false;
+export function shouldParseMarkdownPaste(plainText: string, html: string): boolean {
+  if (!isMarkdownContent(plainText)) return false
 
-  // Strong signals - single match = Markdown
-  const strongPatterns = [
-    /^#{1,6}\s+\S/m,           // # Heading
-    /^```[\w]*\n/m,            // ```code block
-    /\|.*\|.*\n\s*\|(?:-|:|\||\s)+\|/m, // | table |
-    /^\s*([-*_]\s*){3,}\s*$/m, // --- horizontal rule
-  ];
-
-  for (const pattern of strongPatterns) {
-    if (pattern.test(text)) return true;
-  }
-
-  // Weak signals - need 2+ to confirm Markdown
-  const weakPatterns = [
-    /^>\s+.+/m,                 // > blockquote
-    /^\s*[-*+]\s+\S/m,        // - list
-    /^\s*\d+\.\s+\S/m,      // 1. ordered list
-    /\*\*[^\*\n]+\*\*/m,   // **bold**
-    /__[^_\n]+__/m,             // __bold__
-    /`[^`\n]+`/m,               // `code`
-    /\[.+\]\(.+\)/m,         // [link](url)
-    /!\[.*\]\(.+\)/m,        // ![image](url)
-  ];
-
-  let weakMatches = 0;
-  for (const pattern of weakPatterns) {
-    if (pattern.test(text)) weakMatches++;
-  }
-
-  // Multi-line list structure = strong signal
-  const lines = text.split('\n');
-  const listLines = lines.filter(l => /^\s*([-+*]|\d+\.)\s+\S/.test(l));
-  if (listLines.length >= 2) return true;
-
-  return weakMatches >= 2;
+  const hasRichStructure = /<(?:p|h[1-6]|ul|ol|li|table|thead|tbody|tr|td|th|blockquote|pre|code|strong|em|a)\b/i.test(html)
+  return !hasRichStructure
 }
 
 export type FocusEditorHandle = {
@@ -159,41 +145,37 @@ function CrepeEditor({ value, onChange, darkMode, fontSize, slashCommands, onSel
               onChange(markdown)
             }
           })
-
-          // ========================================================================
-          // PROFESSIONAL FIX #449 - No new imports, uses existing editorViewCtx
-          const originalHandlePaste = ctx.get(editorViewOptionsCtx).handlePaste;
+          const originalHandlePaste = ctx.get(editorViewOptionsCtx).handlePaste
           ctx.update(editorViewOptionsCtx, (options) => ({
             ...options,
             handlePaste: (view, event, preProcessedSlice) => {
-              const clipboardData = event.clipboardData;
-              const plainText = clipboardData?.getData('text/plain') ?? '';
-              const html = clipboardData?.getData('text/html') ?? '';
-              if (!html || !isMarkdownContent(plainText)) {
-                return originalHandlePaste?.(view, event, preProcessedSlice) ?? false;
+              const clipboardData = event.clipboardData
+              const plainText = clipboardData?.getData('text/plain') ?? ''
+              const html = clipboardData?.getData('text/html') ?? ''
+
+              if (!shouldParseMarkdownPaste(plainText, html)) {
+                return originalHandlePaste?.(view, event, preProcessedSlice) ?? false
               }
 
               try {
-                const parsed = ctx.get(parserCtx)(plainText);
+                const parsed = ctx.get(parserCtx)(plainText)
                 if (!parsed || typeof parsed === 'string') {
-                  return originalHandlePaste?.(view, event, preProcessedSlice) ?? false;
+                  return originalHandlePaste?.(view, event, preProcessedSlice) ?? false
                 }
 
-                const dom = DOMSerializer.fromSchema(view.state.schema).serializeFragment(parsed.content);
-                const slice = DOMParser.fromSchema(view.state.schema).parseSlice(dom);
                 view.dispatch(
                   view.state.tr
-                    .replaceSelection(slice)
+                    .replaceSelection(new Slice(parsed.content, 0, 0))
                     .setMeta('paste', true)
-                    .setMeta('fix-449', 'consistent-markdown-paste')
-                );
-                return true;
+                    .setMeta('uiEvent', 'paste')
+                )
+                return true
               } catch (error) {
-                console.warn('[Fix #449] Paste handling failed, fallback to default:', error);
-                return originalHandlePaste?.(view, event, preProcessedSlice) ?? false;
+                console.warn('[focus] Markdown paste handling failed; using the default handler.', error)
+                return originalHandlePaste?.(view, event, preProcessedSlice) ?? false
               }
             },
-          }));
+          }))
         })
 
     if (editorRef) {
