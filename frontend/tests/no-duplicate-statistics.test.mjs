@@ -1,8 +1,8 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const frontendRoot = new URL("../frontend/src/", import.meta.url);
+const frontendRoot = new URL("../src/", import.meta.url);
 const page = readFileSync(new URL("app/page.tsx", frontendRoot), "utf8");
 const obsoleteStatsPath = new URL("components/DocumentStats.tsx", frontendRoot);
 
