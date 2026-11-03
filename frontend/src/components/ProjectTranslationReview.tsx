@@ -27,6 +27,7 @@ export default function ProjectTranslationReview({ projectRoot }: { projectRoot:
         {task?.status === "running" ? "Translating..." : "Translate project"}
       </button>
       {task?.status === "running" && <button onClick={() => void translation.cancel()} className="rounded border px-2 py-1 dark:border-gray-600">Cancel</button>}
+      {task && task.status !== "running" && task.failed > 0 && <button onClick={() => void translation.retryFailed()} className="rounded border px-2 py-1 dark:border-gray-600">Retry failed files</button>}
     </div>
     {translation.error && <p role="alert" className="text-red-600 dark:text-red-400">{translation.error}</p>}
     {task && <div className="space-y-1">
