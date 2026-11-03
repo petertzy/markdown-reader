@@ -16,6 +16,7 @@ from backend.project_translation import (
     discover_markdown_files,
     protect_markdown,
     reset_project_translations,
+    retry_failed_project_translation,
     restore_markdown,
     run_project_translation,
     start_project_translation,
@@ -241,3 +242,33 @@ def test_relative_image_assets_are_copied_with_translated_markdown(tmp_path: Pat
         "Bonjour ![Diagram](images/diagram.png)\n"
     )
     assert (output / "images" / "diagram.png").read_bytes() == b"image-bytes"
+
+
+def test_retry_only_reprocesses_files_that_failed(tmp_path: Path):
+    reset_project_translations()
+    (tmp_path / "good.md").write_text("Hello\n", encoding="utf-8")
+    (tmp_path / "retry.md").write_text("World\n", encoding="utf-8")
+
+    def fail_world(content: str, source: str, target: str) -> str:
+        if "World" in content:
+            raise RuntimeError("temporary provider error")
+        return _french(content, source, target)
+
+    started = start_project_translation(
+        root=str(tmp_path),
+        source_language="English",
+        target_language="French",
+        output_dir=str(tmp_path / "out"),
+        translator=fail_world,
+    )
+    completed = wait_for_project_translation(started["id"])
+    assert completed["failed"] == 1
+
+    retried = retry_failed_project_translation(completed["id"], translator=_french)
+    assert retried is not None
+    retried_completed = wait_for_project_translation(retried["id"])
+    assert retried_completed["total"] == 1
+    assert retried_completed["translated"] == 1
+    assert retried_completed["failed"] == 0
+    assert retried_completed["files"][0]["rel_path"] == "retry.md"
+    assert (tmp_path / "out" / "retry.md").read_text(encoding="utf-8") == "Monde\n"
