@@ -1354,7 +1354,7 @@ def request_ai_agent_response(
 
 
 def translate_markdown_with_ai(
-    content: str, source_language: str, target_language: str
+    content: str, source_language: str, target_language: str, extra_rules: str = ""
 ) -> str:
     if not (content or "").strip():
         return ""
@@ -1375,6 +1375,7 @@ def translate_markdown_with_ai(
         content,
         source_language,
         target_language,
+        extra_rules=extra_rules,
     )
 
 
