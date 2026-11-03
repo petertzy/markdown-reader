@@ -932,7 +932,7 @@ export default function AIPanel({
         </div>
       ) : tab === "translate" ? (
         <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
-          <ProjectTranslationReview projectRoot={projectRoot} />
+          <ProjectTranslationReview projectRoot={projectRoot} sourceLanguage={sourceLang} targetLanguage={targetLang} />
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500 dark:text-gray-400">Translate</label>
             <div className="flex gap-1">
