@@ -583,3 +583,19 @@ def cancel_project_translation(task_id: str):
     if snapshot is None:
         raise HTTPException(status_code=404, detail="Unknown translation task.")
     return snapshot
+
+@router.post("/translate/project/{task_id}/retry")
+def retry_project_translation(task_id: str):
+    """Retry only files that failed in a completed project translation task."""
+    from backend.project_translation import (
+        ProjectTranslationError,
+        retry_failed_project_translation as retry_task,
+    )
+
+    try:
+        snapshot = retry_task(task_id)
+    except ProjectTranslationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Unknown translation task.")
+    return snapshot
