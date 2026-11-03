@@ -183,6 +183,7 @@ def run_project_translation(
     output_dir: Path | None = None,
     cancel_event: threading.Event | None = None,
     on_file: Callable[[dict[str, Any]], None] | None = None,
+    relative_paths: set[str] | None = None,
 ) -> dict[str, Any]:
     """Translate a project into ``output_dir`` and return a result snapshot."""
     base = _require_directory(root)
@@ -193,6 +194,11 @@ def run_project_translation(
     )
     _validate_output_dir(base, destination)
     files = discover_markdown_files(base, exclude=destination)
+    if relative_paths is not None:
+        files = [
+            path for path in files
+            if path.relative_to(base).as_posix() in relative_paths
+        ]
     translate = translator or default_translator
     cancel_event = cancel_event or threading.Event()
     results: list[dict[str, Any]] = [
@@ -256,6 +262,7 @@ def start_project_translation(
     target_language: str,
     output_dir: str | None = None,
     translator: Translator | None = None,
+    relative_paths: set[str] | None = None,
 ) -> dict[str, Any]:
     """Start a background translation task and return its initial snapshot."""
     if not (target_language or "").strip():
@@ -268,6 +275,11 @@ def start_project_translation(
     )
     _validate_output_dir(base, destination)
     files = discover_markdown_files(base, exclude=destination)
+    if relative_paths is not None:
+        files = [
+            path for path in files
+            if path.relative_to(base).as_posix() in relative_paths
+        ]
     task_id = uuid.uuid4().hex
     cancel_event = threading.Event()
     task: dict[str, Any] = {
@@ -309,6 +321,7 @@ def start_project_translation(
                 output_dir=destination,
                 cancel_event=cancel_event,
                 on_file=_remember_file(task_id),
+                relative_paths=relative_paths,
             )
         except Exception as exc:
             result = {
@@ -343,6 +356,33 @@ def start_project_translation(
     task["thread"] = thread
     thread.start()
     return _public_snapshot(task)
+
+
+def retry_failed_project_translation(
+    task_id: str, *, translator: Translator | None = None
+) -> dict[str, Any] | None:
+    """Start a new task for only the files that failed in an earlier task."""
+    with _lock:
+        task = _tasks.get(task_id)
+        if task is None:
+            return None
+        failed_paths = {
+            item["rel_path"] for item in task["files"] if item["status"] == "failed"
+        }
+        root = task["root"]
+        source_language = task["source_language"]
+        target_language = task["target_language"]
+        output_dir = task["output_dir"]
+    if not failed_paths:
+        raise ProjectTranslationError("This task has no failed files to retry.")
+    return start_project_translation(
+        root=root,
+        source_language=source_language,
+        target_language=target_language,
+        output_dir=output_dir,
+        translator=translator,
+        relative_paths=failed_paths,
+    )
 
 
 def get_project_translation(task_id: str) -> dict[str, Any] | None:
