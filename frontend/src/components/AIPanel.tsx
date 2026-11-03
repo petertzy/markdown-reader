@@ -5,6 +5,7 @@ import { useAIChat, type TranslationPair, type TranslationProgress } from "@/hoo
 import { AI, getDefaultAISettings, type AISettings, Knowledge, type KnowledgeStatus, Markdown } from "@/lib/api";
 import { tokenizeInlineMarkdown } from "@/lib/inline-markdown.mjs";
 import ProjectWorkReview from "@/components/ProjectWorkReview";
+import ProjectTranslationReview from "@/components/ProjectTranslationReview";
 import type { useProjectWork } from "@/hooks/useProjectWork";
 
 export type AIPanelTab = "chat" | "translate" | "settings" | "work";
@@ -931,6 +932,7 @@ export default function AIPanel({
         </div>
       ) : tab === "translate" ? (
         <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
+          <ProjectTranslationReview projectRoot={projectRoot} />
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500 dark:text-gray-400">Translate</label>
             <div className="flex gap-1">
