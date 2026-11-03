@@ -278,7 +278,9 @@ def start_project_translation(
         else default_output_dir(base, target_language)
     )
     _validate_output_dir(base, destination)
-    files = discover_markdown_files(base, exclude=destination)
+    files = discover_markdown_files(
+        base, exclude=_discovery_exclude_dir(base, destination)
+    )
     if relative_paths is not None:
         files = [
             path for path in files
