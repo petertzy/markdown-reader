@@ -693,6 +693,9 @@ export const AI = {
   cancelProjectTranslation: (id: string) =>
     apiFetch<ProjectTranslationTask>(`/api/ai/translate/project/${id}/cancel`, { method: "POST" }),
 
+  retryProjectTranslation: (id: string) =>
+    apiFetch<ProjectTranslationTask>(`/api/ai/translate/project/${id}/retry`, { method: "POST" }, LONG_REQUEST_TIMEOUT_MS),
+
   getChatHistory: () =>
     apiFetch<{ histories: unknown[] }>("/api/ai/chat/history"),
 
