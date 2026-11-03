@@ -272,3 +272,27 @@ def test_retry_only_reprocesses_files_that_failed(tmp_path: Path):
     assert retried_completed["failed"] == 0
     assert retried_completed["files"][0]["rel_path"] == "retry.md"
     assert (tmp_path / "out" / "retry.md").read_text(encoding="utf-8") == "Monde\n"
+
+
+def test_default_output_is_visible_and_not_discovered_as_source(tmp_path: Path):
+    (tmp_path / "guide.md").write_text("Hello\n", encoding="utf-8")
+
+    first = run_project_translation(
+        root=tmp_path,
+        source_language="English",
+        target_language="French",
+        translator=_french,
+    )
+    output = tmp_path / "translations" / "french"
+    assert first["total"] == 1
+    assert first["output_dir"] == str(output)
+    assert (output / "guide.md").read_text(encoding="utf-8") == "Bonjour\n"
+
+    second = run_project_translation(
+        root=tmp_path,
+        source_language="English",
+        target_language="French",
+        translator=_french,
+    )
+    assert second["total"] == 1
+    assert second["files"][0]["rel_path"] == "guide.md"
