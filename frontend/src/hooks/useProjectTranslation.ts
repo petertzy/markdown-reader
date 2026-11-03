@@ -40,5 +40,15 @@ export function useProjectTranslation(projectRoot: string | null) {
     }
   }, [task]);
 
-  return { task, error, start, cancel };
+  const retryFailed = useCallback(async () => {
+    if (!task) return;
+    setError("");
+    try {
+      setTask(await AI.retryProjectTranslation(task.id));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  }, [task]);
+
+  return { task, error, start, cancel, retryFailed };
 }
