@@ -73,12 +73,14 @@ def language_slug(language: str) -> str:
 
 
 def default_output_dir(root: Path, target_language: str) -> Path:
-    return (
-        root.resolve()
-        / ".markdown-reader"
-        / "translations"
-        / language_slug(target_language)
-    )
+    """Return a visible output directory within the project."""
+    return root.resolve() / "translations" / language_slug(target_language)
+
+
+def _discovery_exclude_dir(root: Path, output_dir: Path) -> Path:
+    """Avoid treating generated translations as source documents."""
+    translations = (root.resolve() / "translations").resolve()
+    return translations if output_dir.is_relative_to(translations) else output_dir
 
 
 class ProjectTranslationError(ValueError):
@@ -193,7 +195,9 @@ def run_project_translation(
         else default_output_dir(base, target_language)
     )
     _validate_output_dir(base, destination)
-    files = discover_markdown_files(base, exclude=destination)
+    files = discover_markdown_files(
+        base, exclude=_discovery_exclude_dir(base, destination)
+    )
     if relative_paths is not None:
         files = [
             path for path in files
@@ -274,7 +278,9 @@ def start_project_translation(
         else default_output_dir(base, target_language)
     )
     _validate_output_dir(base, destination)
-    files = discover_markdown_files(base, exclude=destination)
+    files = discover_markdown_files(
+        base, exclude=_discovery_exclude_dir(base, destination)
+    )
     if relative_paths is not None:
         files = [
             path for path in files
