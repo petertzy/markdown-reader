@@ -220,6 +220,28 @@ export type ProjectWorkTask = {
   changes: ProjectWorkChange[];
 };
 
+export type ProjectTranslationFile = {
+  rel_path: string;
+  status: "pending" | "running" | "translated" | "unchanged" | "failed" | "cancelled";
+  error: string | null;
+};
+
+export type ProjectTranslationTask = {
+  id: string;
+  status: "running" | "completed" | "cancelled" | "failed";
+  root: string;
+  output_dir: string;
+  source_language: string;
+  target_language: string;
+  total: number;
+  completed: number;
+  translated: number;
+  unchanged: number;
+  failed: number;
+  cancelled: number;
+  files: ProjectTranslationFile[];
+};
+
 export type ConvertToMarkdownPayload = {
   path?: string;
   filename?: string;
@@ -658,6 +680,18 @@ export const AI = {
 
   discardProjectWork: (id: string) =>
     apiFetch<{ discarded: boolean }>(`/api/ai/work/project/${id}`, { method: "DELETE" }),
+
+  startProjectTranslation: (payload: { root: string; source_language: string; target_language: string }) =>
+    apiFetch<ProjectTranslationTask>("/api/ai/translate/project", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }, LONG_REQUEST_TIMEOUT_MS),
+
+  projectTranslationStatus: (id: string) =>
+    apiFetch<ProjectTranslationTask>(`/api/ai/translate/project/${id}`),
+
+  cancelProjectTranslation: (id: string) =>
+    apiFetch<ProjectTranslationTask>(`/api/ai/translate/project/${id}/cancel`, { method: "POST" }),
 
   getChatHistory: () =>
     apiFetch<{ histories: unknown[] }>("/api/ai/chat/history"),
