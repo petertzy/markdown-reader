@@ -99,6 +99,57 @@ Type `/` at the start of a line or after whitespace in the main editor to open t
 
 Use the arrow keys to move through the menu, Enter to run a command, and Escape to dismiss it. Focus Mode has its own editor slash-command menu.
 
+## 🏗️ Architecture
+
+Markdown Reader consists of a Next.js / React interface, a Tauri desktop host, and a local FastAPI service. The diagrams below summarize the five high-level views from the [interactive Architecture Explorer](./docs/architecture/index.html). They are simplified architectural maps rather than exhaustive function-call traces.
+
+### 01 · System Overview
+
+The desktop interface communicates with native Tauri capabilities and the Python backend. Document storage stays local; model requests can reach a configured cloud or local provider.
+
+![system overview architecture diagram](./docs/architecture/system-overview.svg)
+
+### 02 · Frontend Modules
+
+The page composes the editor, feature panels, and stateful hooks. Panels and hooks use the typed API client for backend requests.
+
+![frontend modules architecture diagram](./docs/architecture/frontend-modules.svg)
+
+### 03 · Backend Modules
+
+FastAPI registers routers for the main feature areas. Each router delegates work to the relevant domain implementation.
+
+![backend modules architecture diagram](./docs/architecture/backend-modules.svg)
+
+### 04 · AI Chat Request Flow
+
+The chat panel passes a message through the React hook and typed client to the FastAPI AI endpoint, which delegates to the configured model provider.
+
+![ai chat request flow architecture diagram](./docs/architecture/ai-chat-request-flow.svg)
+
+In the packaged desktop app, API requests traverse the Tauri request proxy; the arrow from the client to the router abstracts that transport step.
+
+### 05 · Desktop Runtime
+
+In packaged builds, Tauri launches and supervises the Python sidecar. The Rust host retains the backend connection details and forwards authenticated requests from the WebView.
+
+![desktop runtime architecture diagram](./docs/architecture/desktop-runtime.svg)
+
+### Generate and Open the Interactive Architecture Explorer
+
+These README diagrams provide an at-a-glance overview. To regenerate the source-scanned interactive explorer from your current checkout, run the following commands **from the repository root**:
+
+```bash
+python3 tools/generate_architecture.py
+open docs/architecture/index.html
+```
+
+The generator writes `docs/architecture/index.html`; the `open` command opens that file on macOS. On Linux, use `xdg-open docs/architecture/index.html`; on Windows, use `start docs/architecture/index.html`.
+
+The explorer supports zooming, panning, node inspection, and exporting a selected view as SVG. Its source-derived function views may vary as the code changes. The five static SVG diagrams embedded above are maintained in `docs/architecture/` and do **not** update automatically when the generator is run.
+
+---
+
 ## Documentation
 
 - [User guide](./docs/UserGuide.md): editor modes, files and projects, AI settings, import, citations, and export.
