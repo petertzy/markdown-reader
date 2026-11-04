@@ -141,62 +141,25 @@ Markdown Reader consists of a Next.js / React interface, a Tauri desktop host, a
 
 The desktop interface communicates with native Tauri capabilities and the Python backend. Document storage stays local; model requests can reach a configured cloud or local provider.
 
-```mermaid
-flowchart LR
-    User["Desktop user"] --> UI["Next.js / React UI"]
-    UI --> Host["Tauri Rust host"]
-    Host --> API["FastAPI sidecar"]
-    UI -.->|"Browser development"| API
-    API --> Files[("Local files and settings")]
-    API --> Models["Cloud or local AI providers"]
-```
+![system overview architecture diagram](./docs/architecture/system-overview.svg)
 
 ### 02 · Frontend Modules
 
 The page composes the editor, feature panels, and stateful hooks. Panels and hooks use the typed API client for backend requests.
 
-```mermaid
-flowchart LR
-    Page["HomePage"] --> Editor["EditorWorkspace<br/>Monaco and slash commands"]
-    Page --> Panels["Feature panels<br/>AI, citations, projects"]
-    Page --> Hooks["Stateful hooks<br/>Editor, files, projects"]
-    Panels --> Client["Typed API client"]
-    Hooks --> Client
-    Client --> API["FastAPI endpoints"]
-```
+![frontend modules architecture diagram](./docs/architecture/frontend-modules.svg)
 
 ### 03 · Backend Modules
 
 FastAPI registers routers for the main feature areas. Each router delegates work to the relevant domain implementation.
 
-```mermaid
-flowchart LR
-    App["FastAPI entry<br/>backend/main.py"] --> AI["AI router"]
-    App --> Files["Files router"]
-    App --> Markdown["Markdown router"]
-    App --> Export["Export router"]
-    App --> Other["Citations and knowledge routers"]
-
-    AI --> AILogic["AI logic"]
-    Files --> Convert["Converters"]
-    Markdown --> Renderer["Markdown renderer"]
-    Export --> Renderer
-    Export --> Exporters["DOCX and PDF exporters"]
-    Other --> Domain["Citation and knowledge logic"]
-```
+![backend modules architecture diagram](./docs/architecture/backend-modules.svg)
 
 ### 04 · AI Chat Request Flow
 
 The chat panel passes a message through the React hook and typed client to the FastAPI AI endpoint, which delegates to the configured model provider.
 
-```mermaid
-flowchart LR
-    Panel["AIPanel"] --> Hook["useAIChat<br/>sendMessage()"]
-    Hook --> Client["AI.chat<br/>Typed API client"]
-    Client --> Router["AI router<br/>POST /chat"]
-    Router --> Logic["AI logic"]
-    Logic --> Provider["Cloud or local model endpoint"]
-```
+![ai chat request flow architecture diagram](./docs/architecture/ai-chat-request-flow.svg)
 
 In the packaged desktop app, API requests traverse the Tauri request proxy; the arrow from the client to the router abstracts that transport step.
 
@@ -204,14 +167,7 @@ In the packaged desktop app, API requests traverse the Tauri request proxy; the 
 
 In packaged builds, Tauri launches and supervises the Python sidecar. The Rust host retains the backend connection details and forwards authenticated requests from the WebView.
 
-```mermaid
-flowchart LR
-    Startup["Tauri startup"] --> Sidecar["Python sidecar<br/>Dynamic port and token"]
-    Sidecar --> State["Rust host state<br/>Port and token"]
-    WebView["WebView client<br/>Typed API"] --> Proxy["Rust request proxy<br/>proxy_backend_request"]
-    State --> Proxy
-    Proxy --> Backend["FastAPI<br/>Token middleware"]
-```
+![desktop runtime architecture diagram](./docs/architecture/desktop-runtime.svg)
 
 ### Generate and Open the Interactive Architecture Explorer
 
@@ -224,7 +180,7 @@ open docs/architecture/index.html
 
 The generator writes `docs/architecture/index.html`; the `open` command opens that file on macOS. On Linux, use `xdg-open docs/architecture/index.html`; on Windows, use `start docs/architecture/index.html`.
 
-The explorer supports zooming, panning, node inspection, and exporting a selected view as SVG. Its source-derived function views may vary as the code changes. The five overview diagrams embedded above are maintained in this README and do **not** update automatically when the generator is run.
+The explorer supports zooming, panning, node inspection, and exporting a selected view as SVG. Its source-derived function views may vary as the code changes. The five static SVG diagrams embedded above are maintained in `docs/architecture/` and do **not** update automatically when the generator is run.
 
 ---
 
