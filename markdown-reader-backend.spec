@@ -17,6 +17,9 @@ a = Analysis(
         'backend.routers.citations',
         'bibtexparser',
         *collect_submodules('markitdown'),
+        # Imported lazily by the explorer's delete endpoint; the platform
+        # backend (win/mac/plat_other) is chosen at runtime.
+        *collect_submodules('send2trash'),
     ],
     hookspath=[],
     hooksconfig={},

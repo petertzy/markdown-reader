@@ -19,6 +19,7 @@ import base64
 import json
 import logging
 import os
+import shutil
 import sys
 import tempfile
 from importlib import import_module
@@ -157,6 +158,26 @@ class FileEntry(BaseModel):
     path: str
     is_dir: bool
     extension: str
+
+
+class ProjectPathPayload(BaseModel):
+    root: str
+    path: str
+
+
+class RenamePayload(ProjectPathPayload):
+    new_name: str
+
+
+class CreateEntryPayload(BaseModel):
+    root: str
+    parent: str
+    name: str
+    is_dir: bool = False
+
+
+class TransferPayload(ProjectPathPayload):
+    dest_parent: str
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -440,6 +461,222 @@ def list_files(
         raise HTTPException(status_code=403, detail="Permission denied")
 
     return {"path": path, "entries": entries}
+
+
+# ── Project explorer file management ─────────────────────────────────────────
+
+
+def _resolve_in_project(root: str, path: str, *, allow_root: bool = False) -> Path:
+    """
+    Resolve ``path`` and make sure it lies inside the project folder ``root``.
+
+    The explorer only ever acts on entries it listed from the open project, so
+    anything that resolves outside it (``..`` segments, symlinks, another
+    drive) is rejected rather than touched.
+
+    :param str root: Absolute path of the open project folder.
+    :param str path: Absolute path of the entry to act on.
+    :param bool allow_root: Whether ``path`` may be the project folder itself.
+
+    :return: A Path with symlinks and ``..`` segments resolved.
+
+    :raises HTTPException: 404 if the project folder does not exist, 403 if
+        ``path`` is outside it (or is the folder itself and that is not allowed).
+    """
+    root_path = Path(root).resolve()
+    if not root_path.is_dir():
+        raise HTTPException(status_code=404, detail=f"Project not found: {root}")
+
+    target = Path(path).resolve()
+    if target != root_path and root_path not in target.parents:
+        raise HTTPException(status_code=403, detail="Path is outside the project")
+
+    if target == root_path and not allow_root:
+        raise HTTPException(
+            status_code=403, detail="The project folder itself cannot be changed"
+        )
+    return target
+
+
+def _validate_entry_name(name: str) -> str:
+    """
+    Check that ``name`` is a single file or folder name, not a path.
+
+    :param str name: The name typed by the user.
+
+    :return: The name with surrounding whitespace removed.
+
+    :raises HTTPException: 400 if the name is empty, ``.``/``..``, or contains a
+        path separator or a character Windows does not allow in file names.
+    """
+    cleaned = name.strip()
+    if not cleaned or cleaned in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
+
+    # Reject any special/invalid characters
+    if any(char in cleaned for char in '/\\:*?"<>|') or any(
+        ord(char) < 32 for char in cleaned
+    ):
+        raise HTTPException(
+            status_code=400, detail=f"Name contains invalid characters: {cleaned}"
+        )
+
+    return cleaned
+
+
+def _resolve_transfer(payload: TransferPayload) -> tuple[Path, Path]:
+    """
+    Resolve and check the source and destination folder of a copy or move.
+
+    :param TransferPayload payload: The project, the entry to transfer, and the
+        folder to paste it into.
+
+    :return: The resolved source entry and destination folder.
+
+    :raises HTTPException: 403 if either path is outside the project (or the
+        source is the project folder itself), 404 if the source or destination
+        is missing, 400 if a folder would be pasted into itself.
+    """
+    source = _resolve_in_project(payload.root, payload.path)
+    dest = _resolve_in_project(payload.root, payload.dest_parent, allow_root=True)
+    if not source.exists():
+        raise HTTPException(status_code=404, detail=f"Not found: {payload.path}")
+    if not dest.is_dir():
+        raise HTTPException(status_code=404, detail=f"Folder not found: {dest}")
+    if source.is_dir() and (dest == source or source in dest.parents):
+        raise HTTPException(
+            status_code=400, detail="A folder cannot be pasted into itself"
+        )
+    return source, dest
+
+
+def _unique_copy_target(dest: Path, source: Path) -> Path:
+    """
+    Pick a free name in ``dest`` for a copy of ``source``.
+
+    Keeps the original name when it is free, otherwise follows VS Code:
+    ``a.md`` -> ``a copy.md`` -> ``a copy 2.md``. Folders have no extension.
+
+    :param Path dest: Folder the copy goes into.
+    :param Path source: Entry being copied.
+
+    :return: A path in ``dest`` that does not exist yet.
+    """
+    target = dest / source.name
+    if not target.exists():
+        return target
+
+    if source.is_dir():
+        stem, suffix = source.name, ""
+    else:
+        stem, suffix = source.stem, source.suffix
+    counter = 1
+    while True:
+        label = " copy" if counter == 1 else f" copy {counter}"
+        target = dest / f"{stem}{label}{suffix}"
+        if not target.exists():
+            return target
+        counter += 1
+
+
+def _move_to_trash(path: Path) -> None:
+    """Send ``path`` to the system Recycle Bin / Trash (patched in tests)."""
+    from send2trash import send2trash
+
+    send2trash(str(path))
+
+
+@router.post("/create")
+def create_entry(payload: CreateEntryPayload):
+    """Create an empty file or folder inside the parent path."""
+    parent = _resolve_in_project(payload.root, payload.parent, allow_root=True)
+
+    if not parent.is_dir():
+        raise HTTPException(status_code=404, detail=f"Folder not found: {parent}")
+
+    target = parent / _validate_entry_name(payload.name)
+    if target.exists():
+        raise HTTPException(status_code=409, detail=f"Already exists: {target.name}")
+
+    try:
+        if payload.is_dir:
+            target.mkdir()
+        else:
+            target.touch(exist_ok=False)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"path": str(target), "is_dir": payload.is_dir}
+
+
+@router.post("/rename")
+def rename_entry(payload: RenamePayload):
+    """Rename a file or folder in place, keeping it in the same folder."""
+    source = _resolve_in_project(payload.root, payload.path)
+    if not source.exists():
+        raise HTTPException(status_code=404, detail=f"Not found: {payload.path}")
+
+    target = source.with_name(_validate_entry_name(payload.new_name))
+    if target == source:
+        return {"old_path": str(source), "path": str(target)}
+
+    # A case-only rename ("notes.md" -> "Notes.md") resolves to the same file on
+    # Windows and macOS, so it is not a conflict.
+    if target.exists() and not os.path.samefile(source, target):
+        raise HTTPException(status_code=409, detail=f"Already exists: {target.name}")
+    try:
+        source.rename(target)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"old_path": str(source), "path": str(target)}
+
+
+@router.post("/copy")
+def copy_entry(payload: TransferPayload):
+    """Copy a file or folder into ``dest_parent``, picking a free name on a clash."""
+    source, dest = _resolve_transfer(payload)
+    target = _unique_copy_target(dest, source)
+    try:
+        if source.is_dir():
+            # Copy links as links so a symlink cannot pull in files from
+            # outside the project.
+            shutil.copytree(source, target, symlinks=True)
+        else:
+            shutil.copy2(source, target)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"path": str(target)}
+
+
+@router.post("/move")
+def move_entry(payload: TransferPayload):
+    """Move a file or folder into ``dest_parent`` (the explorer's Cut and Paste)."""
+    source, dest = _resolve_transfer(payload)
+    target = dest / source.name
+    if target == source:
+        # Pasting back into the folder it was cut from changes nothing.
+        return {"old_path": str(source), "path": str(target)}
+    if target.exists():
+        raise HTTPException(status_code=409, detail=f"Already exists: {target.name}")
+    try:
+        shutil.move(source, target)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"old_path": str(source), "path": str(target)}
+
+
+@router.post("/delete")
+def delete_entry(payload: ProjectPathPayload):
+    """Move a file or folder to the system Recycle Bin / Trash."""
+    target = _resolve_in_project(payload.root, payload.path)
+    if not target.exists():
+        raise HTTPException(status_code=404, detail=f"Not found: {payload.path}")
+
+    try:
+        _move_to_trash(target)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {"path": str(target), "deleted": True}
 
 
 @router.get("/recent")
