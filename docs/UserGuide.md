@@ -85,7 +85,7 @@ The application has more than one AI editing path:
 - **Active-document Work:** In the Work tab, choose **Active document**, enter an instruction, and choose **Apply Changes**. The returned replacement is applied to the active document if that document has not changed while the request was running. In the main Monaco editor, the result is applied as one editor change that can be undone through the editor's undo history; it is not a separate multi-file diff review.
 - **Project Work:** Choose **Open project** in the Work scope selector. The AI inspects requested project files and prepares proposed changes with file-by-file diffs. Review the diffs before selecting **Accept changes into editor**. Applying stages the contents in editor tabs; it does not write the files directly to disk. Save the reviewed tabs when ready.
 
-The AI panel also exposes an audit log and an undo control for the recorded AI workflow. These controls do not replace normal file backups or guarantee rollback of every edit made in the application. Project Work has its own validation and staging behavior; see [Project Workflows](./ProjectWorkflows.md).
+Project Work has its own validation and staging behavior; see [Project Workflows](./ProjectWorkflows.md).
 
 ## Import and convert files
 
@@ -102,7 +102,7 @@ Markdown Reader opens Markdown and plain text directly. The backend handles HTML
 | Audio | WAV, MP3 |
 | Other | Outlook MSG, Jupyter IPYNB |
 
-MarkItDown availability depends on the installed optional dependencies. PDF import offers a fast PyMuPDF mode and an advanced Docling mode for complex documents. Conversion can lose layout or information, particularly with scanned PDFs, complex tables, images, and Office documents. Inspect the resulting Markdown before using it as a source of truth.
+MarkItDown availability depends on the installed optional dependencies. Normal PDF opening uses PyMuPDF. Docling is available through a separate backend conversion endpoint, but the current frontend does not expose it as a selectable PDF-import mode. Conversion can lose layout or information, particularly with scanned PDFs, complex tables, images, and Office documents. Inspect the resulting Markdown before using it as a source of truth.
 
 The project currently requires Python 3.11 to 3.13; Python 3.14 is excluded because some optional MarkItDown dependencies do not yet provide compatible wheels.
 
@@ -146,7 +146,7 @@ For multi-file publication details, see [Project Workflows](./ProjectWorkflows.m
 
 ### The app does not start
 
-Check the Python and Node.js versions, install the prerequisites in the main [README](../README.MD), and make sure `frontend/.env.local` exists. Run the platform-appropriate development helper from the repository root.
+Check the Python and Node.js versions, install the prerequisites in the main [README](https://github.com/petertzy/markdown-reader/blob/main/README.MD), and make sure `frontend/.env.local` exists. Run the platform-appropriate development helper from the repository root.
 
 ### The backend port is already in use
 
@@ -173,4 +173,4 @@ Some conversions depend on optional third-party packages and on the structure of
 - [macOS setup](./PrepareForMacUser.md)
 - [Windows setup](./PrepareForWindowsUser.md)
 - [Code signing and distribution](./CodeSigningAndDistribution.md)
-- [Contributing guide](../CONTRIBUTING.md)
+- [Contributing guide](https://github.com/petertzy/markdown-reader/blob/main/CONTRIBUTING.md)

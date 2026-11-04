@@ -70,4 +70,4 @@ Publication HTML can be downloaded from browser-based development. Publication P
 - [User guide](./UserGuide.md)
 - [AI panel and Notes Context](./ProjectAIWorkflows.md)
 - [Technical documentation](./TECHNICAL.md)
-- [Contributing guide](../CONTRIBUTING.md)
+- [Contributing guide](https://github.com/petertzy/markdown-reader/blob/main/CONTRIBUTING.md)

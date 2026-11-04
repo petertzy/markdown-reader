@@ -1,7 +1,7 @@
 # Technical Documentation
 
 This file contains the advanced technical details for Markdown Reader. It is
-linked from the main [README](../README.MD), which is kept focused on the
+linked from the main [README](https://github.com/petertzy/markdown-reader/blob/main/README.MD), which is kept focused on the
 project's purpose, installation, configuration, and basic usage.
 
 ## Table of Contents

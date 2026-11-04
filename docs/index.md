@@ -4,12 +4,12 @@ Use this page to find the right guide. User-facing instructions describe workflo
 
 ## Start here
 
-- [Main README](../README.MD): project overview, desktop downloads, source setup, and links to detailed guides.
+- [Main README](https://github.com/petertzy/markdown-reader/blob/main/README.MD): project overview, desktop downloads, source setup, and links to detailed guides.
 - [User Guide](./UserGuide.md): editor modes, file handling, AI assistance, importing, citations, and export.
 - [AI Panel and Notes Context](./ProjectAIWorkflows.md): Chat, active-document Work, project Work, local note indexing, and provider/data handling.
 - [Project Workflows](./ProjectWorkflows.md): project translation, multi-file AI changes, and publication drafts.
 - [Keyboard Shortcuts](./KeyboardShortcuts.md): default application and editor shortcuts.
-- [Contributing Guide](../CONTRIBUTING.md): prerequisites, development setup, validation, and contribution workflow.
+- [Contributing Guide](https://github.com/petertzy/markdown-reader/blob/main/CONTRIBUTING.md): prerequisites, development setup, validation, and contribution workflow.
 
 ## User and platform guides
 
