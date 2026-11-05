@@ -1,13 +1,20 @@
 site_name: Markdown Reader Docs
+
 theme:
-  name: material  
+  name: material
 
 nav:
-  - Home: index.md        
+  - Home: index.md
+  - User Guide: UserGuide.md
+  - AI Panel and Notes Context: ProjectAIWorkflows.md
+  - Project Workflows: ProjectWorkflows.md
+  - Keyboard Shortcuts: KeyboardShortcuts.md
+  - Technical Documentation: TECHNICAL.md
   - Project Roles and Responsibilities: ProjectRoles.md
   - Math Rendering Test File: MathRenderingTestFile.md
-  - Prepare For Mac User: PrepareForMacUser.md
-  - Prepare For Windows User: PrepareForWindowsUser.md
-  - AI Work Panel Feasibility Study: AIWorkPanelFeasibilityStudy.md
-  - Code Signing & Distribution: CodeSigningAndDistribution.md
+  - Prepare for macOS: PrepareForMacUser.md
+  - Prepare for Windows: PrepareForWindowsUser.md
+  - Code Signing and Distribution: CodeSigningAndDistribution.md
   - Hosting Strategy: HostingStrategy.md
+  - AI Work Panel Feasibility Study: AIWorkPanelFeasibilityStudy.md
+  - Project Extensions Feasibility Study: ProjectExtensionsFeasibilityStudy.md

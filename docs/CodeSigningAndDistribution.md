@@ -2,7 +2,7 @@
 
 > Addresses: [Issue #326](https://github.com/petertzy/markdown-reader/issues/326)
 
-Packaged desktop apps that are unsigned trigger operating-system trust warnings —
+Packaged desktop apps without an appropriate platform signature can trigger operating-system trust warnings —
 macOS Gatekeeper ("unidentified developer" / "damaged") and Windows Defender
 SmartScreen. For non-technical users these warnings often mean abandoning the
 install. This document surveys the practical options, costs, and free/open-source
@@ -20,9 +20,21 @@ routes, with an emphasis on what works well in an automated GitHub Actions relea
 Gatekeeper warning; the user still has to allow it once in **System Settings →
 Privacy & Security**.
 
-**Recommendation:** adopt **SignPath Foundation** (free for open source) for Windows,
-ship **ad-hoc signed** macOS with clear first-run instructions (or pay the $99 for a
-frictionless experience), and publish **checksums + a GPG-signed** Linux release.
+**Research recommendation (not current release configuration):** consider a Windows signing provider, use the optional macOS signing/notarization path when the required credentials are provisioned, and add a GPG signature for the existing Linux checksum files.
+
+## Current repository release status
+
+The statements below were checked against `.github/workflows/release.yml` and `frontend/src-tauri/tauri.conf.json` on **2026-11-04**. They describe repository configuration, not whether a particular release run has valid secrets or completed notarization.
+
+| Area | Current configuration |
+| --- | --- |
+| Release build matrix | macOS Apple Silicon, Windows x64, and Linux x86_64 |
+| macOS | The workflow contains a conditional Apple certificate import and Developer ID identity-resolution step. It runs only when `APPLE_CERTIFICATE` is configured. Apple notarization credentials are passed to the Tauri release action when configured. Verify an individual release run and artifact before calling a build Developer ID signed or notarized. |
+| Windows | No Windows signing command or Azure Artifact Signing step is currently configured in the release workflow. |
+| Linux | The workflow builds Linux x86_64 bundles and generates/uploads a per-target SHA-256 checksum file. No GPG-signed manifest is currently generated. |
+| Tauri bundle settings | The Tauri config includes macOS entitlements. A Windows `bundle.windows.signCommand` is not configured. |
+
+The release workflow and its secrets can change independently of this research document. Check the current workflow and the specific release run before describing an artifact as signed, notarized, or verified.
 
 ## macOS
 
@@ -34,12 +46,7 @@ macOS is the one platform where a paid membership is effectively required for a
   bundle for **notarization**.
 - The **free** Apple Developer plan can only be used for local testing/development
   and **cannot notarize**.
-- **Ad-hoc signing** is *required* for apps to launch at all on Apple Silicon when
-  downloaded from the internet, but it does **not** clear the Gatekeeper prompt.
-  Tauri already ad-hoc signs by default when no `bundle.macOS.signingIdentity` is
-  set, and this repo's `tauri.conf.json` has no `macOS` block at all — so current
-  builds are already ad-hoc signed. Setting `"signingIdentity": "-"` explicitly
-  documents the intent but changes nothing functionally.
+- **Ad-hoc signing** is commonly used when no Developer ID signing identity is supplied. It does not remove Gatekeeper warnings. The repository's Tauri configuration includes a macOS entitlements file but does not pin a Developer ID identity. The release workflow has an optional certificate-import and identity-resolution path; see the current repository status below.
 - There is no reputable free notarization path.
 
 ## Windows
@@ -84,11 +91,8 @@ reputation still has to accrue over time.
 
 No platform-wide certificate requirement; trust depends on the distribution method.
 
-- Currently `"targets": "all"` in `tauri.conf.json` produces **deb**, **rpm**, and
-  **AppImage** on Linux. The repo also ships an AUR `PKGBUILD`. There is no Flatpak
-  or Snap manifest today; adding one would be new work.
-- Publish **SHA-256 checksums** and a **GPG-signed** release manifest. The release
-  workflow currently does neither.
+- The Tauri configuration targets all supported bundle formats. The release workflow currently builds Linux x86_64 artifacts. The repository also ships an AUR `PKGBUILD`; it does not currently include Flatpak or Snap manifests.
+- The release workflow generates and uploads a per-target **SHA-256 checksum file**. It does not currently create a GPG-signed release manifest.
 - This is free and is the community-standard baseline.
 
 ## Free / open-source options
@@ -111,14 +115,10 @@ Other zero-cost routes:
 
 ## Recommended next steps
 
-1. **Windows:** apply to **[SignPath Foundation](https://signpath.org/)** (free,
-   OSS-eligible, application-based) and wire it into the release workflow.
-2. **macOS:** decide between paying **$99/year** for a clean, notarized install, or
-   shipping **ad-hoc signed** with clear first-run guidance
-   (see `docs/PrepareForMacUser.md`).
-3. **Linux:** add **SHA-256 checksums + a GPG-signed** manifest to the release.
-4. Add an **opt-in signing step** to `.github/workflows/release.yml` (currently it
-   builds all three platforms with **no signing configured**).
+1. **Windows:** evaluate a signing provider such as [SignPath Foundation](https://signpath.org/) and implement it only after eligibility, secrets, and CI configuration are confirmed.
+2. **macOS:** keep the optional certificate/notarization path aligned with the secrets configured for the release workflow, and verify the output of each release run.
+3. **Linux:** consider adding a GPG signature for the existing SHA-256 checksum artifacts.
+4. Re-check this document whenever `.github/workflows/release.yml` or `frontend/src-tauri/tauri.conf.json` changes.
 
 ### Budget options compared
 
@@ -137,16 +137,10 @@ Other zero-cost routes:
 > the [Artifact Signing FAQ](https://learn.microsoft.com/azure/artifact-signing/faq);
 > certificate and SmartScreen comparisons come from
 > [Code signing options for Windows app developers](https://learn.microsoft.com/windows/apps/package-and-deploy/code-signing-options).
-> All figures are USD and were verified on **2026-10-03** — re-check before quoting
+> All figures are USD and were checked on **2026-10-03** — re-check before quoting
 > them in a funding request, since vendor pricing changes without notice.
 
-> **Publishing note:** this file is registered in `mkdocs.yml`, but **no workflow
-> currently builds or deploys the docs site** — `mkdocs` appears only in the optional
-> `docs` dependency group in `pyproject.toml`. Until a docs-deploy workflow exists,
-> this document is only reachable from the repository itself. See also
-> `docs/HostingStrategy.md` for the download-channel plan, and the user-facing
-> install note in `distribution/index.html`, which already tells macOS users how to
-> work around the Gatekeeper prompt while builds remain unnotarized.
+**Documentation publishing note:** the current GitHub Pages workflow deploys the `distribution/` directory, not an MkDocs documentation site. This Markdown reference remains available in the repository; do not infer that a separate documentation website is being built or deployed.
 
 ## Appendix: Tauri signing environment variables
 
@@ -251,15 +245,9 @@ Example opt-in macOS step (only runs when the secret is present):
     APPLE_SIGNING_IDENTITY: ${{ steps.cert.outputs.cert_id }}
 ```
 
-> `APPLE_SIGNING_IDENTITY` must be the certificate's SHA-1 fingerprint, not a
-> friendly name. The "Resolve signing identity" step reads it out of the keychain and
-> exports it as a step output — without that step the identity resolves to an empty
-> string and the build fails at signing time. `KEYCHAIN_PASSWORD` must also be
-> provided as a secret; it is used to create and unlock the temporary keychain.
+> The repository's release workflow resolves the installed **Developer ID Application** identity from the temporary keychain and passes that value to the Tauri release action. Keep the identity-resolution step and the Tauri action's expected identity format aligned when changing this workflow. `KEYCHAIN_PASSWORD` is used to create and unlock the temporary keychain.
 >
 > Notarization additionally requires `APPLE_API_ISSUER` / `APPLE_API_KEY` /
 > `APPLE_API_KEY_PATH` (or the Apple ID trio) to be passed to `tauri-action`.
 
-> Note: this appendix documents the wiring only. Enabling it requires repository
-> secrets and (for macOS) a paid Apple Developer account; the release workflow is
-> intentionally left unsigned until those are provisioned.
+> The Windows Azure Artifact Signing configuration above is an implementation option, not a currently configured signing step. The current release workflow does not define a Windows `bundle.windows.signCommand`. The optional macOS certificate import and identity-resolution steps are present; the signing/notarization outcome depends on the required repository secrets and Apple credentials.

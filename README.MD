@@ -1,137 +1,103 @@
 <div align="center">
   <h1>Markdown Reader</h1>
-  <p><b>The open-source, local-first Markdown editor with native AI capabilities.</b></p>
-  
+  <p><b>A local-first Markdown editor with live preview and AI-assisted writing tools.</b></p>
+
   [![macOS Apple Silicon](https://img.shields.io/badge/macOS-Apple_Silicon-black?logo=apple)](#desktop-downloads)
   [![Windows x64](https://img.shields.io/badge/Windows-x64-blue?logo=windows)](#desktop-downloads)
   [![Linux x64](https://img.shields.io/badge/Linux-x64-yellow?logo=linux)](#desktop-downloads)
-  
-  <br />
-  <img width="1177" height="646" alt="Image" src="docs/markdown-reader.webp" />
+
+  <img width="1177" height="646" alt="Markdown Reader application screenshot" src="docs/markdown-reader.webp" />
 </div>
 
----
+Markdown Reader is a desktop Markdown editor and reader built with a Next.js frontend, a local FastAPI backend, and Tauri. It combines tabbed editing, live preview, a rich-text Focus Mode, optional AI assistance, project-wide tools, document conversion, citations, and publication export.
 
-## Table of Contents
+Files are managed locally by the app. Document or note content is sent to an external AI provider only when you use an AI feature that includes that content in its request. See the [AI panel and Notes Context guide](./docs/ProjectAIWorkflows.md) for details.
 
-- [Why Markdown Reader?](#-why-markdown-reader)
-  - [Key Features](#key-features)
-- [Quick Start](#-quick-start)
-- [Desktop Downloads](#-desktop-downloads)
-- [Slash Commands](#-slash-commands)
-- [Local Model Support](#-local-model-support)
-- [Universal File Import](#-universal-file-import)
-- [Academic Citations](#-academic-citations)
-- [Architecture](#-architecture)
-- [Technical Documentation](#-technical-documentation)
-- [Contributing](#-contributing)
+## Features
 
----
+- **Editing and preview:** Edit Markdown in tabs with a rendered preview, document statistics, adjustable editor font size, and split-view controls.
+- **Focus Mode:** Switch to a distraction-reduced rich Markdown editor with CommonMark/GFM support, math, paste handling, and an editor slash-command menu.
+- **AI-assisted writing:** Chat about the active document, translate full documents or selections, use sentence-pair translation, summarize, format text, generate a table of contents, and clean up code blocks.
+- **Reviewable AI changes:** Inspect chat suggestions before applying them; project-level changes are presented as diffs for review before they are staged in editor tabs.
+- **Project workflows:** Translate Markdown files into a separate output tree, retry failed files, prepare multi-file AI changes, and assemble selected open documents into a publication draft.
+- **Notes Context:** Index a local Markdown/text notes folder and retrieve relevant excerpts for AI chat using a local SQLite index.
+- **AI providers:** Configure OpenAI, Anthropic, OpenRouter, or OpenAI-compatible endpoints, including local servers such as Ollama and LM Studio.
+- **File conversion:** Open Markdown and text directly; convert supported HTML, PDF, DOCX, Office, spreadsheet, EPUB, XML, archive, image, audio, email, and notebook files when the relevant converter dependencies are available.
+- **Citations and publication:** Browse a BibTeX library, insert citation-key markers into Markdown, combine selected open documents in a chosen order, and export supported formats.
+- **Desktop integration:** Use native file and folder dialogs and packaged desktop releases through Tauri.
 
-## 🌟 Why Markdown Reader?
+Feature availability can depend on the selected provider, installed optional dependencies, and whether the app is running as a packaged desktop app or in development. Review AI-generated changes, translations, and converted documents before relying on them.
 
-Most modern writing apps force you to choose between **privacy** and **power**. Cloud-based AI editors train on your data, while local editors often lack intelligent features.
+## Desktop downloads
 
-**Markdown Reader bridges the gap.** It is a native desktop application built on Tauri, ensuring your files stay locally on your machine. But it also seamlessly integrates with **OpenAI, Anthropic, OpenRouter, and Local LLMs**, bringing powerful AI-assisted writing directly to your offline workflow.
+Official release builds and platform-specific installation notes are available from the [Markdown Reader downloads page](https://petertzy.github.io/markdown-reader/).
 
-### Key Features
+| Platform | Available release |
+| --- | --- |
+| macOS | Apple Silicon (aarch64-apple-darwin) |
+| Windows | x64 (x86_64-pc-windows-msvc) |
+| Linux | x64 (x86_64-unknown-linux-gnu) |
 
-- 🔒 **Local-First Architecture**: Your files never leave your machine unless you explicitly call an external AI API.
-- 🤖 **Bring-Your-Own-AI**: Configure OpenAI, Anthropic, OpenRouter, OpenAI-compatible providers, or local models.
-- ✍️ **Intelligent Editing**: AI-assisted translation, sentence-by-sentence comparison, summarization, formatting, and code-block cleanup.
-- ⚡ **Slash Commands**: Type `/` in the editor to trigger AI actions or insert a table inline, without opening the AI panel.
-- 🛡️ **Audit & Rollback**: Review all AI suggestions before applying them. Reject or rollback changes with a single click.
-- 🖥️ **Native Desktop Feel**: Built with Next.js and packaged with Tauri for blazing-fast performance.
-- 📊 **Document Statistics**: View word count, character count, heading count, and estimated reading time for the current document (based on 238 words per minute).
+macOS Intel is not currently included in the release matrix. See [Code signing and distribution](./docs/CodeSigningAndDistribution.md) for release and signing details.
 
----
+## Run from source
 
-## 🚀 Quick Start
+### Prerequisites
 
-Get the app running locally for development in under a minute:
+- Python 3.11 to 3.13
+- [uv](https://docs.astral.sh/uv/)
+- Node.js 20.9.0 or newer and npm
+- Rust and the Tauri prerequisites for desktop-shell development
+
+Python 3.14 is not currently supported because some optional MarkItDown dependencies do not yet provide compatible wheels.
+
+### macOS and Linux
 
 ```bash
-# Prerequisites: Python 3.11-3.13, Node.js 20.9.0+, and uv
 git clone https://github.com/petertzy/markdown-reader.git
 cd markdown-reader
-
-# Install dependencies
-uv sync
-cd frontend && npm install && cd ..
-
-# Configure frontend environment variables
 cp frontend/.env.local.example frontend/.env.local
-
-# Launch the Tauri desktop app
 ./scripts/dev-tauri.sh
 ```
 
-The development helper starts the FastAPI backend on `127.0.0.1:8000` when that
-port is available. If port `8000` is already occupied by another process, it
-automatically chooses a free local port and passes it to the Tauri shell. To
-request a specific backend port, run:
+The helper installs/synchronizes the Python and frontend dependencies, starts the local FastAPI backend, and launches the Tauri development shell. It uses port 8000 when available and tries nearby ports if necessary. To request a port explicitly:
 
 ```bash
 MARKDOWN_READER_BACKEND_PORT=8010 ./scripts/dev-tauri.sh
 ```
 
-> PDF export may need extra system libraries on macOS and Windows. See
-> [Technical Documentation](./docs/TECHNICAL.md#pdf-export-dependencies) for
-> those steps.
+### Windows
 
----
+From PowerShell, create the frontend environment file and launch the Windows helper:
 
-## 📦 Desktop Downloads
+```powershell
+git clone https://github.com/petertzy/markdown-reader.git
+cd markdown-reader
+Copy-Item frontend/.env.local.example frontend/.env.local
+.\scripts\dev-tauri.ps1
+```
 
-We provide official desktop release builds through GitHub Actions.
+The PowerShell and batch wrappers call Git Bash at `C:\Program Files\Git\bin\bash.exe`. Install Git for Windows at that location, or run `scripts/dev-tauri.sh` from Git Bash.
 
-| OS          | Architecture  | Download                                                          |
-| ----------- | ------------- | ----------------------------------------------------------------- |
-| **macOS**   | Apple Silicon | [Download .dmg](https://petertzy.github.io/markdown-reader/)      |
-| **Windows** | x64           | [Download .exe](https://petertzy.github.io/markdown-reader/)      |
-| **Linux**   | x64           | [Download .AppImage](https://petertzy.github.io/markdown-reader/) |
+When the backend uses port 8000, its API documentation is available at http://127.0.0.1:8000/docs. If another port is selected, use the port printed by the helper.
 
-_(Note: macOS Intel builds are currently unsupported due to advanced PDF dependency constraints)._
+PDF export may require native system libraries for WeasyPrint. See the [technical documentation](./docs/TECHNICAL.md#pdf-export-dependencies), [macOS setup](./docs/PrepareForMacUser.md), and [Windows setup](./docs/PrepareForWindowsUser.md).
 
----
+## Slash commands
 
-## ⚡ Slash Commands
+Type `/` at the start of a line or after whitespace in the main editor to open the command menu.
 
-Type `/` at the start of a line (or after whitespace) in the editor to open an inline command menu:
-
-| Command | Behavior |
+| Command | Action |
 | --- | --- |
-| `/summarize` | Summarizes the document via AI |
-| `/translate` | Opens the AI panel's Translate tab |
-| `/format` | Applies Markdown formatting via AI |
-| `/toc` | Generates a table of contents via AI |
-| `/fix-code` | Fixes code block fences via AI |
-| `/insert-table` | Inserts a Markdown table (no AI call) |
-| `/insert-toc` | Inserts a table of contents generated locally from the document headings (no AI call) |
+| `/summarize` | Summarize the document with AI |
+| `/translate` | Open the AI panel's Translate tab |
+| `/format` | Format text with AI |
+| `/toc` | Generate a table of contents with AI |
+| `/fix-code` | Clean up Markdown code fences with AI |
+| `/insert-table` | Insert a table without an AI request |
+| `/insert-toc` | Generate a table of contents locally from document headings |
 
-Use the arrow keys to navigate, Enter to run a command, or Escape to dismiss the menu.
-
----
-
-## 🧠 Local Model Support
-
-Markdown Reader can call locally hosted OpenAI-compatible model servers. In the AI settings panel, choose **Local Model**, select **LM Studio**, **Ollama**, or **Custom**, fetch available models, and save the model you want to use. Local endpoints do not require an API key unless your local server is configured to require one.
-
----
-
-## 📥 Universal File Import
-
-Markdown Reader can import Markdown/text files directly and convert HTML, PDF, DOCX, Office files, CSV, EPUB, XML, archives, images, audio, Outlook messages, and Jupyter notebooks to Markdown through the bundled MarkItDown converter. Python 3.14 is not currently supported because some MarkItDown optional dependencies do not publish Python 3.14 wheels yet.
-
----
-
-## 📚 Academic Citations
-
-Use the **Cite** panel to load a BibTeX `.bib` library, search by citation key, author, title, year, publication venue, or entry type, and insert citation references such as `[@doe2024]` at the current cursor position. In the desktop app, click **Select** to choose a `.bib` file with the native file picker. In browser development mode, the same button uploads the selected `.bib` file to the local backend and stores it as the active citation library.
-
-Markdown Reader preserves citation syntax during editing and export, including HTML, DOCX, and PDF output.
-
----
+Use the arrow keys to move through the menu, Enter to run a command, and Escape to dismiss it. Focus Mode has its own editor slash-command menu.
 
 ## 🏗️ Architecture
 
@@ -184,36 +150,22 @@ The explorer supports zooming, panning, node inspection, and exporting a selecte
 
 ---
 
-## 📖 Technical Documentation
+## Documentation
 
-For advanced and implementation details, see [Technical Documentation](./docs/TECHNICAL.md). It covers:
+- [User guide](./docs/UserGuide.md): editor modes, files and projects, AI settings, import, citations, and export.
+- [AI panel and Notes Context](./docs/ProjectAIWorkflows.md): Chat, document Work, provider settings, and local notes retrieval.
+- [Project workflows](./docs/ProjectWorkflows.md): project translation, reviewable project-wide AI changes, and publication drafts.
+- [Keyboard shortcuts](./docs/KeyboardShortcuts.md): default application and editor shortcuts.
+- [Documentation index](./docs/index.md): user guides, technical references, platform notes, and planning documents.
+- [Technical documentation](./docs/TECHNICAL.md): architecture, local backend security, PDF export dependencies, and local packaging.
+- [Code signing and distribution](./docs/CodeSigningAndDistribution.md): current release signing notes and distribution research.
+- [macOS setup](./docs/PrepareForMacUser.md) and [Windows setup](./docs/PrepareForWindowsUser.md): platform-specific PDF export dependencies.
+- [Contributing guide](./CONTRIBUTING.md): development setup, checks, and contribution workflow.
 
-- Architecture, including the FastAPI backend, Next.js/Tauri frontend, and the bundled Python sidecar
-- Local backend security and the Desktop Content Security Policy
-- PDF export dependencies for macOS and Windows
-- Building release artifacts locally
+## Contributing
 
-In short: Markdown Reader is split into a FastAPI backend and a Next.js frontend packaged with Tauri. When packaged for desktop use, the Python backend is bundled as a silent Tauri sidecar process, dynamically assigning ports at runtime to avoid conflicts.
+Contributions are welcome, including bug fixes, focused improvements, tests, and documentation updates. Start with the [contributing guide](./CONTRIBUTING.md), keep changes focused, and run the checks relevant to the files you changed.
 
----
+## License
 
-## 🤝 Contributing
-
-Contributions are highly welcome! Whether you're fixing a bug, suggesting a feature, or helping us write documentation, we'd love to have you.
-
-To get started:
-
-1. `git checkout -b your-feature-branch`
-2. Run linting: `uv run ruff check .`
-3. Run tests: `uv run python -m unittest discover -s tests`
-4. Open a Pull Request!
-
-After cloning, run `uv sync --extra dev` and `uv run pre-commit install` to set up linting hooks.
-
-See our full [Contribution Guidelines](CONTRIBUTING.md) for more details.
-
----
-
-<div align="center">
-  Released under the MIT License. See <a href="LICENSE.md">LICENSE.md</a> for details.
-</div>
+Released under the [MIT License](./LICENSE.md).

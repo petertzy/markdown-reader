@@ -1,45 +1,55 @@
-For Windows users, WeasyPrint requires native system libraries (Cairo, Pango) that are not available by default. The recommended way to install them is via **MSYS2**.
+# Windows PDF Export Dependencies
 
-#### 1. Install MSYS2
+Markdown Reader uses WeasyPrint for PDF export when its native libraries can be loaded. On Windows, install the runtime libraries through MSYS2 UCRT64 and point WeasyPrint at the UCRT64 DLL directory.
 
-Download and install MSYS2 from [https://www.msys2.org/](https://www.msys2.org/), then follow the first-time setup instructions on the site.
+## 1. Install MSYS2
 
-#### 2. Install the required libraries
+Download and install [MSYS2](https://www.msys2.org/). Complete its first-time update steps, then open the **MSYS2 UCRT64** terminal from the Start menu.
 
-Open the **MSYS2 UCRT64** terminal (search for "MSYS2 UCRT64" in the Start menu) and run:
+## 2. Install Pango
+
+In the MSYS2 UCRT64 terminal, run:
 
 ```bash
 pacman -S mingw-w64-ucrt-x86_64-pango
 ```
 
-#### 3. Add MSYS2 to your Windows PATH
+Accept the package installation prompts. This installs the Pango runtime and its required UCRT64 dependencies.
 
-Add the MSYS2 UCRT64 `bin` directory to your Windows `PATH` environment variable:
+## 3. Configure WeasyPrint DLL discovery
 
-```
+WeasyPrint uses the `WEASYPRINT_DLL_DIRECTORIES` environment variable to locate the MSYS2 runtime DLLs. The default MSYS2 UCRT64 path is:
+
+```text
 C:\msys64\ucrt64\bin
 ```
 
-To do this permanently:
-1. Open **System Properties** → **Advanced** → **Environment Variables**
-2. Under **System variables**, select `Path` and click **Edit**
-3. Click **New** and add `C:\msys64\ucrt64\bin`
-4. Click **OK** to save
+For the current PowerShell session, run:
 
-#### 4. Reactivate your virtual environment
-
-Open a new Command Prompt or PowerShell window (so the updated PATH takes effect), then reactivate your virtual environment:
-
-```cmd
-.\.venv\Scripts\activate
+```powershell
+$env:WEASYPRINT_DLL_DIRECTORIES = 'C:\msys64\ucrt64\bin'
 ```
 
-#### 5. Verify the installation
+To configure it persistently, open **System Properties → Advanced → Environment Variables**, add a user variable named `WEASYPRINT_DLL_DIRECTORIES`, and set its value to the UCRT64 `bin` directory. Open a new terminal after changing the variable.
 
-```cmd
-python -c "from weasyprint import HTML; print('OK')"
+This is a WeasyPrint DLL-search setting; adding the directory to the general Windows `PATH` is not the documented replacement for this variable.
+
+## 4. Verify the runtime
+
+From the repository root, after installing the Python dependencies, run:
+
+```powershell
+uv run python -m weasyprint --info
+uv run python -c "from weasyprint import HTML; print('WeasyPrint import OK')"
 ```
 
-If you see `OK`, WeasyPrint is working correctly and you can proceed with installing the remaining dependencies.
+If the import fails, confirm the MSYS2 installation path and the value of `WEASYPRINT_DLL_DIRECTORIES`. If MSYS2 was installed outside `C:\msys64`, use its actual UCRT64 `bin` directory.
 
-> **Note:** If MSYS2 was installed to a different directory (not `C:\msys64`), adjust the path in step 3 accordingly.
+## Notes
+
+For upstream installation and native-library troubleshooting details, see the [WeasyPrint first steps documentation](https://doc.courtbouillon.org/weasyprint/latest/first_steps.html).
+
+- PDF export uses WeasyPrint when available. The app can fall back to PyMuPDF, which may produce simpler layouts.
+- DOCX export is separate from the WeasyPrint PDF dependency.
+- For macOS setup, see [Prepare for macOS](./PrepareForMacUser.md).
+- For the PDF export architecture, see [Technical Documentation](./TECHNICAL.md#pdf-export-dependencies).
