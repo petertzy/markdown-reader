@@ -35,6 +35,9 @@ export type UseActionsOptions = {
   onOpenProject: () => void;
   onFileSaved: () => void;
   onShowPreview: () => void;
+  /** Whether clicking in the editor snaps the preview to that spot. */
+  snapOnClick?: boolean;
+  onToggleSnapOnClick?: () => void;
 };
 
 export function useActions({
@@ -49,6 +52,8 @@ export function useActions({
   onOpenProject,
   onFileSaved,
   onShowPreview,
+  snapOnClick = true,
+  onToggleSnapOnClick,
 }: UseActionsOptions) {
   const { handleOpenFile, handleExport } = fileIO;
   const {
@@ -125,6 +130,7 @@ export function useActions({
       "view.fullEditor": () => setSplit(100),
       "view.balancedSplit": () => setSplit(50),
       "view.fullPreview": () => setSplit(0),
+      "view.toggleSnapOnClick": () => onToggleSnapOnClick?.(),
     }),
     [
       applyHeading,
@@ -140,6 +146,7 @@ export function useActions({
       setSplit,
       onOpenProject,
       onShowPreview,
+      onToggleSnapOnClick,
       wrapSelection,
     ]
   );
@@ -199,6 +206,12 @@ export function useActions({
           { id: "view.fullEditor", label: "Full Width Editor", onSelect: actions["view.fullEditor"] },
           { id: "view.balancedSplit", label: "Balanced Split View", onSelect: actions["view.balancedSplit"] },
           { id: "view.fullPreview", label: "Full Width Preview", onSelect: actions["view.fullPreview"] },
+          "separator",
+          {
+            id: "view.toggleSnapOnClick",
+            label: `Snap Preview on Click: ${snapOnClick ? "On" : "Off"}`,
+            onSelect: actions["view.toggleSnapOnClick"],
+          },
         ],
       },
       {
@@ -214,7 +227,7 @@ export function useActions({
         })),
       },
     ],
-    [actions, backendDisabled, shortcuts]
+    [actions, backendDisabled, shortcuts, snapOnClick]
   );
 
   return {

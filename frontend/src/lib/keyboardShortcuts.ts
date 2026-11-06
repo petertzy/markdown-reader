@@ -28,7 +28,8 @@ export type ActionId =
   | "view.openBrowserPreview"
   | "view.fullEditor"
   | "view.balancedSplit"
-  | "view.fullPreview";
+  | "view.fullPreview"
+  | "view.toggleSnapOnClick";
 
 export type ShortcutBinding = {
   key: string;

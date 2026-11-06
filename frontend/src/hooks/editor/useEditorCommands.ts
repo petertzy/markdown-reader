@@ -28,6 +28,8 @@ export type UseEditorCommandsOptions = {
   onShowPreview: () => void;
   executeAIPrompt: (prompt: string, documentText: string) => Promise<string | null | undefined>;
   syncSelectedText: () => void;
+  snapOnClick?: boolean;
+  onToggleSnapOnClick?: () => void;
 };
 
 /**
@@ -49,6 +51,8 @@ export function useEditorCommands({
   onShowPreview,
   executeAIPrompt,
   syncSelectedText,
+  snapOnClick,
+  onToggleSnapOnClick,
 }: UseEditorCommandsOptions) {
   // 1. Markdown formatting logic (bold, italic, headings, tables, citations)
   const formatting = useEditorFormatting(monacoRef);
@@ -66,6 +70,8 @@ export function useEditorCommands({
     onOpenProject,
     onFileSaved,
     onShowPreview,
+    snapOnClick,
+    onToggleSnapOnClick,
   });
 
   // 3. Register keyboard shortcuts
