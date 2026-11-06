@@ -68,6 +68,16 @@ export default function HomePage() {
     setSplit(showAI ? 60 : 50);
   }, [activePanel, setShowAIPanel]);
 
+  const handleTabSelect = useCallback((id: string) => {
+    editor.setActiveTabId(id);
+    const tab = editor.tabs.find((item) => item.id === id);
+    if (tab) editor.refreshPreview(tab.content, tab.filePath ?? undefined);
+  }, [editor]);
+  const toggleFocusMode = useCallback(() => {
+    setFocusMode((enabled) => !enabled);
+    resetEditor();
+  }, [resetEditor]);
+
   const {
     formatting,
     menuGroups,
@@ -90,14 +100,11 @@ export default function HomePage() {
     onOpenProject: () => { void openProject(); },
     onFileSaved: () => setProjectRefreshToken((token) => token + 1),
     onShowPreview: () => selectPanel(PANELS.PREVIEW),
+    onToggleFocusMode: toggleFocusMode,
+    onSelectTab: handleTabSelect,
     executeAIPrompt,
     syncSelectedText,
   });
-  const handleTabSelect = useCallback((id: string) => {
-    editor.setActiveTabId(id);
-    const tab = editor.tabs.find((item) => item.id === id);
-    if (tab) editor.refreshPreview(tab.content, tab.filePath ?? undefined);
-  }, [editor]);
   const handlePublicationExport = useCallback(async (content: string, format: "html" | "pdf") => {
     const extension = format === "html" ? "html" : "pdf";
     const payload = {
@@ -139,7 +146,7 @@ export default function HomePage() {
         onOpenProject={() => { void openProject(); }}
         onExport={fileIO.handleExport} onOpenBrowserPreview={() => { void handleOpenBrowserPreview(); }}
         onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={selectPanel}
-        onToggleFocusMode={() => { setFocusMode((enabled) => !enabled); resetEditor(); }}
+        onToggleFocusMode={toggleFocusMode}
         darkMode={editor.darkMode} fontSize={editor.fontSize} onFontSizeChange={editor.setFontSize}
         showFocusPanel={focusMode}
         backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null}

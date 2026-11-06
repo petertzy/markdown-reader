@@ -14,8 +14,8 @@ import type {
 
 import { PANELS, type PanelId } from "@/types/panels";
 
-const MIN_FONT_SIZE = 8;
-const MAX_FONT_SIZE = 72;
+export const MIN_FONT_SIZE = 8;
+export const MAX_FONT_SIZE = 72;
 
 type Props = {
   onOpenFile: () => void;
