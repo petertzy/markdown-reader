@@ -15,6 +15,7 @@ import { resolveTabClose } from "@/lib/tabLifecycle.mjs";
 import { settleSavedTab } from "@/lib/save-settle.mjs";
 import { parentDirOf, resolvePreviewBaseDir } from "@/lib/preview-base-dir.mjs";
 import { createLatestRequestGuard } from "@/lib/latest-request.mjs";
+import { revertProjectWork, type ProjectWorkUndoEntry } from "@/lib/project-work-undo.mjs";
 
 export type Tab = {
   id: string;
@@ -391,6 +392,19 @@ export function useEditor() {
     if (activeChange) refreshPreview(activeChange.content, activeChange.file_path);
   }, [activeTab.filePath, refreshPreview]);
 
+  /** Revert an accepted Project Work result; returns the paths left untouched. */
+  const revertProjectChanges = useCallback((record: ProjectWorkUndoEntry[]) => {
+    const { tabs: reverted, skipped } = revertProjectWork(tabs, record);
+    const remaining = reverted.length ? reverted : [makeTab(nextTabId())];
+    const active = remaining.find((tab) => tab.id === activeTabId) ?? remaining[remaining.length - 1];
+    setTabs(remaining);
+    setActiveTabId(active.id);
+    if (active.id !== activeTabId || active.content !== activeTab.content) {
+      refreshPreview(active.content, active.previewBaseDir ?? active.filePath ?? undefined);
+    }
+    return skipped;
+  }, [tabs, activeTabId, activeTab.content, refreshPreview]);
+
   // ── recent files ───────────────────────────────────────────────────────────
   const loadRecentFiles = useCallback(async () => {
     const { entries } = await Files.getRecent();
@@ -435,6 +449,7 @@ export function useEditor() {
     closeTab,
     closeAllTabs,
     applyProjectChanges,
+    revertProjectChanges,
     loadRecentFiles,
     refreshPreview,
     exportAs,

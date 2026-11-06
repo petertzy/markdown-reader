@@ -3,7 +3,7 @@
 import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { editor as MonacoEditor } from "monaco-editor";
 import { AI } from "@/lib/api";
-import { applyWorkResultIfFresh } from "@/lib/work-result-guard.mjs";
+import { applyWorkResultIfFresh, isWorkResultFresh } from "@/lib/work-result-guard.mjs";
 import { applyWorkEdit } from "@/lib/apply-work-edit.mjs";
 
 type UseAIActionsOptions = {
@@ -21,6 +21,8 @@ export function useAIActions({
 }: UseAIActionsOptions) {
   const [selectedText, setSelectedText] = useState("");
   const [isWorking, setIsWorking] = useState(false);
+  // The last AI Work result applied here, so the Work panel can offer to undo it.
+  const [lastWork, setLastWork] = useState<{ documentId: string; before: string; after: string } | null>(null);
   const currentDocumentRef = useRef({ documentId, content: documentText });
 
   useLayoutEffect(() => {
@@ -121,7 +123,9 @@ export function useAIActions({
         // preserves the old behaviour when no editor/model is available.
         (content) => applyWorkEdit(editorRef.current, onDocumentChange, content)
       );
-      if (!applied) {
+      if (applied) {
+        setLastWork({ documentId, before: requestSnapshot.content, after: data.modified_content });
+      } else {
         alert(
           "The document changed while AI Work was running. No AI changes were applied. Run the task again on the current document."
         );
@@ -134,6 +138,21 @@ export function useAIActions({
     }
   }, [documentId, documentText, editorRef, onDocumentChange]);
 
+  const undoWork = useCallback(() => {
+    if (!lastWork) return;
+    const stillAIResult = isWorkResultFresh(
+      { documentId: lastWork.documentId, content: lastWork.after },
+      currentDocumentRef.current
+    );
+    if (!stillAIResult) {
+      alert("The document was edited after AI Work was applied. Use Undo (Cmd/Ctrl+Z) in the editor to step back through those edits.");
+      return;
+    }
+    // Restored as its own undoable edit, so editor Undo (Cmd/Ctrl+Z) can bring the AI result back.
+    applyWorkEdit(editorRef.current, onDocumentChange, lastWork.before);
+    setLastWork(null);
+  }, [editorRef, lastWork, onDocumentChange]);
+
   return {
     selectedText,
     syncSelectedText,
@@ -141,5 +160,7 @@ export function useAIActions({
     executePrompt,
     executeWork,
     isWorking,
+    undoWork,
+    canUndoWork: !isWorking && lastWork?.documentId === documentId,
   };
 }
