@@ -14,6 +14,7 @@ import {
   type ActionId,
   type ShortcutDefinition,
 } from "@/lib/keyboardShortcuts";
+import { groupShortcuts } from "@/lib/shortcut-groups.mjs";
 
 type EditorController = ReturnType<typeof useEditor>;
 type FileIOController = ReturnType<typeof useFileIO>;
@@ -207,10 +208,15 @@ export function useActions({
       },
       {
         label: "Shortcuts",
-        items: shortcuts.map((shortcut) => ({
-          id: shortcut.id,
-          label: shortcut.label,
-          onSelect: actions[shortcut.id],
+        items: [],
+        // Shown as a compact panel with one column per category.
+        columns: groupShortcuts(shortcuts).map((column) => ({
+          heading: column.heading,
+          items: column.items.map((shortcut) => ({
+            id: shortcut.id,
+            label: shortcut.label,
+            onSelect: actions[shortcut.id],
+          })),
         })),
       },
     ],

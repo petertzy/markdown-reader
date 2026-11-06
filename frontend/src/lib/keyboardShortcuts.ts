@@ -199,9 +199,17 @@ export function formatShortcut(binding?: ShortcutBinding) {
   if (binding.ctrl) parts.push("Ctrl");
   if (binding.alt) parts.push(isMac ? "Option" : "Alt");
   if (binding.shift) parts.push("Shift");
-  parts.push(binding.key.length === 1 ? binding.key.toUpperCase() : binding.key);
+  parts.push(binding.key.length === 1 ? binding.key.toUpperCase() : KEY_SYMBOLS[binding.key] ?? binding.key);
   return parts.join("+");
 }
+
+// Shorter names for keys shown in menus and tooltips.
+const KEY_SYMBOLS: Record<string, string> = {
+  ArrowLeft: "←",
+  ArrowRight: "→",
+  ArrowUp: "↑",
+  ArrowDown: "↓",
+};
 
 export function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;

@@ -22,6 +22,8 @@ export type MenuCommand = {
 export type MenuGroup = {
   label: string;
   items: Array<MenuCommand | "separator">;
+  /** When set, the menu opens as a wide panel with these columns instead of a list. */
+  columns?: Array<{ heading: string; items: MenuCommand[] }>;
 };
 
 type Props = {
@@ -41,6 +43,27 @@ export default function MenuBar({ groups, shortcuts }: Props) {
   const keepEditorFocusedOnPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
   };
+
+  const renderCommand = (item: MenuCommand, compact = false) => (
+    <button
+      key={item.id}
+      type="button"
+      className={`flex w-full items-center justify-between ${compact ? "gap-4 px-2 py-1 rounded" : "gap-6 px-3 py-1.5"} text-left text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-gray-700 dark:text-gray-200 dark:hover:bg-blue-950/40 dark:hover:text-blue-200 dark:disabled:hover:bg-transparent dark:disabled:hover:text-gray-200`}
+      onClick={() => {
+        item.onSelect();
+        setOpenMenu(null);
+      }}
+      onPointerDown={keepEditorFocusedOnPointerDown}
+      onMouseDown={keepEditorFocused}
+      disabled={item.disabled}
+      role="menuitem"
+    >
+      <span className="truncate">{item.label}</span>
+      <span className="shrink-0 whitespace-nowrap text-xs text-gray-400 dark:text-gray-500">
+        {shortcutLabelById.get(item.id) ?? ""}
+      </span>
+    </button>
+  );
 
   useEffect(() => {
     const closeOnOutsidePointerDown = (event: PointerEvent) => {
@@ -95,7 +118,24 @@ export default function MenuBar({ groups, shortcuts }: Props) {
           >
             {group.label}
           </button>
-          {openMenu === group.label && (
+          {openMenu === group.label && group.columns && (
+            <div
+              className="fixed left-2 top-8 z-50 mt-0.5 grid max-h-[calc(100vh-3rem)] gap-x-4 gap-y-3 overflow-y-auto rounded-md border border-gray-200 bg-white p-3 text-[13px] shadow-lg dark:border-gray-700 dark:bg-[#252526]"
+              role="menu"
+              aria-label={group.label}
+              style={{ width: "min(60rem, calc(100vw - 1rem))", gridTemplateColumns: "repeat(auto-fit, minmax(12.5rem, 1fr))" }}
+            >
+              {group.columns.map((column) => (
+                <div key={column.heading} role="group" aria-label={column.heading}>
+                  <div className="mb-1 px-2 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                    {column.heading}
+                  </div>
+                  {column.items.map((item) => renderCommand(item, true))}
+                </div>
+              ))}
+            </div>
+          )}
+          {openMenu === group.label && !group.columns && (
             <div
               className="absolute left-0 top-full z-50 mt-0.5 max-h-[calc(100vh-3rem)] min-w-[220px] overflow-y-auto overflow-x-hidden rounded-md border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-[#252526]"
               role="menu"
@@ -110,26 +150,7 @@ export default function MenuBar({ groups, shortcuts }: Props) {
                   );
                 }
 
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="flex w-full items-center justify-between gap-6 px-3 py-1.5 text-left text-gray-700 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-gray-700 dark:text-gray-200 dark:hover:bg-blue-950/40 dark:hover:text-blue-200 dark:disabled:hover:bg-transparent dark:disabled:hover:text-gray-200"
-                    onClick={() => {
-                      item.onSelect();
-                      setOpenMenu(null);
-                    }}
-                    onPointerDown={keepEditorFocusedOnPointerDown}
-                    onMouseDown={keepEditorFocused}
-                    disabled={item.disabled}
-                    role="menuitem"
-                  >
-                    <span>{item.label}</span>
-                    <span className="text-xs text-gray-400 dark:text-gray-500">
-                      {shortcutLabelById.get(item.id) ?? ""}
-                    </span>
-                  </button>
-                );
+                return renderCommand(item);
               })}
             </div>
           )}
