@@ -143,7 +143,7 @@ export default function HomePage() {
         darkMode={editor.darkMode} fontSize={editor.fontSize} onFontSizeChange={editor.setFontSize}
         showFocusPanel={focusMode}
         backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null}
-        lastExportedPath={fileIO.lastExportedPath} onShowInFinder={fileIO.showInFinder} />
+        lastExportedPath={fileIO.lastExportedPath} onShowInFinder={fileIO.showInFinder} shortcuts={shortcuts} />
       <TabBar tabs={editor.tabs} activeTabId={editor.activeTabId} onSelect={handleTabSelect} onClose={editor.closeTab} onNew={editor.newTab} />
       <div className="flex flex-1 overflow-hidden">
         {!focusMode && (

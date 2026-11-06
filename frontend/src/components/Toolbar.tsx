@@ -4,6 +4,9 @@
  * Toolbar.tsx
  * ===========
  * Top action bar: file open/save, export, view toggles, settings.
+ *
+ * Buttons whose icon says enough are icon-only, with a tooltip and an
+ * accessible label. Export formats and font controls keep their text.
  */
 
 import { useEffect, useState } from "react";
@@ -13,6 +16,12 @@ import type {
 } from "react";
 
 import { PANELS, type PanelId } from "@/types/panels";
+import {
+  DEFAULT_SHORTCUTS,
+  formatShortcut,
+  type ActionId,
+  type ShortcutDefinition,
+} from "@/lib/keyboardShortcuts";
 
 const MIN_FONT_SIZE = 8;
 const MAX_FONT_SIZE = 72;
@@ -35,7 +44,15 @@ type Props = {
   backendMessage?: string | null;
   lastExportedPath?: string | null;
   onShowInFinder?: () => void;
+  /** Current shortcuts, so tooltips show the user's own key bindings. */
+  shortcuts?: ShortcutDefinition[];
 };
+
+const EXPORT_ACTIONS = {
+  html: "file.exportHtml",
+  pdf: "file.exportPdf",
+  docx: "file.exportDocx",
+} as const satisfies Record<string, ActionId>;
 
 export default function Toolbar({
   onOpenFile,
@@ -55,6 +72,7 @@ export default function Toolbar({
   backendStatus = "ready",
   backendMessage = null,
   lastExportedPath = null,
+  shortcuts = DEFAULT_SHORTCUTS,
 }: Props) {
   const backendBusy = backendStatus === "starting";
   const backendFailed = backendStatus === "error";
@@ -86,51 +104,66 @@ export default function Toolbar({
   const keepEditorFocusedOnPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
   };
+  const focusProps = { onPointerDown: keepEditorFocusedOnPointerDown, onMouseDown: keepEditorFocused };
+
+  // "Save (Ctrl+S)", or just "Save" when the action has no shortcut.
+  const tip = (label: string, id?: ActionId) => {
+    const keys = id ? formatShortcut(shortcuts.find((s) => s.id === id)?.bindings[0]) : "";
+    return keys ? `${label} (${keys})` : label;
+  };
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-[#252526] border-b border-gray-200 dark:border-gray-700 shrink-0 text-sm">
+    <div className="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-[#252526] border-b border-gray-200 dark:border-gray-700 shrink-0 text-sm">
       {/* File ops */}
-      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onOpenFile} className={buttonClass(backendDisabled)} title="Open file" disabled={backendDisabled}>
-        📂 Open
-      </button>
-      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onOpenProject} className={buttonClass(backendDisabled)} title="Open project folder" disabled={backendDisabled}>
-        📁 Project
-      </button>
-      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onSaveFile} className={buttonClass(backendDisabled)} title="Save (Ctrl+S)" disabled={backendDisabled}>
-        💾 Save
-      </button>
+      <IconButton {...focusProps} icon="📂" label="Open file" title={tip("Open file", "file.open")} onClick={onOpenFile} disabled={backendDisabled} />
+      <IconButton {...focusProps} icon="📁" label="Open project folder" title={tip("Open project folder", "file.openFolder")} onClick={onOpenProject} disabled={backendDisabled} />
+      <IconButton {...focusProps} icon="💾" label="Save" title={tip("Save", "file.save")} onClick={onSaveFile} disabled={backendDisabled} />
       {lastExportedPath && (
-        <button onClick={onShowInFinder} title="Show in Finder">
-          📁 Show in Finder
+        <button type="button" onClick={onShowInFinder} className={btnCls} title={`Show ${lastExportedPath}`}>
+          Show in Finder
         </button>
       )}
 
-      <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+      <Divider />
 
-      {/* Export */}
-      <span className="text-gray-400 text-xs">Export:</span>
+      {/* Export: format names stay as text so they can be told apart. */}
+      <span className="text-gray-400 text-xs mr-0.5">Export:</span>
       {(["html", "pdf", "docx"] as const).map((fmt) => (
-        <button key={fmt} onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onExport(fmt)} className={buttonClass(backendDisabled)} disabled={backendDisabled}>
+        <button
+          key={fmt}
+          type="button"
+          {...focusProps}
+          onClick={() => onExport(fmt)}
+          className={buttonClass(backendDisabled)}
+          title={tip(`Export to ${fmt.toUpperCase()}`, EXPORT_ACTIONS[fmt])}
+          disabled={backendDisabled}
+        >
           {fmt.toUpperCase()}
         </button>
       ))}
-
-      <button
-        onPointerDown={keepEditorFocusedOnPointerDown}
-        onMouseDown={keepEditorFocused}
+      <IconButton
+        {...focusProps}
+        icon="🌐"
+        label="Open rendered preview in browser"
+        title={tip("Open rendered preview in browser", "view.openBrowserPreview")}
         onClick={onOpenBrowserPreview}
-        className={buttonClass(backendDisabled)}
-        title="Open rendered preview in browser"
         disabled={backendDisabled}
-      >
-        🌐 Browser
-      </button>
+      />
 
-      <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+      <Divider />
 
       {/* Font size */}
-      <span className="text-gray-500 dark:text-gray-400 text-xs">Font:</span>
-      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onFontSizeChange(Math.max(MIN_FONT_SIZE, fontSize - 1))} className={btnCls}>A-</button>
+      <span className="text-gray-500 dark:text-gray-400 text-xs mr-0.5">Font:</span>
+      <button
+        type="button"
+        {...focusProps}
+        onClick={() => onFontSizeChange(Math.max(MIN_FONT_SIZE, fontSize - 1))}
+        className={btnCls}
+        title="Decrease font size"
+        aria-label="Decrease font size"
+      >
+        A-
+      </button>
 
       <input
         type="number"
@@ -164,7 +197,16 @@ export default function Toolbar({
         className="w-12 text-center text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#252526] text-gray-700 dark:text-gray-300"
       />
 
-      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onFontSizeChange(Math.min(MAX_FONT_SIZE, fontSize + 1))} className={btnCls}>A+</button>
+      <button
+        type="button"
+        {...focusProps}
+        onClick={() => onFontSizeChange(Math.min(MAX_FONT_SIZE, fontSize + 1))}
+        className={btnCls}
+        title="Increase font size"
+        aria-label="Increase font size"
+      >
+        A+
+      </button>
 
       <div className="flex-1" />
 
@@ -180,60 +222,74 @@ export default function Toolbar({
       )}
 
       {/* Toggles */}
-      <button
-        onClick={onToggleFocusMode}
-        className={`${btnCls} ${showFocusPanel ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
-        title="Focus Mode"
-      >
-        🧠 Focus
-      </button>
-      <button
-        onPointerDown={keepEditorFocusedOnPointerDown}
-        onMouseDown={keepEditorFocused}
-        onClick={() => onTogglePanel(PANELS.PREVIEW)}
-        className={`${btnCls} ${activePanel === PANELS.PREVIEW ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
-        title="Preview"
-      >
-        👁 Preview
-      </button>
-      <button
-        onPointerDown={keepEditorFocusedOnPointerDown}
-        onMouseDown={keepEditorFocused}
+      <IconButton icon="🧠" label="Focus Mode" onClick={onToggleFocusMode} pressed={showFocusPanel} />
+      <IconButton {...focusProps} icon="👁" label="Preview" onClick={() => onTogglePanel(PANELS.PREVIEW)} pressed={activePanel === PANELS.PREVIEW} />
+      <IconButton
+        {...focusProps}
+        icon="🤖"
+        label="AI Assistant"
+        title={tip("AI Assistant", "view.toggleAIPanel")}
         onClick={() => onTogglePanel(PANELS.AI)}
-        className={`${btnCls} ${activePanel === PANELS.AI ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
-        title="AI Assistant"
-      >
-        🤖 AI
-      </button>
-      <button
-        onPointerDown={keepEditorFocusedOnPointerDown}
-        onMouseDown={keepEditorFocused}
-        onClick={() => onTogglePanel(PANELS.CITATION)}
-        className={`${btnCls} ${activePanel === PANELS.CITATION ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
-        title="Citations"
-      >
-        📚 Cite
-      </button>
-      <button
-        onClick={() => onTogglePanel(PANELS.PUBLICATION)}
-        title="Publication"
-        aria-pressed={activePanel === PANELS.PUBLICATION}
-        className={`rounded p-1.5 ${activePanel === PANELS.PUBLICATION ? "bg-blue-100 text-blue-700" : "text-gray-600 hover:bg-gray-100"} dark:${activePanel === PANELS.PUBLICATION ? "bg-[#333] text-blue-400" : "text-gray-300 dark:hover:bg-[#333]"}`}
-      >
-        📝Publication
-      </button>
-      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onToggleDark} className={btnCls} title="Toggle dark mode">
-        {darkMode ? "☀️" : "🌙"}
-      </button>
+        pressed={activePanel === PANELS.AI}
+      />
+      <IconButton {...focusProps} icon="📚" label="Citations" onClick={() => onTogglePanel(PANELS.CITATION)} pressed={activePanel === PANELS.CITATION} />
+      <IconButton icon="📝" label="Publication" onClick={() => onTogglePanel(PANELS.PUBLICATION)} pressed={activePanel === PANELS.PUBLICATION} />
+      <IconButton
+        {...focusProps}
+        icon={darkMode ? "☀️" : "🌙"}
+        label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+        title={tip(darkMode ? "Switch to light mode" : "Switch to dark mode", "view.toggleDarkMode")}
+        onClick={onToggleDark}
+      />
     </div>
   );
+}
+
+type IconButtonProps = {
+  icon: string;
+  /** Read by screen readers, and the tooltip unless `title` is given. */
+  label: string;
+  title?: string;
+  onClick: () => void;
+  disabled?: boolean;
+  /** For toggles: whether the panel or mode is on. Leave out for plain actions. */
+  pressed?: boolean;
+  onPointerDown?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onMouseDown?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+};
+
+function IconButton({ icon, label, title, onClick, disabled = false, pressed, onPointerDown, onMouseDown }: IconButtonProps) {
+  return (
+    <button
+      type="button"
+      onPointerDown={onPointerDown}
+      onMouseDown={onMouseDown}
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      aria-pressed={pressed}
+      title={title ?? label}
+      className={`${iconBtnCls} ${pressed ? activeCls : ""} ${disabled ? disabledCls : ""}`}
+    >
+      <span aria-hidden="true">{icon}</span>
+    </button>
+  );
+}
+
+function Divider() {
+  return <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1.5" />;
 }
 
 const btnCls =
   "px-2 py-0.5 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2d2d2d] transition-colors";
 
+const iconBtnCls =
+  "inline-flex items-center justify-center w-7 h-7 rounded text-base leading-none text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2d2d2d] transition-colors";
+
+const activeCls = "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300";
+
+const disabledCls = "opacity-40 cursor-not-allowed hover:bg-transparent dark:hover:bg-transparent";
+
 function buttonClass(disabled: boolean) {
-  return disabled
-    ? `${btnCls} opacity-40 cursor-not-allowed hover:bg-transparent dark:hover:bg-transparent`
-    : btnCls;
+  return disabled ? `${btnCls} ${disabledCls}` : btnCls;
 }
