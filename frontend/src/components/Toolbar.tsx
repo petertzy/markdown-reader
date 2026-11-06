@@ -13,6 +13,7 @@ import type {
 } from "react";
 
 import { PANELS, type PanelId } from "@/types/panels";
+import { DEFAULT_SHORTCUTS, formatShortcut } from "@/lib/keyboardShortcuts";
 
 const MIN_FONT_SIZE = 8;
 const MAX_FONT_SIZE = 72;
@@ -88,49 +89,33 @@ export default function Toolbar({
   };
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-[#252526] border-b border-gray-200 dark:border-gray-700 shrink-0 text-sm">
+    <div className="flex flex-wrap items-center gap-x-1 gap-y-1 px-2 py-1 bg-white dark:bg-[#252526] border-b border-gray-200 dark:border-gray-700 shrink-0 text-sm">
       {/* File ops */}
-      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onOpenFile} className={buttonClass(backendDisabled)} title="Open file" disabled={backendDisabled}>
-        📂 Open
-      </button>
-      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onOpenProject} className={buttonClass(backendDisabled)} title="Open project folder" disabled={backendDisabled}>
-        📁 Project
-      </button>
-      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onSaveFile} className={buttonClass(backendDisabled)} title="Save (Ctrl+S)" disabled={backendDisabled}>
-        💾 Save
-      </button>
+      <IconButton icon="📂" label="Open file" shortcutId="file.open" onClick={onOpenFile} disabled={backendDisabled} />
+      <IconButton icon="🗂️" label="Open project folder" shortcutId="file.openFolder" onClick={onOpenProject} disabled={backendDisabled} />
+      <IconButton icon="💾" label="Save" shortcutId="file.save" onClick={onSaveFile} disabled={backendDisabled} />
       {lastExportedPath && (
-        <button onClick={onShowInFinder} title="Show in Finder">
+        <button onClick={onShowInFinder} className={btnCls} title="Show the last export in Finder">
           📁 Show in Finder
         </button>
       )}
 
-      <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+      <Divider />
 
-      {/* Export */}
+      {/* Export: the format names are the information, so they stay as text. */}
       <span className="text-gray-400 text-xs">Export:</span>
       {(["html", "pdf", "docx"] as const).map((fmt) => (
-        <button key={fmt} onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onExport(fmt)} className={buttonClass(backendDisabled)} disabled={backendDisabled}>
+        <button key={fmt} onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onExport(fmt)} className={buttonClass(backendDisabled)} disabled={backendDisabled} title={withShortcut(`Export to ${fmt.toUpperCase()}`, `file.export${EXPORT_ACTION_SUFFIX[fmt]}`)}>
           {fmt.toUpperCase()}
         </button>
       ))}
+      <IconButton icon="🌐" label="Open rendered preview in browser" shortcutId="view.openBrowserPreview" onClick={onOpenBrowserPreview} disabled={backendDisabled} />
 
-      <button
-        onPointerDown={keepEditorFocusedOnPointerDown}
-        onMouseDown={keepEditorFocused}
-        onClick={onOpenBrowserPreview}
-        className={buttonClass(backendDisabled)}
-        title="Open rendered preview in browser"
-        disabled={backendDisabled}
-      >
-        🌐 Browser
-      </button>
-
-      <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />
+      <Divider />
 
       {/* Font size */}
       <span className="text-gray-500 dark:text-gray-400 text-xs">Font:</span>
-      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onFontSizeChange(Math.max(MIN_FONT_SIZE, fontSize - 1))} className={btnCls}>A-</button>
+      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onFontSizeChange(Math.max(MIN_FONT_SIZE, fontSize - 1))} className={btnCls} title="Decrease font size" aria-label="Decrease font size">A-</button>
 
       <input
         type="number"
@@ -164,7 +149,7 @@ export default function Toolbar({
         className="w-12 text-center text-xs rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-[#252526] text-gray-700 dark:text-gray-300"
       />
 
-      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onFontSizeChange(Math.min(MAX_FONT_SIZE, fontSize + 1))} className={btnCls}>A+</button>
+      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onFontSizeChange(Math.min(MAX_FONT_SIZE, fontSize + 1))} className={btnCls} title="Increase font size" aria-label="Increase font size">A+</button>
 
       <div className="flex-1" />
 
@@ -180,54 +165,58 @@ export default function Toolbar({
       )}
 
       {/* Toggles */}
-      <button
-        onClick={onToggleFocusMode}
-        className={`${btnCls} ${showFocusPanel ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
-        title="Focus Mode"
-      >
-        🧠 Focus
-      </button>
-      <button
-        onPointerDown={keepEditorFocusedOnPointerDown}
-        onMouseDown={keepEditorFocused}
-        onClick={() => onTogglePanel(PANELS.PREVIEW)}
-        className={`${btnCls} ${activePanel === PANELS.PREVIEW ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
-        title="Preview"
-      >
-        👁 Preview
-      </button>
-      <button
-        onPointerDown={keepEditorFocusedOnPointerDown}
-        onMouseDown={keepEditorFocused}
-        onClick={() => onTogglePanel(PANELS.AI)}
-        className={`${btnCls} ${activePanel === PANELS.AI ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
-        title="AI Assistant"
-      >
-        🤖 AI
-      </button>
-      <button
-        onPointerDown={keepEditorFocusedOnPointerDown}
-        onMouseDown={keepEditorFocused}
-        onClick={() => onTogglePanel(PANELS.CITATION)}
-        className={`${btnCls} ${activePanel === PANELS.CITATION ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300" : ""}`}
-        title="Citations"
-      >
-        📚 Cite
-      </button>
-      <button
-        onClick={() => onTogglePanel(PANELS.PUBLICATION)}
-        title="Publication"
-        aria-pressed={activePanel === PANELS.PUBLICATION}
-        className={`rounded p-1.5 ${activePanel === PANELS.PUBLICATION ? "bg-blue-100 text-blue-700" : "text-gray-600 hover:bg-gray-100"} dark:${activePanel === PANELS.PUBLICATION ? "bg-[#333] text-blue-400" : "text-gray-300 dark:hover:bg-[#333]"}`}
-      >
-        📝Publication
-      </button>
-      <button onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={onToggleDark} className={btnCls} title="Toggle dark mode">
-        {darkMode ? "☀️" : "🌙"}
-      </button>
+      <IconButton icon="🧠" label="Focus Mode" shortcutId="view.toggleFocusMode" onClick={onToggleFocusMode} pressed={showFocusPanel} />
+      <IconButton icon="👁" label="Preview" shortcutId="view.showPreview" onClick={() => onTogglePanel(PANELS.PREVIEW)} pressed={activePanel === PANELS.PREVIEW} />
+      <IconButton icon="🤖" label="AI Assistant" shortcutId="view.toggleAIPanel" onClick={() => onTogglePanel(PANELS.AI)} pressed={activePanel === PANELS.AI} />
+      <IconButton icon="📚" label="Citations" onClick={() => onTogglePanel(PANELS.CITATION)} pressed={activePanel === PANELS.CITATION} />
+      <IconButton icon="📝" label="Publication" onClick={() => onTogglePanel(PANELS.PUBLICATION)} pressed={activePanel === PANELS.PUBLICATION} />
+      <IconButton icon={darkMode ? "☀️" : "🌙"} label={darkMode ? "Switch to light mode" : "Switch to dark mode"} shortcutId="view.toggleDarkMode" onClick={onToggleDark} />
     </div>
   );
 }
+
+const EXPORT_ACTION_SUFFIX = { html: "Html", pdf: "Pdf", docx: "Docx" } as const;
+
+/** "Save (Cmd+S)": the label plus the shortcut bound to `shortcutId`, if any. */
+function withShortcut(label: string, shortcutId?: string) {
+  const binding = DEFAULT_SHORTCUTS.find((shortcut) => shortcut.id === shortcutId)?.bindings[0];
+  return binding ? `${label} (${formatShortcut(binding)})` : label;
+}
+
+type IconButtonProps = {
+  icon: string;
+  /** Tooltip and accessible name; the icon alone is shown. */
+  label: string;
+  shortcutId?: string;
+  onClick: () => void;
+  disabled?: boolean;
+  /** Set for toggles, so their on/off state is exposed and highlighted. */
+  pressed?: boolean;
+};
+
+function IconButton({ icon, label, shortcutId, onClick, disabled = false, pressed }: IconButtonProps) {
+  return (
+    <button
+      // Keep focus (and the selection) in the editor while clicking.
+      onPointerDown={(event) => event.preventDefault()}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onClick}
+      disabled={disabled}
+      title={withShortcut(label, shortcutId)}
+      aria-label={label}
+      aria-pressed={pressed}
+      className={`${buttonClass(disabled)} min-w-8 text-base leading-6 ${pressed ? activeCls : ""}`}
+    >
+      <span aria-hidden="true">{icon}</span>
+    </button>
+  );
+}
+
+function Divider() {
+  return <div className="w-px h-5 bg-gray-300 dark:bg-gray-600 mx-1" />;
+}
+
+const activeCls = "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300";
 
 const btnCls =
   "px-2 py-0.5 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#2d2d2d] transition-colors";

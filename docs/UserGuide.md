@@ -4,6 +4,7 @@ This guide describes user-facing workflows present in the current application. T
 
 ## Contents
 
+- [Toolbar](#toolbar)
 - [Open and edit documents](#open-and-edit-documents)
 - [Focus Mode](#focus-mode)
 - [Manage files and projects](#manage-files-and-projects)
@@ -17,23 +18,44 @@ This guide describes user-facing workflows present in the current application. T
 - [Export and publication](#export-and-publication)
 - [Troubleshooting](#troubleshooting)
 
+## Toolbar
+
+Most toolbar buttons show only an icon. Hover over a button to see its name and, when it has one, its keyboard shortcut; screen readers announce the same name. Export formats and font-size controls keep their text, because the text is the information.
+
+| Icon | Name | What it does |
+| --- | --- | --- |
+| 📂 | Open file | Opens a supported document in a new tab. |
+| 🗂️ | Open project folder | Opens a local folder in the Explorer. |
+| 💾 | Save | Saves the active tab. |
+| HTML / PDF / DOCX | Export | Exports the active document in that format. |
+| 🌐 | Open rendered preview in browser | Opens the rendered document in your web browser. |
+| A- / A+ and the number field | Font size | Changes the editor font size (8 to 72). |
+| 🧠 | Focus Mode | Switches between the main editor and Focus Mode. |
+| 👁 | Preview | Shows or hides the preview panel. |
+| 🤖 | AI Assistant | Shows or hides the AI panel. |
+| 📚 | Citations | Shows or hides the BibTeX citation panel. |
+| 📝 | Publication | Shows or hides the publication panel. |
+| 🌙 / ☀️ | Dark or light mode | Switches the color theme. |
+
+Toggle buttons are highlighted while their mode or panel is on. When the window is narrow, the toolbar wraps onto a second row instead of hiding buttons.
+
 ## Open and edit documents
 
-Markdown Reader provides a tabbed Markdown editor and rendered preview. Use **File → Open File** or the toolbar's **Open** button to select a supported document. Markdown, Markdown extensions, and plain-text files open directly. Supported non-Markdown formats are converted to Markdown when their converter is available.
+Markdown Reader provides a tabbed Markdown editor and rendered preview. Use **File → Open File** or the toolbar's **Open file** (📂) button to select a supported document. Markdown, Markdown extensions, and plain-text files open directly. Supported non-Markdown formats are converted to Markdown when their converter is available.
 
 The main editor uses Monaco in Markdown mode. It supports line numbers, word wrapping, code folding, and configurable font size. The toolbar's font-size field accepts whole-number values from 8 to 72. Tabs can represent files on disk or untitled documents. Unsaved changes are indicated in the status bar.
 
 ## Focus Mode
 
-Choose **Focus** in the toolbar to switch from the split Monaco-and-preview workspace to a distraction-reduced rich Markdown editor. Focus Mode uses Milkdown/Crepe with CommonMark, GitHub Flavored Markdown, math, history, and an editor slash-command menu. The Explorer and right-hand side panel are hidden while Focus Mode is active; the app toolbar and document tabs remain available.
+Choose **Focus Mode** (🧠) in the toolbar to switch from the split Monaco-and-preview workspace to a distraction-reduced rich Markdown editor. Focus Mode uses Milkdown/Crepe with CommonMark, GitHub Flavored Markdown, math, history, and an editor slash-command menu. The Explorer and right-hand side panel are hidden while Focus Mode is active; the app toolbar and document tabs remain available.
 
 The Focus Mode editor handles Markdown paste separately from rich HTML clipboard content. When pasted plain text contains recognizable Markdown syntax, it can parse that text as Markdown rather than inserting visible source markers. Richly formatted HTML clipboard content remains on the normal rich-paste path.
 
-Use the toolbar's **Focus** control again to return to the main editor workspace. The main editor's Monaco-specific search, replace, formatting, and table shortcuts are documented in the [keyboard shortcut reference](./KeyboardShortcuts.md); not every Monaco action is available from the Focus Mode editor.
+Use the toolbar's **Focus Mode** control again to return to the main editor workspace. The main editor's Monaco-specific search, replace, formatting, and table shortcuts are documented in the [keyboard shortcut reference](./KeyboardShortcuts.md); not every Monaco action is available from the Focus Mode editor.
 
 ## Manage files and projects
 
-Use the File menu or toolbar to create, open, save, and close document tabs. The **Project** toolbar button opens a local folder. The Explorer displays its directory tree; folders load their entries when expanded, and selecting a file opens it in a tab.
+Use the File menu or toolbar to create, open, save, and close document tabs. The **Open project folder** (🗂️) toolbar button opens a local folder. The Explorer displays its directory tree; folders load their entries when expanded, and selecting a file opens it in a tab.
 
 Opening a project also recursively opens supported files under that folder into editor tabs. For a large project, this can create many tabs. The project translation and Project Work tools use the selected project folder as their scope. Close the project from the Explorer when you no longer need that folder context.
 
@@ -51,7 +73,7 @@ Keyboard shortcuts use **Command** as the primary modifier on macOS and **Ctrl**
 
 ## AI-assisted writing and translation
 
-Open the **AI** toolbar panel. It contains **Chat**, **Work**, **Translate**, and **Settings** tabs.
+Open the **AI Assistant** (🤖) toolbar panel. It contains **Chat**, **Work**, **Translate**, and **Settings** tabs.
 
 In Chat, ask questions about the active document or selected text. When the AI returns a proposed document action, inspect it and use the displayed Apply control to apply it. Some built-in slash commands can also be entered in the chat input.
 

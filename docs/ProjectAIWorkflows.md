@@ -1,6 +1,6 @@
 # AI Panel and Notes Context
 
-The AI panel groups the application's document chat, AI editing, translation, provider settings, and local notes retrieval. Open it with **AI** in the toolbar. Its tabs are **Chat**, **Work**, **Translate**, and **Settings**.
+The AI panel groups the application's document chat, AI editing, translation, provider settings, and local notes retrieval. Open it with **AI Assistant** (🤖) in the toolbar. Its tabs are **Chat**, **Work**, **Translate**, and **Settings**.
 
 ## Chat with document context
 
