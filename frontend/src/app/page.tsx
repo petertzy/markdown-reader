@@ -47,7 +47,7 @@ export default function HomePage() {
   const { isDesktopRuntime, backendStatus, backendMessage, showPackagedBackendStatus } = useTauriBackend(editor);
   const projectRoot = project.projectRoot;
   const fileIO = useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef });
-  const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt, executeWork, isWorking } = useAIActions({
+  const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt, executeWork, isWorking, undoWork, canUndoWork } = useAIActions({
     documentId: editor.activeTab.id, documentText: editor.activeTab.content, editorRef: monacoRef, onDocumentChange: editor.handleContentChange,
   });
   const selectPanel = useCallback((panel: NonNullable<typeof PANELS[keyof typeof PANELS]>) => {
@@ -194,6 +194,8 @@ export default function HomePage() {
                   initialTab={aiPanelInitialTab}
                   executeWork={executeWork}
                   isWorking={isWorking}
+                  undoWork={undoWork}
+                  canUndoWork={canUndoWork}
                 />
               ),
               [PANELS.CITATION]: (

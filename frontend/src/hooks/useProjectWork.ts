@@ -8,6 +8,7 @@ import {
   projectTabsAreFresh,
   taskMatchesProject,
 } from "@/lib/project-work-guard.mjs";
+import { captureProjectWorkUndo, type ProjectWorkUndoEntry } from "@/lib/project-work-undo.mjs";
 
 type Editor = ReturnType<typeof useEditor>;
 
@@ -20,6 +21,7 @@ export function useProjectWork(editor: Editor, projectRoot: string | null) {
   const requestSnapshot = useRef(editor.tabs);
   const projectRootRef = useRef(projectRoot);
   const runGuard = useRef(createProjectWorkRunGuard());
+  const [undoRecord, setUndoRecord] = useState<ProjectWorkUndoEntry[] | null>(null);
 
   useLayoutEffect(() => { currentTabs.current = editor.tabs; }, [editor.tabs]);
 
@@ -35,6 +37,7 @@ export function useProjectWork(editor: Editor, projectRoot: string | null) {
     if (projectRootRef.current === projectRoot) return;
     projectRootRef.current = projectRoot;
     discard();
+    setUndoRecord(null);
   }, [discard, projectRoot]);
 
   const run = useCallback(async (instruction: string) => {
@@ -84,12 +87,14 @@ export function useProjectWork(editor: Editor, projectRoot: string | null) {
       if (!projectTabsAreFresh(requestSnapshot.current, currentTabs.current)) {
         throw new Error("Open documents changed while Project Work was running. Run the task again.");
       }
+      const record = captureProjectWorkUndo(currentTabs.current, task.changes);
       editor.applyProjectChanges(task.changes);
+      setUndoRecord(record);
       await AI.discardProjectWork(task.id);
       if (!isCurrentRun()) return;
       taskId.current = null;
       setTask(null);
-      setMessage("Changes were staged in editor tabs. Review and save each file.");
+      setMessage("Changes were staged in editor tabs. Review and save each file, or undo them.");
     } catch (error) {
       if (isCurrentRun()) setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -97,5 +102,14 @@ export function useProjectWork(editor: Editor, projectRoot: string | null) {
     }
   }, [busy, editor, task]);
 
-  return { task, busy, message, run, apply, discard };
+  const undo = useCallback(() => {
+    if (!undoRecord || busy) return;
+    const skipped = editor.revertProjectChanges(undoRecord);
+    setUndoRecord(null);
+    setMessage(skipped.length
+      ? `Undid Project Work. These files were edited or saved afterwards and were left as they are:\n${skipped.join("\n")}`
+      : "Undid Project Work. The affected tabs are back to their previous content.");
+  }, [busy, editor, undoRecord]);
+
+  return { task, busy, message, run, apply, discard, undo, canUndo: !!undoRecord && !busy };
 }

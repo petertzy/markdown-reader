@@ -22,6 +22,9 @@ type Props = {
   initialTab?: Tab;
   executeWork?: (instruction: string) => Promise<void>;
   isWorking?: boolean;
+  /** Revert the last AI Work result applied to the active document. */
+  undoWork?: () => void;
+  canUndoWork?: boolean;
 };
 
 const LANGUAGES = [
@@ -172,6 +175,8 @@ export default function AIPanel({
   initialTab,
   executeWork,
   isWorking,
+  undoWork,
+  canUndoWork,
 }: Props) {
   const currentDocumentRef = useRef({ documentId, documentText });
   currentDocumentRef.current = { documentId, documentText };
@@ -929,6 +934,14 @@ export default function AIPanel({
           >
             {isWorking || projectWork.busy ? "Working..." : workScope === "project" ? "Plan Project Changes" : "Apply Changes"}
           </button>
+          {workScope === "document" && canUndoWork && undoWork && (
+            <button
+              className="w-full py-1.5 px-3 rounded text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-[#2d2d2d]"
+              onClick={undoWork}
+            >
+              Undo AI Changes
+            </button>
+          )}
         </div>
       ) : tab === "translate" ? (
         <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
