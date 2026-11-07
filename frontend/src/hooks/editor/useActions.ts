@@ -36,6 +36,9 @@ export type UseActionsOptions = {
   onOpenProject: () => void;
   onFileSaved: () => void;
   onShowPreview: () => void;
+  /** Whether clicking in the editor snaps the preview to that spot. */
+  snapOnClick?: boolean;
+  onToggleSnapOnClick?: () => void;
   onToggleFocusMode: () => void;
   /** Activate a tab and refresh the preview for it. */
   onSelectTab: (id: string) => void;
@@ -53,6 +56,8 @@ export function useActions({
   onOpenProject,
   onFileSaved,
   onShowPreview,
+  snapOnClick = true,
+  onToggleSnapOnClick,
   onToggleFocusMode,
   onSelectTab,
 }: UseActionsOptions) {
@@ -141,6 +146,7 @@ export function useActions({
       "view.fullEditor": () => setSplit(100),
       "view.balancedSplit": () => setSplit(50),
       "view.fullPreview": () => setSplit(0),
+      "view.toggleSnapOnClick": () => onToggleSnapOnClick?.(),
       "view.toggleFocusMode": onToggleFocusMode,
       "view.increaseFontSize": () => editor.setFontSize((size) => Math.min(MAX_FONT_SIZE, size + 1)),
       "view.decreaseFontSize": () => editor.setFontSize((size) => Math.max(MIN_FONT_SIZE, size - 1)),
@@ -161,6 +167,7 @@ export function useActions({
       setSplit,
       onOpenProject,
       onShowPreview,
+      onToggleSnapOnClick,
       onToggleFocusMode,
       selectAdjacentTab,
       wrapSelection,
@@ -232,6 +239,12 @@ export function useActions({
           "separator",
           { id: "tab.next", label: "Next Tab", onSelect: actions["tab.next"] },
           { id: "tab.previous", label: "Previous Tab", onSelect: actions["tab.previous"] },
+          "separator",
+          {
+            id: "view.toggleSnapOnClick",
+            label: `Snap Preview on Click: ${snapOnClick ? "On" : "Off"}`,
+            onSelect: actions["view.toggleSnapOnClick"],
+          },
         ],
       },
       {
@@ -249,7 +262,7 @@ export function useActions({
         }),
       },
     ],
-    [actions, backendDisabled, shortcuts]
+    [actions, backendDisabled, shortcuts, snapOnClick]
   );
 
   return {

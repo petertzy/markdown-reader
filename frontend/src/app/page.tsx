@@ -10,6 +10,7 @@ import { usePanels } from "@/hooks/usePanels";
 import { useTauriBackend } from "@/hooks/useTauriBackend";
 import { useEditorCommands } from "@/hooks/editor/useEditorCommands";
 import { useEditorWorkspace } from "@/hooks/editor/useEditorWorkspace";
+import { usePreviewSnapSetting } from "@/hooks/usePreviewSnapSetting";
 import TabBar from "@/components/TabBar";
 import Toolbar from "@/components/Toolbar";
 import MenuBar from "@/components/MenuBar";
@@ -38,6 +39,7 @@ export default function HomePage() {
     reset: resetEditor,
   } = editorWorkspace;
   const [focusMode, setFocusMode] = useState(false);
+  const { snapOnClick, toggleSnapOnClick } = usePreviewSnapSetting();
   const { activePanel, togglePanel, hidePanel, setShowAIPanel } = usePanels();
   // Focus Mode undo/redo handle (issue #341) — published by FocusModePane.
   const focusEditorRef = useRef<FocusEditorHandle | null>(null);
@@ -104,6 +106,8 @@ export default function HomePage() {
     onSelectTab: handleTabSelect,
     executeAIPrompt,
     syncSelectedText,
+    snapOnClick,
+    onToggleSnapOnClick: toggleSnapOnClick,
   });
   const handlePublicationExport = useCallback(async (content: string, format: "html" | "pdf") => {
     const extension = format === "html" ? "html" : "pdf";
@@ -180,6 +184,9 @@ export default function HomePage() {
               [PANELS.PREVIEW]: (
                 <PreviewPane
                   html={editor.previewHtml}
+                  editorRef={monacoRef}
+                  editorKey={`${revision}-${monacoReady}`}
+                  snapOnClick={snapOnClick}
                   loading={
                     showPackagedBackendStatus && backendStatus === "starting"
                   }

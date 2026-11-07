@@ -38,7 +38,8 @@ export type ActionId =
   | "view.increaseFontSize"
   | "view.decreaseFontSize"
   | "tab.next"
-  | "tab.previous";
+  | "tab.previous"
+  | "view.toggleSnapOnClick";
 
 export type ShortcutBinding = {
   key: string;
