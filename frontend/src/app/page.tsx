@@ -5,6 +5,7 @@ import { useEditor } from "@/hooks/useEditor";
 import { useAIActions } from "@/hooks/useAIActions";
 import { useProjectWorkspace } from "@/hooks/useProjectWorkspace";
 import { useProjectWork } from "@/hooks/useProjectWork";
+import { useProjectTranslation } from "@/hooks/useProjectTranslation";
 import { useFileIO } from "@/hooks/useFileIO";
 import { usePanels } from "@/hooks/usePanels";
 import { useTauriBackend } from "@/hooks/useTauriBackend";
@@ -46,6 +47,8 @@ export default function HomePage() {
   const [aiPanelInitialTab, setAiPanelInitialTab] = useState<AIPanelTab | undefined>();
   const [split, setSplit] = useState(50);
   const [projectRefreshToken, setProjectRefreshToken] = useState(0);
+  // Held at page level so a running translation keeps reporting completion when the AI panel or its tab unmounts.
+  const projectTranslation = useProjectTranslation(project.projectRoot, () => setProjectRefreshToken((token) => token + 1));
   const { isDesktopRuntime, backendStatus, backendMessage, showPackagedBackendStatus } = useTauriBackend(editor);
   const projectRoot = project.projectRoot;
   const fileIO = useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef });
@@ -210,6 +213,7 @@ export default function HomePage() {
                   isWorking={isWorking}
                   undoWork={undoWork}
                   canUndoWork={canUndoWork}
+                  projectTranslation={projectTranslation}
                 />
               ),
               [PANELS.CITATION]: (
