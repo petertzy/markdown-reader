@@ -10,6 +10,7 @@ export default function ProjectWorkReview({ projectRoot, work }: Props) {
     <p className="truncate text-gray-500 dark:text-gray-400" title={projectRoot}>Project: {projectRoot}</p>
     <p className="text-gray-500 dark:text-gray-400">The AI discovers paths first and reads only files it requests. It cannot write to disk.</p>
     {work.message && <p role="status" className="whitespace-pre-wrap">{work.message}</p>}
+    {work.canUndo && <button onClick={work.undo} className="rounded border px-2 py-1 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-[#2d2d2d]">Undo accepted changes</button>}
     {work.task && <div className="space-y-2 border-t pt-2 dark:border-gray-700">
       <p>{work.task.summary}</p>
       <p className="text-gray-500 dark:text-gray-400">{work.task.file_count} files · {work.task.steps} steps · {work.task.inspected.length} inspected</p>

@@ -4,7 +4,7 @@ This guide documents the project-wide workflows implemented in Markdown Reader. 
 
 ## Open a project folder
 
-Choose **Project** in the toolbar or **File → Open Folder**. The application recursively discovers supported files below the selected folder and opens those files in editor tabs. The Explorer also displays the folder hierarchy; its subdirectories load when expanded, and selecting a file in the tree opens that file in a tab.
+Choose **Open project folder** (🗂️) in the toolbar or **File → Open Folder**. The application recursively discovers supported files below the selected folder and opens those files in editor tabs. The Explorer also displays the folder hierarchy; its subdirectories load when expanded, and selecting a file in the tree opens that file in a tab.
 
 Because opening a project can open many files, use a folder containing the documents you intend to work with. Project translation and Project Work use the selected folder as their root. Project Work can use the current contents of open editor tabs as input, so keep the intended project selected and save important changes before starting.
 

@@ -26,6 +26,8 @@ export type UseEditorCommandsOptions = {
   onOpenProject: () => void;
   onFileSaved: () => void;
   onShowPreview: () => void;
+  onToggleFocusMode: () => void;
+  onSelectTab: (id: string) => void;
   executeAIPrompt: (prompt: string, documentText: string) => Promise<string | null | undefined>;
   syncSelectedText: () => void;
   snapOnClick?: boolean;
@@ -49,6 +51,8 @@ export function useEditorCommands({
   onOpenProject,
   onFileSaved,
   onShowPreview,
+  onToggleFocusMode,
+  onSelectTab,
   executeAIPrompt,
   syncSelectedText,
   snapOnClick,
@@ -72,6 +76,8 @@ export function useEditorCommands({
     onShowPreview,
     snapOnClick,
     onToggleSnapOnClick,
+    onToggleFocusMode,
+    onSelectTab,
   });
 
   // 3. Register keyboard shortcuts

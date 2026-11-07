@@ -1,5 +1,7 @@
 "use client";
 
+import { buildDefaultShortcuts } from "@/lib/shortcut-definitions.mjs";
+
 export type ActionId =
   | "file.new"
   | "file.open"
@@ -21,6 +23,9 @@ export type ActionId =
   | "format.heading2"
   | "format.heading3"
   | "format.normal"
+  | "format.strikethrough"
+  | "format.inlineCode"
+  | "format.link"
   | "table.insert"
   | "view.toggleDarkMode"
   | "view.toggleAIPanel"
@@ -29,6 +34,11 @@ export type ActionId =
   | "view.fullEditor"
   | "view.balancedSplit"
   | "view.fullPreview"
+  | "view.toggleFocusMode"
+  | "view.increaseFontSize"
+  | "view.decreaseFontSize"
+  | "tab.next"
+  | "tab.previous"
   | "view.toggleSnapOnClick";
 
 export type ShortcutBinding = {
@@ -53,100 +63,8 @@ const isMac =
   typeof navigator !== "undefined" &&
   (/Mac|iPhone|iPad|iPod/i.test(navigator.platform) || /Mac/i.test(navigator.userAgent));
 
-function keyCodeFor(key: string) {
-  if (/^[a-z]$/i.test(key)) return `Key${key.toUpperCase()}`;
-  if (/^\d$/.test(key)) return `Digit${key}`;
-  return undefined;
-}
-
-const primary = (key: string, extra: Omit<ShortcutBinding, "key" | "code"> = {}): ShortcutBinding => ({
-  key,
-  code: keyCodeFor(key),
-  ...(isMac ? { meta: true } : { ctrl: true }),
-  ...extra,
-});
-
-const primaryAlt = (key: string): ShortcutBinding =>
-  isMac
-    ? { key, code: keyCodeFor(key), meta: true, alt: true }
-    : { key, code: keyCodeFor(key), ctrl: true, alt: true };
-
-export const DEFAULT_SHORTCUTS: ShortcutDefinition[] = [
-  { id: "file.new", label: "New File", scope: "global", bindings: [primary("n")] },
-  { id: "file.open", label: "Open File", scope: "global", bindings: [primary("o")] },
-  { id: "file.save", label: "Save File", scope: "global", bindings: [primary("s")] },
-  { id: "file.closeTab", label: "Close Current Tab", scope: "global", bindings: [primary("w")] },
-  {
-    id: "file.closeAllTabs",
-    label: "Close All Tabs",
-    scope: "global",
-    bindings: [primary("w", { shift: true })],
-  },
-  // Undo/redo drive the document editor (useActions maps them to
-  // runMonacoAction), so they are scoped to the editor like every other
-  // `edit.*` / `format.*` command. With `scope: "global"` they also fired while
-  // typing in the AI panel's chat and work-instruction textareas and in the
-  // settings inputs: preventDefault killed the field's native undo, then focus
-  // jumped to Monaco and undid a document edit instead.
-  { id: "edit.undo", label: "Undo", scope: "editor", bindings: [primary("z")] },
-  {
-    id: "edit.redo",
-    label: "Redo",
-    scope: "editor",
-    bindings: isMac
-      ? [primary("z", { shift: true })]
-      : [{ key: "y", ctrl: true }, primary("z", { shift: true })],
-  },
-  { id: "edit.search", label: "Search", scope: "editor", bindings: [primary("f")] },
-  {
-    id: "edit.replace",
-    label: "Replace",
-    scope: "editor",
-    bindings: [isMac ? primaryAlt("f") : { key: "h", ctrl: true }],
-  },
-  { id: "format.bold", label: "Bold", scope: "editor", bindings: [primary("b")] },
-  { id: "format.italic", label: "Italic", scope: "editor", bindings: [primary("i")] },
-  { id: "format.underline", label: "Underline", scope: "editor", bindings: [primary("u")] },
-  { id: "format.heading1", label: "Heading 1", scope: "editor", bindings: [primary("1")] },
-  { id: "format.heading2", label: "Heading 2", scope: "editor", bindings: [primary("2")] },
-  { id: "format.heading3", label: "Heading 3", scope: "editor", bindings: [primary("3")] },
-  { id: "format.normal", label: "Normal Text", scope: "editor", bindings: [primary("0")] },
-  { id: "table.insert", label: "Insert Table", scope: "editor", bindings: [primaryAlt("t")] },
-  { id: "file.exportHtml", label: "Export to HTML", scope: "editor", bindings: [primaryAlt("h")] },
-  { id: "file.exportDocx", label: "Export to Word", scope: "editor", bindings: [primaryAlt("d")] },
-  { id: "file.exportPdf", label: "Export to PDF", scope: "editor", bindings: [primaryAlt("p")] },
-  { id: "view.toggleDarkMode", label: "Toggle Dark Mode", scope: "global", bindings: [{ key: "F6" }] },
-  {
-    id: "view.toggleAIPanel",
-    label: "Toggle AI Agent Panel",
-    scope: "global",
-    bindings: [primary("a", { shift: true })],
-  },
-  {
-    id: "view.openBrowserPreview",
-    label: "Open Preview in Browser",
-    scope: "global",
-    bindings: [primaryAlt("b")],
-  },
-  {
-    id: "view.fullEditor",
-    label: "Full Width Editor",
-    scope: "global",
-    bindings: [primaryAlt("ArrowLeft")],
-  },
-  {
-    id: "view.balancedSplit",
-    label: "Balanced Split View",
-    scope: "global",
-    bindings: [primaryAlt("ArrowDown")],
-  },
-  {
-    id: "view.fullPreview",
-    label: "Full Width Preview",
-    scope: "global",
-    bindings: [primaryAlt("ArrowRight")],
-  },
-];
+// The table itself lives in shortcut-definitions.mjs so tests can check it.
+export const DEFAULT_SHORTCUTS = buildDefaultShortcuts(isMac) as ShortcutDefinition[];
 
 export function resolveShortcutDefinitions(
   overrides: ShortcutOverrideMap = {}

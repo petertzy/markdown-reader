@@ -7,6 +7,7 @@ import type { useEditor } from "@/hooks/useEditor";
 import type { useFileIO } from "@/hooks/useFileIO";
 import type { EditorFormattingController } from "@/hooks/editor/useEditorFormatting";
 import type { MenuGroup } from "@/components/MenuBar";
+import { MIN_FONT_SIZE, MAX_FONT_SIZE } from "@/components/Toolbar";
 import type { FocusEditorHandle } from "@/components/FocusModePane";
 import { Markdown } from "@/lib/api";
 import {
@@ -38,6 +39,9 @@ export type UseActionsOptions = {
   /** Whether clicking in the editor snaps the preview to that spot. */
   snapOnClick?: boolean;
   onToggleSnapOnClick?: () => void;
+  onToggleFocusMode: () => void;
+  /** Activate a tab and refresh the preview for it. */
+  onSelectTab: (id: string) => void;
 };
 
 export function useActions({
@@ -54,6 +58,8 @@ export function useActions({
   onShowPreview,
   snapOnClick = true,
   onToggleSnapOnClick,
+  onToggleFocusMode,
+  onSelectTab,
 }: UseActionsOptions) {
   const { handleOpenFile, handleExport } = fileIO;
   const {
@@ -85,6 +91,13 @@ export function useActions({
       alert(`Open browser preview failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, [backendStatus, editor.activeTab.content, editor.activeTab.filePath, editor.darkMode, editor.fontSize, monacoRef]);
+
+  const selectAdjacentTab = useCallback((step: 1 | -1) => {
+    const { tabs, activeTabId } = editor;
+    if (tabs.length < 2) return;
+    const index = tabs.findIndex((tab) => tab.id === activeTabId);
+    onSelectTab(tabs[(index + step + tabs.length) % tabs.length].id);
+  }, [editor, onSelectTab]);
 
   const actions = useMemo<Record<ActionId, () => void>>(
     () => ({
@@ -122,6 +135,9 @@ export function useActions({
       "format.heading2": () => applyHeading(2),
       "format.heading3": () => applyHeading(3),
       "format.normal": () => applyHeading(0),
+      "format.strikethrough": () => wrapSelection("strikethrough", "~~"),
+      "format.inlineCode": () => wrapSelection("inline-code", "`"),
+      "format.link": () => wrapSelection("link", "[", "](url)"),
       "table.insert": insertTable,
       "view.toggleDarkMode": () => editor.setDarkMode((dark) => !dark),
       "view.toggleAIPanel": () => setShowAIPanel((visible) => !visible),
@@ -131,6 +147,11 @@ export function useActions({
       "view.balancedSplit": () => setSplit(50),
       "view.fullPreview": () => setSplit(0),
       "view.toggleSnapOnClick": () => onToggleSnapOnClick?.(),
+      "view.toggleFocusMode": onToggleFocusMode,
+      "view.increaseFontSize": () => editor.setFontSize((size) => Math.min(MAX_FONT_SIZE, size + 1)),
+      "view.decreaseFontSize": () => editor.setFontSize((size) => Math.max(MIN_FONT_SIZE, size - 1)),
+      "tab.next": () => selectAdjacentTab(1),
+      "tab.previous": () => selectAdjacentTab(-1),
     }),
     [
       applyHeading,
@@ -147,6 +168,8 @@ export function useActions({
       onOpenProject,
       onShowPreview,
       onToggleSnapOnClick,
+      onToggleFocusMode,
+      selectAdjacentTab,
       wrapSelection,
     ]
   );
@@ -188,6 +211,9 @@ export function useActions({
           { id: "format.bold", label: "Bold", onSelect: actions["format.bold"] },
           { id: "format.italic", label: "Italic", onSelect: actions["format.italic"] },
           { id: "format.underline", label: "Underline", onSelect: actions["format.underline"] },
+          { id: "format.strikethrough", label: "Strikethrough", onSelect: actions["format.strikethrough"] },
+          { id: "format.inlineCode", label: "Inline Code", onSelect: actions["format.inlineCode"] },
+          { id: "format.link", label: "Insert Link", onSelect: actions["format.link"] },
           "separator",
           { id: "format.heading1", label: "Heading 1", onSelect: actions["format.heading1"] },
           { id: "format.heading2", label: "Heading 2", onSelect: actions["format.heading2"] },
@@ -199,13 +225,20 @@ export function useActions({
         label: "View",
         items: [
           { id: "view.toggleDarkMode", label: "Toggle Dark Mode", onSelect: actions["view.toggleDarkMode"] },
+          { id: "view.toggleFocusMode", label: "Toggle Focus Mode", onSelect: actions["view.toggleFocusMode"] },
           { id: "view.toggleAIPanel", label: "Show AI Agent Panel", onSelect: actions["view.toggleAIPanel"] },
-          { id: "view.showPreview", label: "Show Preview Panel", onSelect: actions["view.showPreview"] },
+          { id: "view.showPreview", label: "Toggle Preview Panel", onSelect: actions["view.showPreview"] },
           { id: "view.openBrowserPreview", label: "Open Preview in Browser", onSelect: actions["view.openBrowserPreview"], disabled: backendDisabled },
           "separator",
           { id: "view.fullEditor", label: "Full Width Editor", onSelect: actions["view.fullEditor"] },
           { id: "view.balancedSplit", label: "Balanced Split View", onSelect: actions["view.balancedSplit"] },
           { id: "view.fullPreview", label: "Full Width Preview", onSelect: actions["view.fullPreview"] },
+          "separator",
+          { id: "view.increaseFontSize", label: "Increase Font Size", onSelect: actions["view.increaseFontSize"] },
+          { id: "view.decreaseFontSize", label: "Decrease Font Size", onSelect: actions["view.decreaseFontSize"] },
+          "separator",
+          { id: "tab.next", label: "Next Tab", onSelect: actions["tab.next"] },
+          { id: "tab.previous", label: "Previous Tab", onSelect: actions["tab.previous"] },
           "separator",
           {
             id: "view.toggleSnapOnClick",
@@ -220,11 +253,13 @@ export function useActions({
       },
       {
         label: "Shortcuts",
-        items: shortcuts.map((shortcut) => ({
-          id: shortcut.id,
-          label: shortcut.label,
-          onSelect: actions[shortcut.id],
-        })),
+        // Same table as the key handler, split into categories by id prefix.
+        items: shortcuts.flatMap((shortcut, index): MenuGroup["items"] => {
+          const item = { id: shortcut.id, label: shortcut.label, onSelect: actions[shortcut.id] };
+          const category = shortcut.id.split(".")[0];
+          const startsCategory = index > 0 && shortcuts[index - 1].id.split(".")[0] !== category;
+          return startsCategory ? ["separator", item] : [item];
+        }),
       },
     ],
     [actions, backendDisabled, shortcuts, snapOnClick]

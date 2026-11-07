@@ -15,6 +15,11 @@ import { resolveTabClose } from "@/lib/tabLifecycle.mjs";
 import { settleSavedTab } from "@/lib/save-settle.mjs";
 import { parentDirOf, resolvePreviewBaseDir } from "@/lib/preview-base-dir.mjs";
 import { createLatestRequestGuard } from "@/lib/latest-request.mjs";
+import {
+  remapTabsAfterRename,
+  resolveTabsAfterDelete,
+} from "@/lib/explorer-paths.mjs";
+import { revertProjectWork, type ProjectWorkUndoEntry } from "@/lib/project-work-undo.mjs";
 
 export type Tab = {
   id: string;
@@ -374,6 +379,59 @@ export function useEditor() {
     debounceRef.current = null;
   }, []);
 
+  // ── explorer rename / delete (issue #455) ──────────────────────────────────
+  const handlePathRenamed = useCallback((oldPath: string, newPath: string) => {
+    setTabs((prev) => remapTabsAfterRename(prev, oldPath, newPath));
+  }, []);
+
+  const handlePathDeleted = useCallback(
+    (deletedPath: string) => {
+      const { tabs: updated, closeIds } = resolveTabsAfterDelete(
+        tabs,
+        deletedPath,
+      );
+      // Close every affected tab in one pass over the same list, so the active
+      // tab and preview end up where closing them one by one would leave them.
+      let remaining = updated;
+      let nextActiveId = activeTabId;
+      let previewTab: Tab | null = null;
+
+      for (const id of closeIds) {
+        const result = resolveTabClose(remaining, nextActiveId, id);
+        remaining = result.remaining;
+        if (result.nextActiveTabId) nextActiveId = result.nextActiveTabId;
+        if (result.previewTab) previewTab = result.previewTab;
+      }
+
+      if (closeIds.includes(activeTabId)) {
+        previewGuardRef.current.supersede();
+        wordCountGuardRef.current.supersede();
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+
+      if (remaining.length === 0) {
+        const fresh = makeTab(nextTabId());
+        setTabs([fresh]);
+        setActiveTabId(fresh.id);
+        setPreviewHtml("");
+        setWordCount(null);
+        return;
+      }
+
+      setTabs(remaining);
+      setActiveTabId(nextActiveId);
+
+      if (previewTab && previewTab.id === nextActiveId) {
+        refreshPreview(
+          previewTab.content,
+          previewTab.previewBaseDir ?? previewTab.filePath ?? undefined,
+        );
+      }
+    },
+    [tabs, activeTabId, refreshPreview],
+  );
+
   const applyProjectChanges = useCallback((changes: ProjectWorkChange[]) => {
     setTabs((previous) => {
       const next = [...previous];
@@ -390,6 +448,19 @@ export function useEditor() {
     const activeChange = changes.find((change) => change.file_path === activeTab.filePath);
     if (activeChange) refreshPreview(activeChange.content, activeChange.file_path);
   }, [activeTab.filePath, refreshPreview]);
+
+  /** Revert an accepted Project Work result; returns the paths left untouched. */
+  const revertProjectChanges = useCallback((record: ProjectWorkUndoEntry[]) => {
+    const { tabs: reverted, skipped } = revertProjectWork(tabs, record);
+    const remaining = reverted.length ? reverted : [makeTab(nextTabId())];
+    const active = remaining.find((tab) => tab.id === activeTabId) ?? remaining[remaining.length - 1];
+    setTabs(remaining);
+    setActiveTabId(active.id);
+    if (active.id !== activeTabId || active.content !== activeTab.content) {
+      refreshPreview(active.content, active.previewBaseDir ?? active.filePath ?? undefined);
+    }
+    return skipped;
+  }, [tabs, activeTabId, activeTab.content, refreshPreview]);
 
   // ── recent files ───────────────────────────────────────────────────────────
   const loadRecentFiles = useCallback(async () => {
@@ -434,7 +505,10 @@ export function useEditor() {
     newTab,
     closeTab,
     closeAllTabs,
+    handlePathRenamed,
+    handlePathDeleted,
     applyProjectChanges,
+    revertProjectChanges,
     loadRecentFiles,
     refreshPreview,
     exportAs,
