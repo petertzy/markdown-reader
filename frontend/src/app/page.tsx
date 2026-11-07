@@ -152,6 +152,9 @@ export default function HomePage() {
             onOpenFile={(path) => { void editor.openFile(path); }}
             onOpenProject={() => { void openProject(); }}
             onCloseProject={project.closeProject}
+            onPathRenamed={editor.handlePathRenamed}
+            onPathDeleted={editor.handlePathDeleted}
+            canReveal={isDesktopRuntime}
             refreshToken={projectRefreshToken}
           />
         )}
