@@ -13,7 +13,11 @@ import type {
 } from "react";
 
 import { PANELS, type PanelId } from "@/types/panels";
-import { DEFAULT_SHORTCUTS, formatShortcut } from "@/lib/keyboardShortcuts";
+import {
+  DEFAULT_SHORTCUTS,
+  formatShortcut,
+  type ShortcutDefinition,
+} from "@/lib/keyboardShortcuts";
 
 export const MIN_FONT_SIZE = 8;
 export const MAX_FONT_SIZE = 72;
@@ -62,10 +66,20 @@ export default function Toolbar({
   const backendDisabled = backendBusy || backendFailed;
 
   const [fontSizeInput, setFontSizeInput] = useState(String(fontSize));
+  // Platform detection relies on `navigator`. Defer shortcut labels until after
+  // mount so server rendering and hydration agree, then use the same table as
+  // the keyboard handler (Cmd on macOS, Ctrl elsewhere).
+  const [shortcutDefinitions, setShortcutDefinitions] = useState<
+    ShortcutDefinition[] | null
+  >(null);
 
   useEffect(() => {
     setFontSizeInput(String(fontSize));
   }, [fontSize]);
+
+  useEffect(() => {
+    setShortcutDefinitions(DEFAULT_SHORTCUTS);
+  }, []);
 
   const isValidFontSize = (value: number) =>
     Number.isInteger(value) && value >= MIN_FONT_SIZE && value <= MAX_FONT_SIZE;
@@ -91,9 +105,9 @@ export default function Toolbar({
   return (
     <div className="flex flex-wrap items-center gap-x-1 gap-y-1 px-2 py-1 bg-white dark:bg-[#252526] border-b border-gray-200 dark:border-gray-700 shrink-0 text-sm">
       {/* File ops */}
-      <IconButton icon="📂" label="Open file" shortcutId="file.open" onClick={onOpenFile} disabled={backendDisabled} />
-      <IconButton icon="🗂️" label="Open project folder" shortcutId="file.openFolder" onClick={onOpenProject} disabled={backendDisabled} />
-      <IconButton icon="💾" label="Save" shortcutId="file.save" onClick={onSaveFile} disabled={backendDisabled} />
+      <IconButton icon="📂" label="Open file" shortcutId="file.open" shortcuts={shortcutDefinitions} onClick={onOpenFile} disabled={backendDisabled} />
+      <IconButton icon="🗂️" label="Open project folder" shortcutId="file.openFolder" shortcuts={shortcutDefinitions} onClick={onOpenProject} disabled={backendDisabled} />
+      <IconButton icon="💾" label="Save" shortcutId="file.save" shortcuts={shortcutDefinitions} onClick={onSaveFile} disabled={backendDisabled} />
       {lastExportedPath && (
         <button onClick={onShowInFinder} className={btnCls} title="Show the last export in Finder">
           📁 Show in Finder
@@ -105,11 +119,11 @@ export default function Toolbar({
       {/* Export: the format names are the information, so they stay as text. */}
       <span className="text-gray-400 text-xs">Export:</span>
       {(["html", "pdf", "docx"] as const).map((fmt) => (
-        <button key={fmt} onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onExport(fmt)} className={buttonClass(backendDisabled)} disabled={backendDisabled} title={withShortcut(`Export to ${fmt.toUpperCase()}`, `file.export${EXPORT_ACTION_SUFFIX[fmt]}`)}>
+        <button key={fmt} onPointerDown={keepEditorFocusedOnPointerDown} onMouseDown={keepEditorFocused} onClick={() => onExport(fmt)} className={buttonClass(backendDisabled)} disabled={backendDisabled} title={withShortcut(`Export to ${fmt.toUpperCase()}`, `file.export${EXPORT_ACTION_SUFFIX[fmt]}`, shortcutDefinitions)}>
           {fmt.toUpperCase()}
         </button>
       ))}
-      <IconButton icon="🌐" label="Open rendered preview in browser" shortcutId="view.openBrowserPreview" onClick={onOpenBrowserPreview} disabled={backendDisabled} />
+      <IconButton icon="🌐" label="Open rendered preview in browser" shortcutId="view.openBrowserPreview" shortcuts={shortcutDefinitions} onClick={onOpenBrowserPreview} disabled={backendDisabled} />
 
       <Divider />
 
@@ -165,12 +179,12 @@ export default function Toolbar({
       )}
 
       {/* Toggles */}
-      <IconButton icon="🧠" label="Focus Mode" shortcutId="view.toggleFocusMode" onClick={onToggleFocusMode} pressed={showFocusPanel} />
-      <IconButton icon="👁" label="Preview" shortcutId="view.showPreview" onClick={() => onTogglePanel(PANELS.PREVIEW)} pressed={activePanel === PANELS.PREVIEW} />
-      <IconButton icon="🤖" label="AI Assistant" shortcutId="view.toggleAIPanel" onClick={() => onTogglePanel(PANELS.AI)} pressed={activePanel === PANELS.AI} />
-      <IconButton icon="📚" label="Citations" onClick={() => onTogglePanel(PANELS.CITATION)} pressed={activePanel === PANELS.CITATION} />
-      <IconButton icon="📝" label="Publication" onClick={() => onTogglePanel(PANELS.PUBLICATION)} pressed={activePanel === PANELS.PUBLICATION} />
-      <IconButton icon={darkMode ? "☀️" : "🌙"} label={darkMode ? "Switch to light mode" : "Switch to dark mode"} shortcutId="view.toggleDarkMode" onClick={onToggleDark} />
+      <IconButton icon="🧠" label="Focus Mode" shortcutId="view.toggleFocusMode" shortcuts={shortcutDefinitions} onClick={onToggleFocusMode} pressed={showFocusPanel} />
+      <IconButton icon="👁" label="Preview" shortcutId="view.showPreview" shortcuts={shortcutDefinitions} onClick={() => onTogglePanel(PANELS.PREVIEW)} pressed={activePanel === PANELS.PREVIEW} />
+      <IconButton icon="🤖" label="AI Assistant" shortcutId="view.toggleAIPanel" shortcuts={shortcutDefinitions} onClick={() => onTogglePanel(PANELS.AI)} pressed={activePanel === PANELS.AI} />
+      <IconButton icon="📚" label="Citations" shortcuts={shortcutDefinitions} onClick={() => onTogglePanel(PANELS.CITATION)} pressed={activePanel === PANELS.CITATION} />
+      <IconButton icon="📝" label="Publication" shortcuts={shortcutDefinitions} onClick={() => onTogglePanel(PANELS.PUBLICATION)} pressed={activePanel === PANELS.PUBLICATION} />
+      <IconButton icon={darkMode ? "☀️" : "🌙"} label={darkMode ? "Switch to light mode" : "Switch to dark mode"} shortcutId="view.toggleDarkMode" shortcuts={shortcutDefinitions} onClick={onToggleDark} />
     </div>
   );
 }
@@ -178,8 +192,12 @@ export default function Toolbar({
 const EXPORT_ACTION_SUFFIX = { html: "Html", pdf: "Pdf", docx: "Docx" } as const;
 
 /** "Save (Cmd+S)": the label plus the shortcut bound to `shortcutId`, if any. */
-function withShortcut(label: string, shortcutId?: string) {
-  const binding = DEFAULT_SHORTCUTS.find((shortcut) => shortcut.id === shortcutId)?.bindings[0];
+function withShortcut(
+  label: string,
+  shortcutId: string | undefined,
+  shortcuts: ShortcutDefinition[] | null,
+) {
+  const binding = shortcuts?.find((shortcut) => shortcut.id === shortcutId)?.bindings[0];
   return binding ? `${label} (${formatShortcut(binding)})` : label;
 }
 
@@ -188,13 +206,14 @@ type IconButtonProps = {
   /** Tooltip and accessible name; the icon alone is shown. */
   label: string;
   shortcutId?: string;
+  shortcuts: ShortcutDefinition[] | null;
   onClick: () => void;
   disabled?: boolean;
   /** Set for toggles, so their on/off state is exposed and highlighted. */
   pressed?: boolean;
 };
 
-function IconButton({ icon, label, shortcutId, onClick, disabled = false, pressed }: IconButtonProps) {
+function IconButton({ icon, label, shortcutId, shortcuts, onClick, disabled = false, pressed }: IconButtonProps) {
   return (
     <button
       // Keep focus (and the selection) in the editor while clicking.
@@ -202,7 +221,7 @@ function IconButton({ icon, label, shortcutId, onClick, disabled = false, presse
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
       disabled={disabled}
-      title={withShortcut(label, shortcutId)}
+      title={withShortcut(label, shortcutId, shortcuts)}
       aria-label={label}
       aria-pressed={pressed}
       className={`${buttonClass(disabled)} min-w-8 text-base leading-6 ${pressed ? activeCls : ""}`}
