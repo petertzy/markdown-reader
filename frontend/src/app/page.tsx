@@ -47,7 +47,7 @@ export default function HomePage() {
   const { isDesktopRuntime, backendStatus, backendMessage, showPackagedBackendStatus } = useTauriBackend(editor);
   const projectRoot = project.projectRoot;
   const fileIO = useFileIO({ editor, isDesktopRuntime, backendStatus, monacoRef });
-  const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt, executeWork, isWorking } = useAIActions({
+  const { selectedText, syncSelectedText, applyAction: handleAIApplyAction, executePrompt: executeAIPrompt, executeWork, isWorking, undoWork, canUndoWork } = useAIActions({
     documentId: editor.activeTab.id, documentText: editor.activeTab.content, editorRef: monacoRef, onDocumentChange: editor.handleContentChange,
   });
   const selectPanel = useCallback((panel: NonNullable<typeof PANELS[keyof typeof PANELS]>) => {
@@ -67,6 +67,16 @@ export default function HomePage() {
     setShowAIPanel(action);
     setSplit(showAI ? 60 : 50);
   }, [activePanel, setShowAIPanel]);
+
+  const handleTabSelect = useCallback((id: string) => {
+    editor.setActiveTabId(id);
+    const tab = editor.tabs.find((item) => item.id === id);
+    if (tab) editor.refreshPreview(tab.content, tab.filePath ?? undefined);
+  }, [editor]);
+  const toggleFocusMode = useCallback(() => {
+    setFocusMode((enabled) => !enabled);
+    resetEditor();
+  }, [resetEditor]);
 
   const {
     formatting,
@@ -90,14 +100,11 @@ export default function HomePage() {
     onOpenProject: () => { void openProject(); },
     onFileSaved: () => setProjectRefreshToken((token) => token + 1),
     onShowPreview: () => selectPanel(PANELS.PREVIEW),
+    onToggleFocusMode: toggleFocusMode,
+    onSelectTab: handleTabSelect,
     executeAIPrompt,
     syncSelectedText,
   });
-  const handleTabSelect = useCallback((id: string) => {
-    editor.setActiveTabId(id);
-    const tab = editor.tabs.find((item) => item.id === id);
-    if (tab) editor.refreshPreview(tab.content, tab.filePath ?? undefined);
-  }, [editor]);
   const handlePublicationExport = useCallback(async (content: string, format: "html" | "pdf") => {
     const extension = format === "html" ? "html" : "pdf";
     const payload = {
@@ -139,7 +146,7 @@ export default function HomePage() {
         onOpenProject={() => { void openProject(); }}
         onExport={fileIO.handleExport} onOpenBrowserPreview={() => { void handleOpenBrowserPreview(); }}
         onToggleDark={() => editor.setDarkMode((dark) => !dark)} activePanel={activePanel} onTogglePanel={selectPanel}
-        onToggleFocusMode={() => { setFocusMode((enabled) => !enabled); resetEditor(); }}
+        onToggleFocusMode={toggleFocusMode}
         darkMode={editor.darkMode} fontSize={editor.fontSize} onFontSizeChange={editor.setFontSize}
         showFocusPanel={focusMode}
         backendStatus={showPackagedBackendStatus ? backendStatus : "ready"} backendMessage={showPackagedBackendStatus ? backendMessage : null}
@@ -152,6 +159,9 @@ export default function HomePage() {
             onOpenFile={(path) => { void editor.openFile(path); }}
             onOpenProject={() => { void openProject(); }}
             onCloseProject={project.closeProject}
+            onPathRenamed={editor.handlePathRenamed}
+            onPathDeleted={editor.handlePathDeleted}
+            canReveal={isDesktopRuntime}
             refreshToken={projectRefreshToken}
           />
         )}
@@ -191,6 +201,8 @@ export default function HomePage() {
                   initialTab={aiPanelInitialTab}
                   executeWork={executeWork}
                   isWorking={isWorking}
+                  undoWork={undoWork}
+                  canUndoWork={canUndoWork}
                 />
               ),
               [PANELS.CITATION]: (
