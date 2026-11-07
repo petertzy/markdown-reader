@@ -27,6 +27,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from backend import explorer_fs
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -157,6 +159,26 @@ class FileEntry(BaseModel):
     path: str
     is_dir: bool
     extension: str
+
+
+class ProjectPathPayload(BaseModel):
+    root: str
+    path: str
+
+
+class RenamePayload(ProjectPathPayload):
+    new_name: str
+
+
+class CreateEntryPayload(BaseModel):
+    root: str
+    parent: str
+    name: str
+    is_dir: bool = False
+
+
+class TransferPayload(ProjectPathPayload):
+    dest_parent: str
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -440,6 +462,273 @@ def list_files(
         raise HTTPException(status_code=403, detail="Permission denied")
 
     return {"path": path, "entries": entries}
+
+
+# ── Project explorer file management ─────────────────────────────────────────
+
+
+def _resolve_in_project(
+    root: str, path: str, *, allow_root: bool = False, follow_symlinks: bool = False
+) -> Path:
+    """
+    Resolve ``path`` and make sure it lies inside the project folder ``root``.
+
+    The explorer only acts on entries it listed from the open project, so
+    anything that ends up outside it is rejected rather than touched.
+
+    By default the entry itself is not followed: only the folder holding it is
+    resolved. A symlink or junction is then handled as the link itself, so
+    Delete and Rename affect the link and never its target, and a link that
+    points outside the project can still be removed or renamed (only the link,
+    which lives inside the project, is touched). Folders that something is
+    created or pasted *into* are resolved with ``follow_symlinks=True``, so a
+    linked folder pointing outside the project is refused.
+
+    :param str root: Absolute path of the open project folder.
+    :param str path: Absolute path of the entry to act on.
+    :param bool allow_root: Whether ``path`` may be the project folder itself.
+    :param bool follow_symlinks: Whether to follow ``path`` itself if it is a
+        link (True for destination folders).
+
+    :return: The path to act on: its folder fully resolved, and the final
+        component resolved too when ``follow_symlinks`` is True.
+
+    :raises HTTPException: 404 if the project folder does not exist, 403 if
+        ``path`` is relative, contains ``..``, is outside the project, or is
+        the folder itself and that is not allowed.
+    """
+    root_path = Path(root).resolve()
+    if not root_path.is_dir():
+        raise HTTPException(status_code=404, detail=f"Project not found: {root}")
+
+    raw = Path(path)
+    if not raw.is_absolute() or ".." in raw.parts:
+        raise HTTPException(status_code=403, detail="Path is outside the project")
+
+    is_root = os.path.normcase(raw) == os.path.normcase(Path(root))
+    if follow_symlinks or is_root:
+        target = raw.resolve()
+    else:
+        target = raw.parent.resolve() / raw.name
+
+    if target != root_path and root_path not in target.parents:
+        raise HTTPException(status_code=403, detail="Path is outside the project")
+
+    if target == root_path and not allow_root:
+        raise HTTPException(
+            status_code=403, detail="The project folder itself cannot be changed"
+        )
+    return target
+
+
+def _validate_entry_name(name: str) -> str:
+    """
+    Check that ``name`` is a single file or folder name, not a path.
+
+    :param str name: The name typed by the user.
+
+    :return: The name with surrounding whitespace removed.
+
+    :raises HTTPException: 400 if the name is empty, ``.``/``..``, or contains a
+        path separator or a character Windows does not allow in file names.
+    """
+    cleaned = name.strip()
+    if not cleaned or cleaned in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
+
+    # Reject any special/invalid characters
+    if any(char in cleaned for char in '/\\:*?"<>|') or any(
+        ord(char) < 32 for char in cleaned
+    ):
+        raise HTTPException(
+            status_code=400, detail=f"Name contains invalid characters: {cleaned}"
+        )
+
+    return cleaned
+
+
+def _already_exists(path: Path) -> HTTPException:
+    return HTTPException(status_code=409, detail=f"Already exists: {path.name}")
+
+
+def _resolve_transfer(payload: TransferPayload) -> tuple[Path, Path]:
+    """
+    Resolve and check the source and destination folder of a copy or move.
+
+    :param TransferPayload payload: The project, the entry to transfer, and the
+        folder to paste it into.
+
+    :return: The source entry (a link is not followed) and the resolved
+        destination folder.
+
+    :raises HTTPException: 403 if either path is outside the project (or the
+        source is the project folder itself), 404 if the source or destination
+        is missing, 400 if a folder would be pasted into itself.
+    """
+    source = _resolve_in_project(payload.root, payload.path)
+    dest = _resolve_in_project(
+        payload.root, payload.dest_parent, allow_root=True, follow_symlinks=True
+    )
+    if not explorer_fs.entry_exists(source):
+        raise HTTPException(status_code=404, detail=f"Not found: {payload.path}")
+    if not dest.is_dir():
+        raise HTTPException(status_code=404, detail=f"Folder not found: {dest}")
+    is_real_folder = source.is_dir() and not explorer_fs.is_link(source)
+    if is_real_folder and (dest == source or source in dest.parents):
+        raise HTTPException(
+            status_code=400, detail="A folder cannot be pasted into itself"
+        )
+    return source, dest
+
+
+def _copy_names(dest: Path, source: Path):
+    """
+    Yield candidate paths in ``dest`` for a copy of ``source``, in order.
+
+    The original name first, then VS Code's ``a copy.md``, ``a copy 2.md``, …
+    (folders have no extension). Names already taken are skipped; the copy
+    itself still refuses a name that is taken by the time it runs.
+
+    :param Path dest: Folder the copy goes into.
+    :param Path source: Entry being copied.
+    """
+    if source.is_dir():
+        stem, suffix = source.name, ""
+    else:
+        stem, suffix = source.stem, source.suffix
+    names = [source.name]
+    counter = 1
+    while True:
+        for name in names:
+            candidate = dest / name
+            if not explorer_fs.entry_exists(candidate):
+                yield candidate
+        label = " copy" if counter == 1 else f" copy {counter}"
+        names = [f"{stem}{label}{suffix}"]
+        counter += 1
+
+
+def _move_to_trash(path: Path) -> None:
+    """Send ``path`` to the system Recycle Bin / Trash (patched in tests)."""
+    from send2trash import send2trash
+
+    send2trash(str(path))
+
+
+@router.post("/create")
+def create_entry(payload: CreateEntryPayload):
+    """Create an empty file or folder inside the parent path."""
+    parent = _resolve_in_project(
+        payload.root, payload.parent, allow_root=True, follow_symlinks=True
+    )
+
+    if not parent.is_dir():
+        raise HTTPException(status_code=404, detail=f"Folder not found: {parent}")
+
+    target = parent / _validate_entry_name(payload.name)
+    if explorer_fs.entry_exists(target):
+        raise _already_exists(target)
+
+    # mkdir and an exclusive create both fail if the name was taken meanwhile.
+    try:
+        if payload.is_dir:
+            target.mkdir()
+        else:
+            target.touch(exist_ok=False)
+    except FileExistsError:
+        raise _already_exists(target)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"path": str(target), "is_dir": payload.is_dir}
+
+
+@router.post("/rename")
+def rename_entry(payload: RenamePayload):
+    """Rename a file, folder or link in place, keeping it in the same folder."""
+    source = _resolve_in_project(payload.root, payload.path)
+    if not explorer_fs.entry_exists(source):
+        raise HTTPException(status_code=404, detail=f"Not found: {payload.path}")
+
+    target = source.with_name(_validate_entry_name(payload.new_name))
+    if target == source:
+        return {"old_path": str(source), "path": str(target)}
+
+    try:
+        if explorer_fs.entry_exists(target):
+            # A case-only rename ("notes.md" -> "Notes.md") finds the entry
+            # itself on Windows and macOS. Any other entry is a conflict.
+            if not os.path.samestat(os.lstat(source), os.lstat(target)):
+                raise _already_exists(target)
+            os.rename(source, target)
+        else:
+            explorer_fs.rename_no_replace(source, target)
+    except FileExistsError:
+        raise _already_exists(target)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"old_path": str(source), "path": str(target)}
+
+
+@router.post("/copy")
+def copy_entry(payload: TransferPayload):
+    """Copy a file, folder or link into ``dest_parent``, picking a free name."""
+    source, dest = _resolve_transfer(payload)
+    for target in _copy_names(dest, source):
+        try:
+            explorer_fs.copy_no_replace(source, target)
+        except FileExistsError:
+            continue  # Taken since it was checked; try the next name.
+        except explorer_fs.UnsupportedEntryError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        return {"path": str(target)}
+
+
+@router.post("/move")
+def move_entry(payload: TransferPayload):
+    """Move a file, folder or link into ``dest_parent`` (Cut and Paste)."""
+    source, dest = _resolve_transfer(payload)
+    target = dest / source.name
+    if target == source:
+        # Pasting back into the folder it was cut from changes nothing.
+        return {"old_path": str(source), "path": str(target)}
+    if explorer_fs.entry_exists(target):
+        raise _already_exists(target)
+    try:
+        explorer_fs.move_no_replace(source, target)
+    except FileExistsError:
+        raise _already_exists(target)
+    except explorer_fs.UnsupportedEntryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+    return {"old_path": str(source), "path": str(target)}
+
+
+@router.post("/delete")
+def delete_entry(payload: ProjectPathPayload):
+    """
+    Move a file or folder to the system Recycle Bin / Trash.
+
+    A symlink or junction is removed directly instead: only the link goes, its
+    target is never touched, and a link holds no content of its own to
+    restore. This also works for links whose target no longer exists, which
+    the trash implementations cannot handle consistently.
+    """
+    target = _resolve_in_project(payload.root, payload.path)
+    if not explorer_fs.entry_exists(target):
+        raise HTTPException(status_code=404, detail=f"Not found: {payload.path}")
+
+    try:
+        if explorer_fs.is_link(target):
+            explorer_fs.remove_link(target)
+        else:
+            _move_to_trash(target)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    return {"path": str(target), "deleted": True}
 
 
 @router.get("/recent")

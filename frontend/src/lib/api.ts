@@ -302,6 +302,41 @@ export const Files = {
 
   clearRecent: () =>
     apiFetch<{ entries: string[] }>("/api/files/recent", { method: "DELETE" }),
+
+  // Explorer file management. `root` is the open project folder; the backend
+  // refuses any path that resolves outside it.
+  create: (root: string, parent: string, name: string, isDir: boolean) =>
+    apiFetch<{ path: string; is_dir: boolean }>("/api/files/create", {
+      method: "POST",
+      body: JSON.stringify({ root, parent, name, is_dir: isDir }),
+    }),
+
+  rename: (root: string, path: string, newName: string) =>
+    apiFetch<{ old_path: string; path: string }>("/api/files/rename", {
+      method: "POST",
+      body: JSON.stringify({ root, path, new_name: newName }),
+    }),
+
+  /** Moves the entry to the system Recycle Bin / Trash. */
+  delete: (root: string, path: string) =>
+    apiFetch<{ path: string; deleted: boolean }>("/api/files/delete", {
+      method: "POST",
+      body: JSON.stringify({ root, path }),
+    }),
+
+  /** Copies the entry into `destParent`; a clashing name becomes "a copy.md". */
+  copy: (root: string, path: string, destParent: string) =>
+    apiFetch<{ path: string }>("/api/files/copy", {
+      method: "POST",
+      body: JSON.stringify({ root, path, dest_parent: destParent }),
+    }),
+
+  /** Moves the entry into `destParent`; refuses to overwrite an existing entry. */
+  move: (root: string, path: string, destParent: string) =>
+    apiFetch<{ old_path: string; path: string }>("/api/files/move", {
+      method: "POST",
+      body: JSON.stringify({ root, path, dest_parent: destParent }),
+    }),
 };
 
 // ── Markdown API ──────────────────────────────────────────────────────────────
