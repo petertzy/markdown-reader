@@ -1,7 +1,7 @@
 # Technical Documentation
 
 This file contains the advanced technical details for Markdown Reader. It is
-linked from the main [README](../README.MD), which is kept focused on the
+linked from the main [README](https://github.com/petertzy/markdown-reader/blob/main/README.MD), which is kept focused on the
 project's purpose, installation, configuration, and basic usage.
 
 ## Table of Contents
@@ -61,7 +61,7 @@ install the Homebrew libraries below so WeasyPrint can find `libgobject-2.0`,
 Pango, and Cairo:
 
 ```bash
-brew install glib pango cairo libffi
+brew install glib pango cairo gdk-pixbuf libffi
 ```
 
 `./scripts/dev-tauri.sh` automatically adds `/opt/homebrew/lib` to
@@ -73,7 +73,7 @@ For a fuller walkthrough of the macOS dependencies, including shell configuratio
 
 ### Windows PDF Export Dependencies
 
-On Windows, WeasyPrint requires native system libraries (Cairo, Pango) that are not available by default. Install them via MSYS2 by following the steps in [PrepareForWindowsUser.md](./PrepareForWindowsUser.md).
+On Windows, WeasyPrint requires native system libraries. Install the Pango runtime in MSYS2 UCRT64 and configure `WEASYPRINT_DLL_DIRECTORIES` as described in [PrepareForWindowsUser.md](./PrepareForWindowsUser.md).
 
 If WeasyPrint is unavailable, PDF export falls back to PyMuPDF with simpler layout, the same as on macOS.
 

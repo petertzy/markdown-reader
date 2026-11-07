@@ -1,47 +1,46 @@
+# macOS PDF Export Dependencies
 
-For Mac users, you should first run the following additional command:
-```bash
-brew install cairo pango gdk-pixbuf libffi
-```
-Then reactivate your virtual environment:
-```bash
-deactivate
-source .venv/bin/activate
-```
-#### If you are using Apple Silicon (M1/M2/M3/M4)
+Markdown Reader uses WeasyPrint for PDF export when the required native libraries can be loaded. The development helper adds `/opt/homebrew/lib` to `DYLD_FALLBACK_LIBRARY_PATH` automatically when that directory exists. A manual setup is useful when running Python or the backend outside the helper.
 
-Run:
-```bash
-export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib
-```
-Then test:
-```bash
-python -c "from weasyprint import HTML; print('OK')"
-```
-#### If you are using an Intel Mac
+## 1. Install Homebrew libraries
 
-Run:
-```bash
-export DYLD_FALLBACK_LIBRARY_PATH=/usr/local/lib
-```
-#### Make It Permanent (Recommended)
+Install Homebrew if it is not already available, then run:
 
-If the previous step works, add the environment variable to your shell configuration.
-If you are using **zsh**, open:
 ```bash
-nano ~/.zshrc
+brew install glib pango cairo gdk-pixbuf libffi
 ```
-Add the following line:
 
-#### Apple Silicon
+## 2. Make Homebrew libraries discoverable
+
+For Apple Silicon Macs using the standard Homebrew location:
+
 ```bash
-export DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib
+export DYLD_FALLBACK_LIBRARY_PATH="/opt/homebrew/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 ```
-#### Intel Mac
+
+For Intel Macs using the standard Homebrew location:
+
 ```bash
-export DYLD_FALLBACK_LIBRARY_PATH=/usr/local/lib
+export DYLD_FALLBACK_LIBRARY_PATH="/usr/local/lib${DYLD_FALLBACK_LIBRARY_PATH:+:$DYLD_FALLBACK_LIBRARY_PATH}"
 ```
-Save the file, then run:
+
+If Homebrew is installed somewhere else, use the corresponding library directory. To make the setting persistent in zsh, add the appropriate export line to `~/.zshrc` and run `source ~/.zshrc`.
+
+## 3. Verify WeasyPrint
+
+After synchronizing the project Python environment with `uv sync`, run:
+
 ```bash
-source ~/.zshrc
+uv run python -c "from weasyprint import HTML; print('WeasyPrint import OK')"
 ```
+
+If the import succeeds but PDF export still falls back, inspect the reported WeasyPrint/system-library diagnostics and confirm that the shell launching the backend has the library path.
+
+## Notes
+
+For upstream installation and native-library troubleshooting details, see the [WeasyPrint first steps documentation](https://doc.courtbouillon.org/weasyprint/latest/first_steps.html).
+
+- The project development helper adds the Apple Silicon Homebrew library path when `/opt/homebrew/lib` exists; it does not automatically add the Intel `/usr/local/lib` path.
+- WeasyPrint is preferred when available. The application can fall back to PyMuPDF for PDF export, with simpler layout fidelity.
+- For Windows, follow [Prepare for Windows](./PrepareForWindowsUser.md).
+- For architecture and export details, see [Technical Documentation](./TECHNICAL.md#pdf-export-dependencies).

@@ -18,7 +18,7 @@ project owner has granted.
 | Admin | [@petertzy](https://github.com/petertzy), [@lwu1822](https://github.com/lwu1822) |
 | Maintainer | [@Eswar0108](https://github.com/Eswar0108), [@karaaslanz](https://github.com/karaaslanz) |
 | Reviewer | TBD; currently review is performed by all Admins and Maintainers |
-| Contributor | See [`CONTRIBUTORS.md`](../CONTRIBUTORS.md) |
+| Contributor | See [CONTRIBUTORS.md](https://github.com/petertzy/markdown-reader/blob/main/CONTRIBUTORS.md) |
 
 The assignment list is current as of the latest update to this document. A
 person may hold more than one role when the project explicitly assigns those
@@ -88,9 +88,9 @@ in the project's review capacity, not an immediate organizational change.
 ### Contributors
 
 For the project's contributor list, see
-[`CONTRIBUTORS.md`](../CONTRIBUTORS.md). Contribution guidelines and the
+[CONTRIBUTORS.md](https://github.com/petertzy/markdown-reader/blob/main/CONTRIBUTORS.md). Contribution guidelines and the
 process for proposing changes are documented in
-[`CONTRIBUTING.md`](../CONTRIBUTING.md).
+[CONTRIBUTING.md](https://github.com/petertzy/markdown-reader/blob/main/CONTRIBUTING.md).
 
 ## Adding or removing members
 
