@@ -1,19 +1,20 @@
 "use client";
 
-import { useProjectTranslation } from "@/hooks/useProjectTranslation";
+import type { useProjectTranslation } from "@/hooks/useProjectTranslation";
 
 type Props = {
   projectRoot: string | null;
   sourceLanguage: string;
   targetLanguage: string;
+  translation: ReturnType<typeof useProjectTranslation>;
 };
 
 export default function ProjectTranslationReview({
   projectRoot,
   sourceLanguage,
   targetLanguage,
+  translation,
 }: Props) {
-  const translation = useProjectTranslation(projectRoot);
   const task = translation.task;
   const source = sourceLanguage === "Auto Detect" ? "auto" : sourceLanguage;
 

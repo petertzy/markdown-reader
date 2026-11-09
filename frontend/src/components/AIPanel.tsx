@@ -7,6 +7,7 @@ import { tokenizeInlineMarkdown } from "@/lib/inline-markdown.mjs";
 import ProjectWorkReview from "@/components/ProjectWorkReview";
 import ProjectTranslationReview from "@/components/ProjectTranslationReview";
 import type { useProjectWork } from "@/hooks/useProjectWork";
+import type { useProjectTranslation } from "@/hooks/useProjectTranslation";
 
 export type AIPanelTab = "chat" | "translate" | "settings" | "work";
 type Tab = AIPanelTab;
@@ -25,6 +26,7 @@ type Props = {
   /** Revert the last AI Work result applied to the active document. */
   undoWork?: () => void;
   canUndoWork?: boolean;
+  projectTranslation: ReturnType<typeof useProjectTranslation>;
 };
 
 const LANGUAGES = [
@@ -177,6 +179,7 @@ export default function AIPanel({
   isWorking,
   undoWork,
   canUndoWork,
+  projectTranslation,
 }: Props) {
   const currentDocumentRef = useRef({ documentId, documentText });
   currentDocumentRef.current = { documentId, documentText };
@@ -945,7 +948,7 @@ export default function AIPanel({
         </div>
       ) : tab === "translate" ? (
         <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
-          <ProjectTranslationReview projectRoot={projectRoot} sourceLanguage={sourceLang} targetLanguage={targetLang} />
+          <ProjectTranslationReview projectRoot={projectRoot} sourceLanguage={sourceLang} targetLanguage={targetLang} translation={projectTranslation} />
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500 dark:text-gray-400">Translate</label>
             <div className="flex gap-1">
