@@ -1,3 +1,12 @@
+> [!IMPORTANT]
+> 🎉 **Markdown Reader v2.2.0 is here!** 🎉
+>
+> We're celebrating the latest desktop release, now available for **macOS (Apple Silicon), Windows (x64), and Linux (x64)**. Thank you to everyone who has supported the project!
+>
+> 🚀 **[Download v2.2.0](https://github.com/petertzy/markdown-reader/releases/tag/v2.2.0)** · [View release notes](https://github.com/petertzy/markdown-reader/releases/tag/v2.2.0)
+>
+> **Installation note:** These builds are not notarized or signed with a verified developer certificate. Your operating system may display a security warning; verify the download before proceeding.
+
 <div align="center">
   <h1>Markdown Reader</h1>
   <p><b>A local-first Markdown editor with live preview and AI-assisted writing tools.</b></p>
