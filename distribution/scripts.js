@@ -206,3 +206,33 @@ style.textContent = `
     .hero-mockup.reveal { transition-delay: 0.4s; }
 `;
 document.head.appendChild(style);
+
+// Copy the macOS installation command with a fallback for non-secure contexts.
+const copyMacosButton = document.getElementById('copy-macos-install-command');
+const macosCommand = document.getElementById('macos-install-command');
+if (copyMacosButton && macosCommand) {
+    copyMacosButton.addEventListener('click', async () => {
+        const command = macosCommand.textContent.trim();
+        try {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(command);
+            } else {
+                const temporaryInput = document.createElement('textarea');
+                temporaryInput.value = command;
+                temporaryInput.style.position = 'fixed';
+                temporaryInput.style.opacity = '0';
+                document.body.appendChild(temporaryInput);
+                temporaryInput.select();
+                const copied = document.execCommand('copy');
+                temporaryInput.remove();
+                if (!copied) throw new Error('Clipboard copy failed');
+            }
+            copyMacosButton.querySelector('span').textContent = 'Copied!';
+        } catch (error) {
+            copyMacosButton.querySelector('span').textContent = 'Copy failed';
+        }
+        window.setTimeout(() => {
+            copyMacosButton.querySelector('span').textContent = 'Copy';
+        }, 2000);
+    });
+}

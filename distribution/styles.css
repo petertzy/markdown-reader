@@ -279,15 +279,47 @@ nav {
     margin-bottom: 1rem;
 }
 
-.install-note code {
-    display: block;
-    overflow-x: auto;
-    padding: 0.9rem 1rem;
+.install-command {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
     border-radius: 10px;
     background: rgba(0, 0, 0, 0.35);
+}
+
+.install-note .install-command code {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+    padding: 0.4rem 0.5rem;
     color: var(--accent-secondary);
     font-size: 0.95rem;
     white-space: nowrap;
+}
+
+.copy-command-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.65rem 0.85rem;
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-main);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.copy-command-button:hover,
+.copy-command-button:focus-visible {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.copy-command-button svg {
+    width: 1rem;
+    height: 1rem;
 }
 
 .download-card {
