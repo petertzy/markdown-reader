@@ -5,6 +5,21 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build
+        required: true
+        type: choice
+        default: All
+        options:
+          - All
+          - macOS
+          - Windows
+          - Linux
+      release_tag:
+        description: Release tag to upload artifacts to (for example, v2.2.0)
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,29 +29,53 @@ env:
   NEXT_EXPORT: "1"
 
 jobs:
+  select-platforms:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - name: Select build platforms
+        id: select
+        shell: bash
+        env:
+          PLATFORM: ${{ inputs.platform || 'All' }}
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          platforms = [
+              {"platform": "macOS (Apple Silicon)", "platform_key": "macOS", "os": "macos-15", "target": "aarch64-apple-darwin", "bin-ext": ""},
+              {"platform": "Linux (x86_64)", "platform_key": "Linux", "os": "ubuntu-22.04", "target": "x86_64-unknown-linux-gnu", "bin-ext": ""},
+              {"platform": "Windows (x86_64)", "platform_key": "Windows", "os": "windows-latest", "target": "x86_64-pc-windows-msvc", "bin-ext": ".exe"},
+          ]
+          selected = os.environ["PLATFORM"]
+          filtered = [p for p in platforms if selected == "All" or p["platform_key"] == selected]
+          if not filtered:
+              raise SystemExit(f"Invalid platform: {selected}")
+          print("matrix=" + json.dumps({"include": filtered}, separators=(",", ":")))
+          PY
+
   build:
+    needs: select-platforms
     env:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
     name: ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - platform: macOS (Apple Silicon)
-            os: macos-15
-            target: aarch64-apple-darwin
-            bin-ext: ""
-          - platform: Linux (x86_64)
-            os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            bin-ext: ""
-          - platform: Windows (x86_64)
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
-            bin-ext: ".exe"
-
+      matrix: ${{ fromJSON(needs.select-platforms.outputs.matrix) }}
     steps:
+      - name: Validate release tag
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Release tag must be a version such as v2.2.0"
+            exit 1
+          fi
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@v5
 
@@ -150,14 +189,13 @@ jobs:
           APPLE_API_KEY_PATH: ${{ secrets.APPLE_API_KEY_PATH }}
         with:
           projectPath: frontend
-          tagName: ${{ github.ref_name }}
-          releaseName: "Markdown Reader ${{ github.ref_name }}"
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: "Markdown Reader ${{ env.RELEASE_TAG }}"
           releaseDraft: true
           prerelease: false
           args: --target ${{ matrix.target }}
 
       - name: Generate release checksums
-        if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           set -o pipefail
@@ -188,6 +226,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.ref_name }}" \
+          gh release upload "$RELEASE_TAG" \
             "SHA256SUMS-${{ matrix.target }}.txt" \
             --clobber --repo "${{ github.repository }}"
