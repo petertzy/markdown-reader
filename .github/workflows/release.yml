@@ -29,32 +29,41 @@ env:
   NEXT_EXPORT: "1"
 
 jobs:
+  select-platforms:
+    runs-on: ubuntu-22.04
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - name: Select build platforms
+        id: select
+        shell: bash
+        env:
+          PLATFORM: ${{ inputs.platform || 'All' }}
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          platforms = [
+              {"platform": "macOS (Apple Silicon)", "platform_key": "macOS", "os": "macos-15", "target": "aarch64-apple-darwin", "bin-ext": ""},
+              {"platform": "Linux (x86_64)", "platform_key": "Linux", "os": "ubuntu-22.04", "target": "x86_64-unknown-linux-gnu", "bin-ext": ""},
+              {"platform": "Windows (x86_64)", "platform_key": "Windows", "os": "windows-latest", "target": "x86_64-pc-windows-msvc", "bin-ext": ".exe"},
+          ]
+          selected = os.environ["PLATFORM"]
+          filtered = [p for p in platforms if selected == "All" or p["platform_key"] == selected]
+          if not filtered:
+              raise SystemExit(f"Invalid platform: {selected}")
+          print("matrix=" + json.dumps({"include": filtered}, separators=(",", ":")))
+          PY
+
   build:
+    needs: select-platforms
     env:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'All' || inputs.platform == matrix.platform_key }}
     name: ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - platform: macOS (Apple Silicon)
-            platform_key: macOS
-            os: macos-15
-            target: aarch64-apple-darwin
-            bin-ext: ""
-          - platform: Linux (x86_64)
-            platform_key: Linux
-            os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            bin-ext: ""
-          - platform: Windows (x86_64)
-            platform_key: Windows
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
-            bin-ext: ".exe"
-
+      matrix: ${{ fromJSON(needs.select-platforms.outputs.matrix) }}
     steps:
       - name: Validate release tag
         shell: bash
