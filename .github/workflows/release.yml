@@ -24,7 +24,7 @@ jobs:
       matrix:
         include:
           - platform: macOS (Apple Silicon)
-            os: macos-14
+            os: macos-15
             target: aarch64-apple-darwin
             bin-ext: ""
           - platform: Linux (x86_64)
@@ -104,7 +104,7 @@ jobs:
         run: npm ci
 
       - name: Import Apple certificate (macOS opt-in)
-        if: matrix.os == 'macos-14' && env.APPLE_CERTIFICATE != ''
+        if: matrix.os == 'macos-15' && env.APPLE_CERTIFICATE != ''
         env:
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -126,7 +126,7 @@ jobs:
 
       - name: Resolve Apple signing identity
         id: cert
-        if: matrix.os == 'macos-14' && env.APPLE_CERTIFICATE != ''
+        if: matrix.os == 'macos-15' && env.APPLE_CERTIFICATE != ''
         run: |
           CERT_ID=$(security find-identity -v -p codesigning build.keychain | \
             awk -F'"' '/Developer ID Application/ { print $2; exit }')
