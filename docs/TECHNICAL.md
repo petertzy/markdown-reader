@@ -52,6 +52,14 @@ CDN loader, not evidence of a WebAssembly requirement. The policy does not permi
 broader JavaScript `unsafe-eval` directive. Remote `http:` and `https:` image
 sources remain available only for images referenced by Markdown previews.
 
+When Tauri packages the app it adds a `sha256-` hash for each bundled inline
+script to `script-src`, and browsers ignore `'unsafe-inline'` once a hash is
+present. The Markdown preview is a sandboxed `srcdoc` iframe that inherits this
+policy, so scripts injected inline into the preview HTML do not run in packaged
+builds. The preview's scroll-sync code is therefore a static file,
+`public/preview-sync-frame.js`, loaded by URL from the app origin, which
+`script-src 'self'` allows.
+
 ## PDF Export Dependencies
 
 ### macOS PDF Export Dependencies

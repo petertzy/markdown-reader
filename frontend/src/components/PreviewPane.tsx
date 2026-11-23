@@ -8,7 +8,8 @@
  * Synced scrolling: when an editor instance is passed in, scrolling either
  * side scrolls the other to the same relative position, and (optionally)
  * clicking in the editor glides the preview to the clicked spot. The sync
- * logic lives in lib/preview-sync.mjs so the Node test suite can cover it.
+ * logic lives in lib/preview-sync.mjs so the Node test suite can cover it;
+ * the iframe side is public/preview-sync-frame.js.
  */
 
 import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from "react";
@@ -51,7 +52,10 @@ export default function PreviewPane({ html, loading = false, error = null, edito
       : "<p style='color:#999;padding:24px;font-family:sans-serif'>Preview will appear here…</p>";
 
   const srcDoc = useMemo(
-    () => (html && editorRef ? withSyncScript(html) : html || placeholder),
+    () =>
+      html && editorRef && typeof window !== "undefined"
+        ? withSyncScript(html, window.location.origin)
+        : html || placeholder,
     [html, editorRef, placeholder],
   );
 
