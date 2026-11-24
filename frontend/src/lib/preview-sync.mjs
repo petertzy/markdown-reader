@@ -2,8 +2,9 @@
 // Scroll sync between the Monaco editor and the sandboxed preview iframe.
 //
 // The preview iframe has no same-origin access, so the two sides talk through
-// postMessage. A small script injected into the preview HTML handles the
-// iframe side. Plain .mjs (not .ts) so the Node test suite can import it.
+// postMessage. The iframe side lives in public/preview-sync-frame.js and is
+// loaded by a <script src> tag added to the preview HTML. Plain .mjs (not .ts)
+// so the Node test suite can import it.
 
 export const MSG_TO_PREVIEW = "mdr-scroll";
 export const MSG_FROM_PREVIEW = "mdr-preview-scroll";
@@ -42,58 +43,51 @@ export function locateLine(lines, lineNumber) {
   return { heading, fraction };
 }
 
-/** Script that runs inside the preview iframe. */
-export const SYNC_SCRIPT = `<script>(function(){
-var ignoreUntil=0,snapUntil=0;
-function el(){return document.scrollingElement||document.documentElement;}
-function maxScroll(){return Math.max(0,el().scrollHeight-window.innerHeight);}
-function pageTop(n){return n.getBoundingClientRect().top+el().scrollTop;}
-function snap(m){
-  var hs=document.body.querySelectorAll("h1,h2,h3,h4,h5,h6");
-  var docEnd=el().scrollHeight;
-  var start=m.heading>=0&&hs[m.heading]?pageTop(hs[m.heading]):0;
-  var next=hs[m.heading+1]?pageTop(hs[m.heading+1]):docEnd;
-  var y=start+m.fraction*Math.max(0,next-start);
-  var blocks=document.body.querySelectorAll("h1,h2,h3,h4,h5,h6,p,li,pre,blockquote,table,img,hr");
-  var target=null,best=Infinity;
-  for(var i=0;i<blocks.length;i++){var d=Math.abs(pageTop(blocks[i])-y);if(d<best){best=d;target=blocks[i];}}
-  if(target)y=pageTop(target);
-  ignoreUntil=snapUntil=Date.now()+${SNAP_GUARD_MS};
-  window.scrollTo({top:Math.max(0,y-window.innerHeight*0.3),behavior:"smooth"});
-  if(target){
-    var prev=target.style.backgroundColor,prevT=target.style.transition;
-    target.style.transition="background-color 0.6s ease";
-    target.style.backgroundColor="rgba(59,130,246,0.22)";
-    setTimeout(function(){target.style.backgroundColor=prev;setTimeout(function(){target.style.transition=prevT;},600);},500);
-  }
+/** Path of the iframe-side script, served from frontend/public. */
+export const FRAME_SCRIPT_PATH = "/preview-sync-frame.js";
+
+function escapeAttr(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
-window.addEventListener("message",function(e){
-  if(e.source!==parent)return;
-  var m=e.data;
-  if(!m)return;
-  if(m.type==="${MSG_SNAP}"){snap(m);return;}
-  // A click can nudge the editor's scroll; don't let that cancel the glide.
-  if(m.type!=="${MSG_TO_PREVIEW}"||Date.now()<snapUntil)return;
-  ignoreUntil=Date.now()+${ECHO_GUARD_MS};
-  el().scrollTop=m.ratio*maxScroll();
-});
-window.addEventListener("scroll",function(){
-  if(Date.now()<ignoreUntil)return;
-  var max=maxScroll();
-  parent.postMessage({type:"${MSG_FROM_PREVIEW}",ratio:max?el().scrollTop/max:0},"*");
-},{passive:true});
-parent.postMessage({type:"${MSG_PREVIEW_READY}"},"*");
-})();</script>`;
 
 /**
- * Insert the sync script into preview HTML, before </body> when present.
- * @param {string} html
+ * The <script> tag that loads the iframe side of the sync.
+ *
+ * It must be loaded by URL, not inlined: the preview's srcdoc inherits the
+ * app's Content Security Policy, and packaged Tauri builds add script hashes
+ * to it, which makes browsers ignore 'unsafe-inline'. The URL is absolute
+ * because the sandboxed iframe has an opaque origin of its own.
+ *
+ * @param {string} origin the editor window's origin, e.g. window.location.origin
  * @returns {string}
  */
-export function withSyncScript(html) {
+export function syncScriptTag(origin) {
+  const attrs = {
+    src: origin.replace(/\/+$/, "") + FRAME_SCRIPT_PATH,
+    "data-msg-to-preview": MSG_TO_PREVIEW,
+    "data-msg-from-preview": MSG_FROM_PREVIEW,
+    "data-msg-preview-ready": MSG_PREVIEW_READY,
+    "data-msg-snap": MSG_SNAP,
+    "data-echo-guard-ms": ECHO_GUARD_MS,
+    "data-snap-guard-ms": SNAP_GUARD_MS,
+  };
+  const rendered = Object.entries(attrs)
+    .map(([name, value]) => `${name}="${escapeAttr(value)}"`)
+    .join(" ");
+  return `<script ${rendered}></script>`;
+}
+
+/**
+ * Insert the sync script tag into preview HTML, before </body> when present.
+ * @param {string} html
+ * @param {string} origin the editor window's origin
+ * @returns {string}
+ */
+export function withSyncScript(html, origin) {
+  const tag = syncScriptTag(origin);
   const closeBody = html.lastIndexOf("</body>");
-  if (closeBody === -1) return html + SYNC_SCRIPT;
-  return html.slice(0, closeBody) + SYNC_SCRIPT + html.slice(closeBody);
+  if (closeBody === -1) return html + tag;
+  return html.slice(0, closeBody) + tag + html.slice(closeBody);
 }
 
 /**
